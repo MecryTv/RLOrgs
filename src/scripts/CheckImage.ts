@@ -37,6 +37,9 @@ function Sample(width: number, height: number): Buffer {
 // Das kleinstmoegliche gueltige GIF (1x1, transparent).
 const GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
 
+// Muss zur (nicht exportierten) QUALITY in image.ts passen.
+const QUALITY = 80;
+
 async function main(): Promise<void> {
     console.log("\n🖼️  Bild-Verkleinerung\n");
 
@@ -47,10 +50,23 @@ async function main(): Promise<void> {
     check("Lange Kante landet auf 1920px", back.width === 1920, `${back.width}px`);
     check("Seitenverhaeltnis bleibt", back.height === 640, `${back.height}px`);
     check("Ergebnis ist WebP", shrunk.extension === ".webp", shrunk.extension);
+
+    const bigImage = await loadImage(big);
+    const bigCanvas = createCanvas(bigImage.width, bigImage.height);
+
+    bigCanvas.getContext("2d").drawImage(bigImage, 0, 0, bigImage.width, bigImage.height);
+
+    const bigWebp = await bigCanvas.encode("webp", QUALITY);
+
+    // Vergleich bewusst nicht gegen das PNG: WebP komprimiert schon ganz ohne
+    // Verkleinerung so viel staerker als PNG (102389 → 14490 Bytes bei diesem
+    // Sample), dass die Pruefung selbst bei kaputter Verkleinerung bestehen
+    // wuerde. Erst der Vergleich mit WebP in Originalgroesse und gleicher
+    // Qualitaet zeigt, ob das Verkleinern selbst etwas bringt.
     check(
-        "Ergebnis ist kleiner als das Original",
-        shrunk.buffer.length < big.length,
-        `${big.length} → ${shrunk.buffer.length}`
+        "Verkleinerung spart Bytes gegenueber WebP in Originalgroesse",
+        shrunk.buffer.length < bigWebp.length * 0.9,
+        `${bigWebp.length} → ${shrunk.buffer.length}`
     );
 
     const small = Sample(200, 100);
@@ -58,6 +74,7 @@ async function main(): Promise<void> {
     const keptBack = await loadImage(kept.buffer);
 
     check("Kleines Bild wird nicht hochskaliert", keptBack.width === 200, `${keptBack.width}px`);
+    check("Kleines Bild wird trotzdem zu WebP", kept.extension === ".webp", kept.extension);
 
     const gif = await Shrink(GIF, "image/gif");
 
@@ -74,4 +91,7 @@ async function main(): Promise<void> {
     process.exit(failures === 0 ? 0 : 1);
 }
 
-void main();
+main().catch((error: Error) => {
+    console.log(`\n❌ Unerwarteter Fehler: ${error.message}\n`);
+    process.exit(1);
+});
