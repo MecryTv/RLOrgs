@@ -18,3 +18,5 @@ card-check-stale.png
 # Geheimnisse - Vorlage ist .env.example
 .env
 
+.superpowers
+.impeccable/hook.cache.json
