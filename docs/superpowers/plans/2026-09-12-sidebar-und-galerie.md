@@ -1340,6 +1340,7 @@ Erwartet: beide neuen Zeilen `ok`, Exit-Code 0.
 
 **Files:**
 - Modify: `src/dashboard/public/guild.html` (neue Sektion vor `</div>` von `#moduleCards`)
+- Modify: `src/scripts/CheckDashboard.ts` (Kollisionsprüfung „Modul-Anker")
 - Create: `src/dashboard/client/pages/GuildGallery.ts`
 - Modify: `src/dashboard/client/pages/Guild.ts` (Aufruf in `renderGuild`)
 - Modify: `src/dashboard/public/assets/style.css` (ans Ende)
@@ -1378,7 +1379,55 @@ In `src/dashboard/public/guild.html` innerhalb von `<div class="setcards" id="mo
         </section>
 ```
 
-- [ ] **Step 2: CSS ans Ende von `style.css`**
+- [ ] **Step 2: Die Kollisionsprüfung auf die neue Lage bringen**
+
+`npm run check:dashboard -- --dev` schlägt jetzt fehl:
+
+```
+  FAIL Modul-Anker sind eindeutig und brauchbar (22)  → rl-6mans, lft, …
+```
+
+Das ist richtig so. Die Prüfung in `src/scripts/CheckDashboard.ts` verlangt
+bisher, dass **keine** Modul-ID im HTML vorkommt — sie sollte verhindern, dass
+ein Modul-Anker auf ein fremdes Element zeigt. Seit Task 2 gilt eine andere
+Regel: `card()` überspringt jede Sektion, die es schon gibt, also darf ein
+gebautes Modul seine eigene Sektion mitbringen. Was weiterhin verboten bleibt,
+ist eine Modul-ID auf irgendetwas anderem.
+
+Die Bedingung ersetzen:
+
+```ts
+    // Eine Modul-ID darf im HTML vorkommen - aber nur als die Karte dieses
+    // Moduls. card() in Guild.ts ueberspringt sie dann, statt eine Platzkarte
+    // darueberzulegen. Auf irgendetwas anderem waere dieselbe ID ein Anker,
+    // der ins Leere zeigt.
+    const misplaced = ids.filter(
+        (id) =>
+            !/^[a-z][a-z0-9-]*$/.test(id) ||
+            (guildPage.includes(`id="${id}"`) &&
+                !guildPage.includes(`<section class="setcard" id="${id}"`))
+    );
+
+    check(
+        `Modul-Anker sind eindeutig und brauchbar (${ids.length})`,
+        ids.length > 0 && new Set(ids).size === ids.length && misplaced.length === 0,
+        misplaced.join(", ")
+    );
+```
+
+Erneut laufen lassen:
+
+```bash
+npm run check:dashboard -- --dev
+```
+
+Erwartet: `ok Modul-Anker sind eindeutig und brauchbar (22)`, Exit-Code 0.
+
+Gegenprobe, dass die Prüfung noch beißt: in `guild.html` testweise ein
+`<div id="tickets"></div>` einfügen, Prüfung laufen lassen — sie muss `FAIL …
+→ tickets` melden. Das `div` danach wieder entfernen.
+
+- [ ] **Step 3: CSS ans Ende von `style.css`**
 
 ```css
 /* ----------------------------------------------------------
@@ -1417,7 +1466,7 @@ In `src/dashboard/public/guild.html` innerhalb von `<div class="setcards" id="mo
 .galempty{margin:24px 0;color:var(--text-3);font-size:13px;text-align:center}
 ```
 
-- [ ] **Step 3: Die Seite schreiben**
+- [ ] **Step 4: Die Seite schreiben**
 
 Neue Datei `src/dashboard/client/pages/GuildGallery.ts`:
 
@@ -1681,7 +1730,7 @@ export function renderGallery(guildId: string, canManage: boolean): void {
 }
 ```
 
-- [ ] **Step 4: In `Guild.ts` aufrufen**
+- [ ] **Step 5: In `Guild.ts` aufrufen**
 
 Import ergänzen:
 
@@ -1695,7 +1744,7 @@ In `renderGuild`, direkt hinter `void renderOverview(guild, data.user.id, waitin
     renderGallery(guild.id, guild.canManage);
 ```
 
-- [ ] **Step 5: Bauen und prüfen**
+- [ ] **Step 6: Bauen und prüfen**
 
 ```bash
 npm run build:dashboard && npm run typecheck && npm run check:dashboard -- --dev
