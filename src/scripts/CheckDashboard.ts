@@ -656,6 +656,17 @@ async function main(): Promise<void> {
     });
     check("Festes Modul laesst sich nicht ausschalten", festesAus.status === 400, `${festesAus.status}`);
 
+    // Der Bilder-Parser aus Server.ts haengt am ganzen Server, nicht nur an der
+    // kuenftigen Galerie-Route. Ohne eigenes bodyLimit auf dieser Route muss ein
+    // Bild-Body wieder beim Fastify-Standard (1 MiB) kappen, nicht bei den 8 MiB,
+    // die eigentlich nur fuer Uploads gedacht sind.
+    const zuGrossesBild = await fetch(modulesApi, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "image/png" },
+        body: Buffer.alloc(1024 * 1024 + 1),
+    });
+    check("Modul-Schalter kappt Bild-Body ueber 1 MiB (413, kein eigenes bodyLimit)", zuGrossesBild.status === 413, `${zuGrossesBild.status}`);
+
     // Das Dashboard zeigt die Namen, der Bot entscheidet, was gespeichert wird.
     // Fehlt ein Modul im Bot, ließe es sich anklicken, aber nie einschalten.
     // Verglichen werden nur die Module: Teile eines Moduls haben keinen Schalter.

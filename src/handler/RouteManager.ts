@@ -96,6 +96,9 @@ export default class RouteManager implements IRouteManager {
                 method: route.method,
                 url: route.path,
                 config: route.rateLimit ? { rateLimit: route.rateLimit } : {},
+                // Nur gesetzt weiterreichen: Fastifys eigene Prüfung akzeptiert
+                // "undefined" (Standard bleibt in Kraft), aber kein "null".
+                ...(route.bodyLimit ? { bodyLimit: route.bodyLimit } : {}),
                 onRequest: route.requiresAuth
                     ? (request: FastifyRequest, reply: FastifyReply) => this.Authenticate(route, request, reply)
                     : undefined,

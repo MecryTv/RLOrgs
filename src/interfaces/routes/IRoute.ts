@@ -10,6 +10,7 @@ export default interface IRoute {
     description: string;
     requiresAuth: boolean;
     rateLimit: IRateLimit | null;
+    bodyLimit: number | null;
 
     readonly Key: string;
 

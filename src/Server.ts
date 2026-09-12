@@ -5,7 +5,7 @@ import RouteManager from "./handler/RouteManager";
 import IServer from "./interfaces/services/server/IServer";
 import { AssertSecret } from "./utils/jwt";
 import logger from "./utils/logger";
-import { MAX_IMAGE_BYTES, UPLOAD_TYPES } from "./constants/Gallery";
+import { UPLOAD_TYPES } from "./constants/Gallery";
 
 const DEFAULT_HOST = "0.0.0.0";
 const MAX_PORT = 65535;
@@ -81,9 +81,16 @@ export default class Server implements IServer {
         // Bilder kommen roh: der Browser schickt die Datei als Body, Ziel und
         // Name stehen in der Adresse. Ein Multipart-Paket waere eine Dependency
         // fuer fuenf Zeilen.
+        //
+        // Kein bodyLimit hier: der Parser gilt serverweit - eine Grenze hier
+        // traefe jede POST-Route mit image/*-Body, nicht nur die eine, die
+        // wirklich ein Bild erwartet. Ohne eigene Grenze bleibt es beim
+        // Fastify-Standard von 1 MiB; die 8 MiB (MAX_IMAGE_BYTES) setzt
+        // stattdessen die Galerie-Route selbst ueber IRouteOptions.bodyLimit
+        // (Task 8).
         instance.addContentTypeParser(
             UPLOAD_TYPES,
-            { parseAs: "buffer", bodyLimit: MAX_IMAGE_BYTES },
+            { parseAs: "buffer" },
             (_request, body, done) => done(null, body)
         );
 

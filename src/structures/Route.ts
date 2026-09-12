@@ -12,6 +12,7 @@ export default abstract class Route implements IRoute {
     description: string;
     requiresAuth: boolean;
     rateLimit: IRateLimit | null;
+    bodyLimit: number | null;
 
     constructor(client: BotClient, options: IRouteOptions) {
         this.client = client;
@@ -20,6 +21,7 @@ export default abstract class Route implements IRoute {
         this.description = options.description;
         this.requiresAuth = options.requiresAuth ?? true;
         this.rateLimit = options.rateLimit ?? null;
+        this.bodyLimit = options.bodyLimit ?? null;
     }
 
     get Key(): string {
