@@ -969,6 +969,16 @@ In `Start()` direkt hinter `const instance = fastify({ logger: false, ignoreTrai
         );
 ```
 
+> **Korrektur nach dem Review (12.09.2026).** So wie oben gezeigt gilt das
+> 8-MB-Limit für **jede** POST-Route, sobald jemand `Content-Type: image/*`
+> setzt — vor jeder Anmeldung. Der Parser trägt deshalb kein eigenes Limit
+> mehr (`{ parseAs: "buffer" }`), überall bleibt Fastifys Standard von 1 MiB.
+> Routen können ein `bodyLimit` setzen, das `RouteManager.Apply()` an Fastify
+> weitergibt — laut `node_modules/fastify/lib/content-type-parser.js:241`
+> gewinnt das Limit der Route. Nur die Schreibroute aus Task 8 setzt 8 MB.
+> `check:dashboard` prüft, dass ein Bild-Body über 1 MiB auf der Modul-Route
+> mit 413 abgewiesen wird.
+
 - [ ] **Step 3: Typen prüfen**
 
 ```bash
@@ -1134,7 +1144,7 @@ Sollte `this.client.galleryService` einen Typfehler werfen, den tatsächlichen F
 - Modify: `src/scripts/CheckDashboard.ts` (hinter dem Check aus Task 7)
 
 **Interfaces:**
-- Consumes: `AddUpload` (Task 5), Buffer-Body (Task 6), `CanManage` (Task 7).
+- Consumes: `AddUpload` (Task 5), Buffer-Body (Task 6), `CanManage` (Task 7), `IRouteOptions.bodyLimit` (Nachbesserung zu Task 6 — ohne dieses Feld nimmt die Route keine Bilder über 1 MiB an).
 - Produces: `POST /api/guild/:id/gallery/*` mit sechs Aktionen. Task 9 ruft sie auf, Teil 3 ebenfalls.
 
 Sechs Aktionen unter einem Pfad statt sechs Dateien: die Rechteprüfung steht damit einmal da statt sechsmal, und die Galerie-ID enthält Schrägstriche (`<guild>/<kategorie>/<datei>`) und passt deshalb ohnehin in keinen Pfad-Parameter.
@@ -1168,6 +1178,16 @@ In `src/scripts/CheckDashboard.ts` hinter dem Galerie-Check aus Task 7 einfügen
         body: "{}",
     });
     check("Galerie weist unbekannte Aktionen ab", galerieErfunden.status === 400, `${galerieErfunden.status}`);
+
+    // Gegenstueck zum 413 auf der Modul-Route: hier muss ein Bild ueber 1 MiB
+    // durchkommen. Welcher Status danach folgt, haengt an der Test-Sitzung -
+    // nur 413 waere falsch, dann fehlt der Route ihr bodyLimit.
+    const grossesBild = await fetch(`${BASE}${P}/api/guild/${id}/gallery/image?category=test&name=gross`, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "image/png" },
+        body: new Uint8Array(1024 * 1024 + 1),
+    });
+    check("Galerie nimmt Bilder ueber 1 MiB an", grossesBild.status !== 413, `${grossesBild.status}`);
 ```
 
 - [ ] **Step 2: Prüfung laufen lassen, Fehlschlag bestätigen**
@@ -1189,7 +1209,7 @@ import Route from "../structures/Route";
 import { SessionExpired } from "../services/DashboardService";
 import { ClearCookie, DASHBOARD_PATH, SESSION_COOKIE } from "../constants/Dashboard";
 import { SNOWFLAKE } from "../constants/Discord";
-import { UPLOAD_TYPES } from "../constants/Gallery";
+import { MAX_IMAGE_BYTES, UPLOAD_TYPES } from "../constants/Gallery";
 import { SessionOf } from "../utils/dashboard";
 import logger from "../utils/logger";
 
@@ -1218,6 +1238,11 @@ export default class DashboardApiGalleryEdit extends Route {
             prefixed: false,
             requiresAuth: false,
             rateLimit: { max: 60, timeWindow: "1 minute" },
+            // Die einzige Route, die ein Bild als Body annimmt - und damit die
+            // einzige, die mehr als Fastifys 1 MiB braucht. Der Parser in
+            // Server.ts traegt absichtlich kein eigenes Limit: sonst puffert
+            // jede POST-Route 8 MB, bevor sie die Sitzung ueberhaupt ansieht.
+            bodyLimit: MAX_IMAGE_BYTES,
         });
     }
 
