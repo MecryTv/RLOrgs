@@ -681,6 +681,9 @@ async function main(): Promise<void> {
     const activityApi = await fetch(`${BASE}${P}/api/guild/${id}/activity`, MANUAL);
     check("Aktivität ohne Sitzung ist 401", activityApi.status === 401, `${activityApi.status}`);
 
+    const galerieApi = await fetch(`${BASE}${P}/api/guild/${id}/gallery`, MANUAL);
+    check("Galerie ohne Sitzung ist 401", galerieApi.status === 401, `${galerieApi.status}`);
+
     const health = await fetch(`${BASE}/dcapi/health`);
     check("Bestehende API bleibt tokenpflichtig", health.status === 401, `${health.status}`);
 

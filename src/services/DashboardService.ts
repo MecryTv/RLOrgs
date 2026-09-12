@@ -372,6 +372,17 @@ export default class DashboardService implements IDashboardService {
         return modules;
     }
 
+    /**
+     * Darf diese Sitzung den Server verwalten? Dieselbe Frage, die SetModule
+     * stellt - die Galerie-Routen stellen sie auch, und sie soll an genau einer
+     * Stelle beantwortet werden. Wirft SessionExpired.
+     */
+    async CanManage(session: IDashboardSession, guildId: string): Promise<boolean> {
+        const guild = (await this.GuildsOf(session)).find((entry) => entry.id === guildId);
+
+        return Boolean(guild?.canManage);
+    }
+
     // Frisch aus der Datenbank statt aus der zwischengespeicherten Serverliste,
     // sonst stünde nach dem Umschalten bis zu einer Minute der alte Stand da.
     // null heißt: ohne Datenbank lässt sich nichts schalten.
