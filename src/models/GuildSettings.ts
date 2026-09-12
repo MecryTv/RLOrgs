@@ -122,6 +122,13 @@ export default class GuildSettings extends Model<IGuildSettingsRow> {
 
         for (const row of rows) found.set(row.guild_id, WithPermanent(Unpack<string[]>(row.modules, [])));
 
+        // Auch ohne eigene Zeile bekommt jeder angefragte Server die festen
+        // Module - sonst zeigt die Serverliste (die hier durchgeht) etwas
+        // anderes als die Detailseite (die über Of() geht) für denselben Server.
+        for (const guildId of guildIds) {
+            if (!found.has(guildId)) found.set(guildId, WithPermanent([]));
+        }
+
         return found;
     }
 }

@@ -20,6 +20,7 @@ import { DatabaseUnavailable } from "../services/DatabaseService";
 import { TeamMMR, WTSI } from "../constants/WTSI";
 import PlayerRanks from "../models/PlayerRanks";
 import { DAY_MS, HOUR_MS, SplitSpan } from "../constants/Activity";
+import { PERMANENT_MODULES } from "../constants/Modules";
 
 // Eine Snowflake, die es bei Discord nicht gibt - Stand 2262.
 const GUILD = "9007199254740991";
@@ -172,8 +173,20 @@ async function checkSettings(client: BotClient): Promise<void> {
 
     const model = client.settings;
 
+    // Seit Task 3 mischt Of() PERMANENT_MODULES immer mit ein - ein unbekannter
+    // Server bekommt also nicht "gar nichts", sondern genau die festen Module.
+    // Verglichen wird gegen die Konstante statt gegen ["gallery"], damit dieser
+    // Check nicht veraltet, sobald dort ein weiteres Modul dazukommt.
     const fresh = await model.Of(GUILD);
-    check("Unbekannter Server bekommt Standardwerte", fresh.modules.length === 0 && fresh.matchChannel === null);
+    const permanent = [...PERMANENT_MODULES].sort();
+
+    check(
+        "Unbekannter Server bekommt Standardwerte plus die festen Module",
+        fresh.modules.length === permanent.length &&
+            permanent.every((id) => fresh.modules.includes(id)) &&
+            fresh.matchChannel === null,
+        fresh.modules.join(",")
+    );
 
     await model.Save({
         guildId: GUILD,
