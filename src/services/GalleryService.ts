@@ -1,8 +1,5 @@
 import path from "path";
-import { createWriteStream } from "node:fs";
-import { mkdir, readdir, rename, rm, stat, unlink } from "node:fs/promises";
-import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
+import { mkdir, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import axios from "axios";
 import { AttachmentBuilder } from "discord.js";
 import BotClient from "../client/BotClient";
@@ -21,13 +18,14 @@ import {
     IMAGE_TYPES,
     IsImageFile,
     IsScope,
+    MAX_IMAGE_BYTES,
     ParseSource,
     PRIVATE_SCOPE,
     SanitizeName,
 } from "../constants/Gallery";
+import { Shrink } from "../utils/image";
 import logger from "../utils/logger";
 
-const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT = 15_000;
 const EXTENSION_BY_MIME = new Map<string, string>();
 for (const [extension, mime] of Object.entries(IMAGE_TYPES)) {
@@ -125,53 +123,72 @@ export default class GalleryService implements IGalleryService {
     }
 
     async AddImage(target: IGalleryTarget, url: string, fileName?: string): Promise<IGalleryEntry> {
+        const source = ParseSource(url);
+
+        const response = await axios.get<ArrayBuffer>(source.href, {
+            responseType: "arraybuffer",
+            timeout: DOWNLOAD_TIMEOUT,
+            maxRedirects: 3,
+            maxContentLength: MAX_IMAGE_BYTES,
+            validateStatus: (status) => status === 200,
+        });
+
+        const mime = String(response.headers["content-type"] ?? "")
+            .split(";")[0]
+            .trim()
+            .toLowerCase();
+
+        if (!EXTENSION_BY_MIME.has(mime)) throw new Error(`Nicht unterstützter Dateityp: ${mime || "unbekannt"}`);
+
+        return this.Store(target, Buffer.from(response.data), mime, fileName ?? path.basename(source.pathname));
+    }
+
+    async AddUpload(
+        target: IGalleryTarget,
+        buffer: Buffer,
+        mime: string,
+        fileName: string
+    ): Promise<IGalleryEntry> {
+        if (buffer.length > MAX_IMAGE_BYTES) {
+            throw new Error(`Bild ist größer als ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`);
+        }
+
+        if (!EXTENSION_BY_MIME.has(mime)) throw new Error(`Nicht unterstützter Dateityp: ${mime || "unbekannt"}`);
+
+        return this.Store(target, buffer, mime, fileName);
+    }
+
+    // Der einzige Weg, auf dem ein Bild ins Verzeichnis kommt - aus dem Netz wie
+    // aus dem Dashboard. Deshalb steht das Verkleinern hier und nirgends sonst.
+    private async Store(
+        target: IGalleryTarget,
+        buffer: Buffer,
+        mime: string,
+        wanted: string
+    ): Promise<IGalleryEntry> {
         const { guildId, category, subcategory } = this.Normalize(target);
 
         if (!guildId || guildId === DEFAULT_SCOPE) throw new Error("Der Default-Scope kann nicht befüllt werden.");
         if (!category) throw new Error("Es wurde keine gültige Kategorie angegeben.");
 
-        const source = ParseSource(url);
-
-        const response = await axios.get<Readable>(source.href, {
-            responseType: "stream",
-            timeout: DOWNLOAD_TIMEOUT,
-            maxRedirects: 3,
-            maxContentLength: MAX_DOWNLOAD_BYTES,
-            validateStatus: (status) => status === 200,
-        });
-
-        const contentType = String(response.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
-        const extension = EXTENSION_BY_MIME.get(contentType);
-
-        if (!extension) {
-            response.data.destroy();
-            throw new Error(`Nicht unterstützter Dateityp: ${contentType || "unbekannt"}`);
-        }
-
-        const wanted = fileName ?? path.basename(source.pathname);
-        const file = `${SanitizeName(path.parse(wanted).name) || `image-${Date.now()}`}${extension}`;
+        const shrunk = await Shrink(buffer, mime);
+        const stem = SanitizeName(path.parse(wanted).name) || `image-${Date.now()}`;
 
         const directory = this.DirectoryFor(guildId, category, subcategory);
         await mkdir(directory, { recursive: true });
 
-        const destination = path.join(directory, file);
+        // Zwei Uploads mit demselben Namen sind kein Fehler des Nutzers. Ohne
+        // diese Schleife ueberschriebe der zweite den ersten, stumm.
+        let file = `${stem}${shrunk.extension}`;
+        let attempt = 2;
 
-        let received = 0;
-        response.data.on("data", (chunk: Buffer) => {
-            received += chunk.length;
-            if (received > MAX_DOWNLOAD_BYTES) {
-                response.data.destroy(new Error(`Bild ist größer als ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MB.`));
-            }
-        });
+        while (await this.Exists(path.join(directory, file))) file = `${stem}-${attempt++}${shrunk.extension}`;
 
-        try {
-            await pipeline(response.data, createWriteStream(destination));
-        } catch (error) {
-            await unlink(destination).catch(() => {});
-            throw error;
-        }
+        await writeFile(path.join(directory, file), shrunk.buffer);
 
-        logger.info(`⬇️  Bild "${file}" in ${guildId}/${category} gespeichert`);
+        logger.info(
+            `⬇️  Bild "${file}" in ${guildId}/${category} gespeichert (${Math.round(shrunk.buffer.length / 1024)} KB)`
+        );
 
         return this.ToEntry({ guildId, category, subcategory, file });
     }

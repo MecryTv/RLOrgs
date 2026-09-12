@@ -47,6 +47,7 @@ export default interface IGalleryService {
     DeleteCategory(target: IGalleryTarget): Promise<number>;
 
     AddImage(target: IGalleryTarget, url: string, fileName?: string): Promise<IGalleryEntry>;
+    AddUpload(target: IGalleryTarget, buffer: Buffer, mime: string, fileName: string): Promise<IGalleryEntry>;
     MoveImage(id: string, folder: IGalleryFolder): Promise<boolean>;
     DeleteImage(id: string): Promise<boolean>;
 }
