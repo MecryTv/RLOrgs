@@ -498,16 +498,27 @@ async function main(): Promise<void> {
     // Geladen wird die gebaute Datei selbst, nicht ihr Text: nur so ist zu sehen,
     // was ein Modul ist und was ein Teil davon. Teile haben keinen Schalter und
     // stehen nie in guild_settings.modules - der Bot kennt sie deshalb nicht.
-    type ModuleEntry = { id: string; icon: string; parts?: { id: string; icon: string }[] };
+    type ModuleEntry = {
+        id: string;
+        icon: string;
+        category?: string;
+        always?: true;
+        parts?: { id: string; icon: string }[];
+    };
+    type CategoryEntry = { id: string; name: string };
 
     const { pathToFileURL } = await import("node:url");
     const moduleFile = path.join(ASSETS, "constants", "Modules.js");
     const guildPage = await readFile(path.join(ASSETS, "..", "guild.html"), "utf8");
     const loaded = existsSync(moduleFile)
-        ? ((await import(pathToFileURL(moduleFile).href)) as { MODULES?: ModuleEntry[] })
+        ? ((await import(pathToFileURL(moduleFile).href)) as {
+              MODULES?: ModuleEntry[];
+              CATEGORIES?: CategoryEntry[];
+          })
         : {};
 
     const modules = loaded.MODULES ?? [];
+    const categories = loaded.CATEGORIES ?? [];
     const anchors = [...modules, ...modules.flatMap((module) => module.parts ?? [])];
     const symbols = anchors.map((entry) => entry.icon.replace("#", ""));
     const missing = symbols.filter((symbol) => !guildPage.includes(`id="${symbol}"`));
@@ -524,6 +535,32 @@ async function main(): Promise<void> {
             new Set(ids).size === ids.length &&
             ids.every((id) => /^[a-z][a-z0-9-]*$/.test(id) && !guildPage.includes(`id="${id}"`)),
         ids.join(", ")
+    );
+
+    // Jedes Modul steht unter einer Ueberschrift der Leiste. Ohne Kategorie
+    // fiele es aus der Leiste heraus, ohne dass jemand es merkt.
+    const known = new Set(categories.map((entry) => entry.id));
+    const homeless = modules.filter((entry) => !entry.category || !known.has(entry.category));
+
+    check(
+        `Jedes Modul haengt an einer Kategorie (${modules.length})`,
+        categories.length > 0 && homeless.length === 0,
+        homeless.map((entry) => entry.id).join(", ")
+    );
+
+    const empty = categories.filter((entry) => !modules.some((module) => module.category === entry.id));
+
+    check(
+        `Jede Kategorie traegt mindestens ein Modul (${categories.length})`,
+        empty.length === 0,
+        empty.map((entry) => entry.id).join(", ")
+    );
+
+    // Die Galerie gehoert fest dazu. Faellt die Markierung weg, stuende im
+    // Dashboard ein Schalter, den der Bot nicht annimmt.
+    check(
+        "Galerie ist als festes Modul markiert",
+        modules.find((entry) => entry.id === "gallery")?.always === true
     );
 
     const up = await fetch(`${BASE}${P}/assets/..%2Findex.html`);
