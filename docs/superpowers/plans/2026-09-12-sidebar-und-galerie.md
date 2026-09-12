@@ -1095,17 +1095,23 @@ export default class DashboardApiGallery extends Route {
         }
 
         const gallery = this.client.galleryService;
-        const scopes = [id, "default"];
-        const categories = (await Promise.all(scopes.map((scope) => gallery.GetCategories(scope)))).flat();
+
+        // Auch leere Alben: ohne das verschwaende ein frisch angelegtes Album
+        // sofort wieder aus der Liste, und "Anlegen" saehe aus, als taete es
+        // nichts. Das Discord-Panel blendet leere Alben aus, das Dashboard nicht.
+        const all = { requireImages: false };
+
+        // GetCategories(id) liefert Vorlagen und Server schon zusammen - ein
+        // zweiter Aufruf fuer "default" haette jede Vorlage doppelt gezeigt.
+        const categories = await gallery.GetCategories(id, all);
+
+        // Unterordner je Name nur einmal abfragen: GetSubcategories schaut
+        // ebenfalls in beide Bereiche, und ein Name kann in beiden vorkommen.
+        const names = [...new Set(categories.map((entry) => entry.name))];
+        const nested = (await Promise.all(names.map((name) => gallery.GetSubcategories(id, name, all)))).flat();
 
         // Unterordner stehen gleichberechtigt in derselben Liste; ihr Feld
         // "parent" sagt, wohin sie gehoeren.
-        const nested = (
-            await Promise.all(
-                categories.map((entry) => gallery.GetSubcategories(entry.guildId, entry.name))
-            )
-        ).flat();
-
         const folders = [...categories, ...nested];
 
         const images = (
