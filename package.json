@@ -27,6 +27,7 @@
         "build:dashboard": "tsc -p src/dashboard/tsconfig.json",
         "check:card": "tsx src/scripts/CheckCard.ts",
         "check:dashboard": "tsx src/scripts/CheckDashboard.ts",
+        "check:image": "tsx src/scripts/CheckImage.ts",
         "check:db": "tsx src/scripts/CheckDatabase.ts",
         "check:prime": "tsx src/scripts/CheckPrime.ts",
         "dev": "npm run build:dashboard && tsx watch src/index.ts --dev",

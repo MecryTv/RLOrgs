@@ -17,6 +17,15 @@ export const IMAGE_TYPES = {
 
 export type ImageExtension = keyof typeof IMAGE_TYPES;
 
+/**
+ * Die Obergrenze fuer ein Bild - fuer den Download aus dem Netz wie fuer den
+ * Upload aus dem Dashboard. Die Zahl steht hier und nur hier.
+ */
+export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+/** Die Typen, die ein Upload tragen darf - ohne Dubletten. */
+export const UPLOAD_TYPES = [...new Set(Object.values(IMAGE_TYPES))];
+
 export function IsScope(value: string): boolean {
     return value === DEFAULT_SCOPE || /^\d{17,20}$/.test(value);
 }
