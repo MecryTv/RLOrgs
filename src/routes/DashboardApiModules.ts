@@ -4,7 +4,7 @@ import Route from "../structures/Route";
 import { SessionExpired } from "../services/DashboardService";
 import { ClearCookie, DASHBOARD_PATH, SESSION_COOKIE } from "../constants/Dashboard";
 import { SNOWFLAKE } from "../constants/Discord";
-import { IsModule } from "../constants/Modules";
+import { IsModule, IsPermanent } from "../constants/Modules";
 import { WantsJSON } from "../utils/admin";
 import { SessionOf } from "../utils/dashboard";
 import logger from "../utils/logger";
@@ -46,6 +46,15 @@ export default class DashboardApiModules extends Route {
 
         if (!IsModule(moduleId) || typeof on !== "boolean") {
             return reply.code(400).send({ error: "Unbekanntes Modul oder kein An/Aus" });
+        }
+
+        // Vor der Datenbank: die Antwort haengt nicht daran, ob eine erreichbar
+        // ist - das Modul laesst sich so oder so nicht ausschalten.
+        if (!on && IsPermanent(moduleId)) {
+            return reply.code(400).send({
+                error: "Dieses Modul lässt sich nicht ausschalten.",
+                hint: "Die Galerie gehört fest zum Bot.",
+            });
         }
 
         if (!this.client.databaseService.Ready) {

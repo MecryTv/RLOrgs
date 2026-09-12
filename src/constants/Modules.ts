@@ -37,3 +37,17 @@ export type ModuleId = (typeof MODULE_IDS)[number];
 export function IsModule(value: unknown): value is ModuleId {
     return typeof value === "string" && (MODULE_IDS as readonly string[]).includes(value);
 }
+
+/**
+ * Module, die zum Bot gehoeren und sich nicht abschalten lassen. Sie stehen
+ * trotzdem in MODULE_IDS: das Dashboard zeigt ihre Kachel, nur gesperrt.
+ *
+ * GuildSettings.Of() mischt sie in jede Modulliste - damit muss keine andere
+ * Stelle davon wissen. Die Schalter-Route weist ein Ausschalten zusaetzlich mit
+ * 400 ab, damit die Antwort erklaert, was passiert ist.
+ */
+export const PERMANENT_MODULES = new Set<ModuleId>(["gallery"]);
+
+export function IsPermanent(value: unknown): value is ModuleId {
+    return IsModule(value) && PERMANENT_MODULES.has(value);
+}

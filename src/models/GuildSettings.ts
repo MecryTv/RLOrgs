@@ -1,5 +1,6 @@
 import Model from "../structures/Model";
 import { OrNull, TABLES, TableName } from "../constants/Database";
+import { ModuleId, PERMANENT_MODULES } from "../constants/Modules";
 
 /** Eine Zeile aus guild_settings, so wie MariaDB sie liefert. */
 export interface IGuildSettingsRow {
@@ -41,6 +42,16 @@ function Unpack<T>(value: unknown, fallback: T): T {
     }
 }
 
+// Feste Module stehen in jeder Liste, egal was in der Spalte steht: so muss
+// keine aufrufende Stelle wissen, dass es sie gibt.
+function WithPermanent(modules: string[]): string[] {
+    const all = new Set(modules);
+
+    for (const id of PERMANENT_MODULES) all.add(id);
+
+    return [...all].sort();
+}
+
 export default class GuildSettings extends Model<IGuildSettingsRow> {
     readonly Table: TableName = TABLES.settings;
     readonly Key = ["guild_id"] as const;
@@ -49,11 +60,11 @@ export default class GuildSettings extends Model<IGuildSettingsRow> {
     async Of(guildId: string): Promise<IGuildSettings> {
         const row = await this.Find(guildId);
 
-        if (!row) return { guildId, ...DEFAULT_SETTINGS };
+        if (!row) return { guildId, ...DEFAULT_SETTINGS, modules: WithPermanent([]) };
 
         return {
             guildId: row.guild_id,
-            modules: Unpack<string[]>(row.modules, []),
+            modules: WithPermanent(Unpack<string[]>(row.modules, [])),
             rankRoles: Unpack<Record<string, string>>(row.rank_roles, {}),
             matchChannel: row.match_channel,
             queueChannel: row.queue_channel,
@@ -79,8 +90,10 @@ export default class GuildSettings extends Model<IGuildSettingsRow> {
         const settings = await this.Of(guildId);
         const modules = new Set(settings.modules);
 
+        // Ein festes Modul bliebe ohnehin in jeder Liste - hier stehen zu
+        // bleiben haelt auch die Spalte ehrlich.
         if (on) modules.add(module);
-        else modules.delete(module);
+        else if (!PERMANENT_MODULES.has(module as ModuleId)) modules.delete(module);
 
         const next = [...modules].sort();
 
@@ -107,7 +120,7 @@ export default class GuildSettings extends Model<IGuildSettingsRow> {
             )
         );
 
-        for (const row of rows) found.set(row.guild_id, Unpack<string[]>(row.modules, []));
+        for (const row of rows) found.set(row.guild_id, WithPermanent(Unpack<string[]>(row.modules, [])));
 
         return found;
     }

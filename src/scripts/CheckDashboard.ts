@@ -647,6 +647,15 @@ async function main(): Promise<void> {
     });
     check("Modul-Schalter weist unbekannte Module ab", erfunden.status === 400, `${erfunden.status}`);
 
+    // Die Galerie gehoert fest dazu. Der Schalter muss vor Datenbank und Discord
+    // abweisen, sonst haengt die Antwort an Dingen, die der Check nicht hat.
+    const festesAus = await fetch(modulesApi, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "application/json" },
+        body: JSON.stringify({ module: "gallery", on: false }),
+    });
+    check("Festes Modul laesst sich nicht ausschalten", festesAus.status === 400, `${festesAus.status}`);
+
     // Das Dashboard zeigt die Namen, der Bot entscheidet, was gespeichert wird.
     // Fehlt ein Modul im Bot, ließe es sich anklicken, aber nie einschalten.
     // Verglichen werden nur die Module: Teile eines Moduls haben keinen Schalter.
