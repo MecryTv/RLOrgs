@@ -87,6 +87,23 @@ async function main(): Promise<void> {
 
     check("Muell wird mit lesbarem Text abgelehnt", broken === "Das Bild ließ sich nicht lesen.", broken);
 
+    // Das Label "image/gif" kommt von aussen (content-type oder Browser) und darf
+    // allein nicht entscheiden, ob verkleinert wird - das entscheiden die Bytes.
+    const falseLabel = await Shrink(Sample(300, 200), "image/gif");
+
+    check(
+        "PNG mit falschem Label 'image/gif' wird trotzdem verkleinert",
+        falseLabel.extension === ".webp",
+        falseLabel.extension
+    );
+
+    const fakeGif = await Shrink(Buffer.from("kein bild"), "image/gif").then(
+        () => "kein Fehler",
+        (error: Error) => error.message
+    );
+
+    check("Muell mit falschem Label 'image/gif' wird abgelehnt", fakeGif === "Das Bild ließ sich nicht lesen.", fakeGif);
+
     console.log(failures === 0 ? "\n✅ Alle Prüfungen bestanden.\n" : `\n❌ ${failures} Prüfung(en) fehlgeschlagen.\n`);
     process.exit(failures === 0 ? 0 : 1);
 }

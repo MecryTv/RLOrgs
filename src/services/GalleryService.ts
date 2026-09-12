@@ -182,9 +182,29 @@ export default class GalleryService implements IGalleryService {
         let file = `${stem}${shrunk.extension}`;
         let attempt = 2;
 
-        while (await this.Exists(path.join(directory, file))) file = `${stem}-${attempt++}${shrunk.extension}`;
+        for (;;) {
+            const destination = path.join(directory, file);
 
-        await writeFile(path.join(directory, file), shrunk.buffer);
+            // Der Schreibvorgang selbst ist die Pruefung: "wx" legt die Datei nur an,
+            // wenn dort noch keine liegt. Ein stat() vorher prueft nur einen Augenblick,
+            // der sofort wieder vorbei ist - bis zum eigenen writeFile() kann ein
+            // zweiter Upload denselben Namen laengst angelegt haben, und "w" (anlegen-
+            // oder-abschneiden) ueberschriebe ihn dann stumm.
+            try {
+                await writeFile(destination, shrunk.buffer, { flag: "wx" });
+                break;
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+                    // Unter "wx" legt nur dieser Aufruf die Datei an - stuende dort schon
+                    // eine, kaeme EEXIST statt dessen. Das Fragment hier gehoert also
+                    // wirklich ihm und darf vor dem Weiterwerfen wieder verschwinden.
+                    await unlink(destination).catch(() => {});
+                    throw error;
+                }
+
+                file = `${stem}-${attempt++}${shrunk.extension}`;
+            }
+        }
 
         logger.info(
             `⬇️  Bild "${file}" in ${guildId}/${category} gespeichert (${Math.round(shrunk.buffer.length / 1024)} KB)`

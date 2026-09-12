@@ -9,14 +9,24 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
  *
  * Animierte GIFs gehen unveraendert durch: ein Canvas-Durchlauf behielte nur
  * das erste Bild, und eine stehende Animation waere schlechter als ein paar
- * Kilobyte mehr.
+ * Kilobyte mehr. Ob das zutrifft, entscheiden die Bytes selbst und nicht das
+ * mitgelieferte Label: "image/gif" kommt vom content-type eines fremden
+ * Servers oder direkt vom Browser und laesst sich frei behaupten. Nur ein
+ * Puffer, der wirklich mit "GIF8" beginnt, kommt unveraendert durch - alles
+ * andere unter diesem Label landet ganz normal im Canvas.
  */
 
 const MAX_EDGE = 1920;
 const QUALITY = 80;
 
+// "GIF87a" und "GIF89a" sind die einzigen beiden Varianten, und beide beginnen
+// mit diesen vier ASCII-Zeichen - das reicht als Nachweis.
+function IsGif(buffer: Buffer): boolean {
+    return buffer.length >= 4 && buffer.toString("ascii", 0, 4) === "GIF8";
+}
+
 export async function Shrink(buffer: Buffer, mime: string): Promise<{ buffer: Buffer; extension: string }> {
-    if (mime === "image/gif") return { buffer, extension: ".gif" };
+    if (mime === "image/gif" && IsGif(buffer)) return { buffer, extension: ".gif" };
 
     const image = await loadImage(buffer).catch(() => null);
 
