@@ -5,6 +5,7 @@ import RouteManager from "./handler/RouteManager";
 import IServer from "./interfaces/services/server/IServer";
 import { AssertSecret } from "./utils/jwt";
 import logger from "./utils/logger";
+import { MAX_IMAGE_BYTES, UPLOAD_TYPES } from "./constants/Gallery";
 
 const DEFAULT_HOST = "0.0.0.0";
 const MAX_PORT = 65535;
@@ -76,6 +77,15 @@ export default class Server implements IServer {
         // das Dashboard "/", im Entwicklungsmodus "/dashboard" - und ein Link auf
         // "/dashboard/" soll nicht ins Leere laufen.
         const instance = fastify({ logger: false, ignoreTrailingSlash: true });
+
+        // Bilder kommen roh: der Browser schickt die Datei als Body, Ziel und
+        // Name stehen in der Adresse. Ein Multipart-Paket waere eine Dependency
+        // fuer fuenf Zeilen.
+        instance.addContentTypeParser(
+            UPLOAD_TYPES,
+            { parseAs: "buffer", bodyLimit: MAX_IMAGE_BYTES },
+            (_request, body, done) => done(null, body)
+        );
 
         await instance.register(rateLimit, {
             global: true,
