@@ -186,14 +186,15 @@ Neu: `src/dashboard/client/pages/GuildGallery.ts` — die Verwaltungsansicht mit
 denselben Funktionen wie `/gallery` in Discord: durchblättern, hochladen,
 verschieben, löschen, Kategorien anlegen und löschen.
 
-Neu: `src/dashboard/client/layout/ImagePicker.ts` — Bildauswahl mit drei
-Reitern:
+In **Teil 3** (nicht hier): `src/dashboard/client/layout/ImagePicker.ts` —
+Bildauswahl mit drei Reitern. Sie entsteht erst dort, weil sie in Teil 2 keinen
+Aufrufer hätte; die Routen und das Bildraster aus Teil 2 tragen sie dann schon.
 
 - **Galerie** — Kategorien des Servers plus die Default-Bilder
 - **Hochladen** — Datei wählen, wird verkleinert und in der Galerie abgelegt
 - **URL** — https-Adresse, wird heruntergeladen, geprüft und abgelegt
 
-Der Picker ist das Stück, das Teil 3 wiederverwendet.
+Was Teil 2 dafür liefert: die Galerie-Routen und das Raster `.galgrid` / `.galtile`.
 
 **Custom Images** landen in derselben Galerie, in der Kategorie `custom` des
 Servers. Kein zweiter Bilderspeicher, und was ein Panel benutzt, steht sichtbar

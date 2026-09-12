@@ -4,7 +4,7 @@
 
 **Goal:** Die Modul-Leiste des Dashboards nach Kategorien gruppieren, die Galerie zum festen Modul machen und ihr eine Dashboard-Ansicht mit Upload, Bildauswahl und automatischer Komprimierung geben.
 
-**Architecture:** Teil 1 ändert nur Anzeige und Modul-Liste — keine neuen Tabellen, keine neuen Routen. Teil 2 legt eine Komprimierfunktion (`Shrink`) unter den bestehenden `GalleryService`, sodass jeder Weg ins Bildverzeichnis durch sie läuft, und stellt zwei Fastify-Routen davor. Das Dashboard bekommt eine Verwaltungsseite und einen wiederverwendbaren Bild-Picker, den der spätere Message-Editor übernimmt.
+**Architecture:** Teil 1 ändert nur Anzeige und Modul-Liste — keine neuen Tabellen, keine neuen Routen. Teil 2 legt eine Komprimierfunktion (`Shrink`) unter den bestehenden `GalleryService`, sodass jeder Weg ins Bildverzeichnis durch sie läuft, und stellt zwei Fastify-Routen davor. Das Dashboard bekommt eine Verwaltungsseite, über die Alben und Bilder ohne Discord zu erreichen sind.
 
 **Tech Stack:** TypeScript (CommonJS für den Bot, ESNext für den Dashboard-Client), discord.js 14, Fastify 5, MariaDB, `@napi-rs/canvas`, `axios`.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Kein Git-Repository.** `C:\Users\YT197\Desktop\Development\RLOrgs` ist kein Repo (`git rev-parse` schlägt fehl). Jede Aufgabe endet deshalb mit einem Prüflauf statt mit einem Commit. Wer vorher `git init` ausführt, kann die Prüfschritte zusätzlich als Commit abschließen — nötig ist es nicht.
+- **Git.** Das Repository wurde am 12.09.2026 lokal angelegt; Baseline ist `01c500f`, gearbeitet wird auf `feature/sidebar-und-galerie`. Es gibt kein Remote — nichts wird gepusht. Jede Aufgabe endet mit einem Prüflauf **und** einem Commit. `core.autocrlf` steht auf `false`, damit Zeilenenden die Diffs nicht zumüllen.
 - **Kein Test-Framework, absichtlich.** Der Kopf von `src/scripts/CheckDashboard.ts` sagt es: „Absichtlich ohne Test-Framework - der Bot hat keins." Prüfungen sind ausführbare Skripte unter `src/scripts/`, angemeldet als `check:*` in `package.json`. Der TDD-Zyklus lautet hier: Prüfung zuerst erweitern, fehlschlagen lassen, dann bauen.
 - **Keine neuen npm-Pakete.** Alles Nötige ist vorhanden: `@napi-rs/canvas` für Bilder, `axios` für Downloads, `glob` für die Routen-Erkennung.
 - **Der Dashboard-Client kompiliert eigenständig.** `src/dashboard/tsconfig.json` setzt `rootDir: "client"` und `types: []`. Aus `src/dashboard/client/**` darf **nichts** außerhalb von `client/` importiert werden. Geteiltes Wissen wird gespiegelt und von `npm run check:dashboard` verglichen — so läuft es schon für die Modul-Liste.
@@ -44,7 +44,6 @@
 | `src/routes/DashboardApiGalleryEdit.ts` | Schreiben: sechs Aktionen unter einem Pfad | 8 |
 | `src/dashboard/public/guild.html` | Sektion `gallery` | 9 |
 | `src/dashboard/client/pages/GuildGallery.ts` | Verwaltungsansicht | 9 |
-| `src/dashboard/client/layout/ImagePicker.ts` | Bildauswahl, von Teil 3 wiederverwendet | 10 |
 
 ---
 
@@ -985,7 +984,7 @@ Erwartet: alle Prüfungen `ok`, Exit-Code 0. Der Check startet denselben Server 
 
 **Interfaces:**
 - Consumes: `SessionOf` (`src/utils/dashboard.ts`), `DashboardService.GuildsOf` über eine neue öffentliche Hilfe.
-- Produces: `GET /api/guild/:id/gallery` → `{ categories: ICategoryEntry[]; images: IGalleryEntry[] }`. Task 9 und 10 lesen davon.
+- Produces: `GET /api/guild/:id/gallery` → `{ categories: ICategoryEntry[]; images: IGalleryEntry[] }`. Task 9 liest davon, Teil 3 ebenfalls.
 
 - [ ] **Step 1: Prüfung zuerst — Route ohne Sitzung ist 401**
 
@@ -1125,7 +1124,7 @@ Sollte `this.client.galleryService` einen Typfehler werfen, den tatsächlichen F
 
 **Interfaces:**
 - Consumes: `AddUpload` (Task 5), Buffer-Body (Task 6), `CanManage` (Task 7).
-- Produces: `POST /api/guild/:id/gallery/*` mit sechs Aktionen. Task 9 und 10 rufen sie auf.
+- Produces: `POST /api/guild/:id/gallery/*` mit sechs Aktionen. Task 9 ruft sie auf, Teil 3 ebenfalls.
 
 Sechs Aktionen unter einem Pfad statt sechs Dateien: die Rechteprüfung steht damit einmal da statt sechsmal, und die Galerie-ID enthält Schrägstriche (`<guild>/<kategorie>/<datei>`) und passt deshalb ohnehin in keinen Pfad-Parameter.
 
@@ -1367,7 +1366,8 @@ In `src/dashboard/public/guild.html` innerhalb von `<div class="setcards" id="mo
 
           <div class="galbar">
             <select id="galFolder" aria-label="Album"></select>
-            <button class="btn" id="galNew" type="button"><svg><use href="#i-plus"/></svg>Album anlegen</button>
+            <input id="galName" type="text" maxlength="32" placeholder="Neues Album…" aria-label="Name des neuen Albums">
+            <button class="btn" id="galNew" type="button"><svg><use href="#i-plus"/></svg>Anlegen</button>
             <button class="btn" id="galUpload" type="button"><svg><use href="#i-image"/></svg>Bild hochladen</button>
             <input id="galFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
           </div>
@@ -1388,10 +1388,13 @@ In `src/dashboard/public/guild.html` innerhalb von `<div class="setcards" id="mo
    zerreissen; das Bild selbst bleibt vollstaendig sichtbar.
    ---------------------------------------------------------- */
 .galbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 16px}
-.galbar select{
-  min-width:200px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm);
+.galbar select,.galbar input[type="text"]{
+  min-width:180px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm);
   background:var(--glass);color:var(--text);font-size:13px;
 }
+/* Loeschen in zwei Schritten: der erste Klick fragt, der zweite loescht. Ein
+   window.confirm waere die einzige Systembox in einer sonst eigenen Oberflaeche. */
+.galtile__bar button.is-sure{background:var(--brand);padding:4px 8px;font-size:11px}
 .galgrid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(132px,1fr))}
 .galtile{
   position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:var(--r-sm);
@@ -1459,12 +1462,14 @@ export function renderGallery(guildId: string, canManage: boolean): void {
     const empty = need<HTMLElement>("#galEmpty");
     const file = need<HTMLInputElement>("#galFile");
     const newButton = need<HTMLButtonElement>("#galNew");
+    const name = need<HTMLInputElement>("#galName");
     const uploadButton = need<HTMLButtonElement>("#galUpload");
 
     let folders: IFolder[] = [];
     let images: IImage[] = [];
 
     newButton.disabled = !canManage;
+    name.disabled = !canManage;
     uploadButton.disabled = !canManage;
 
     function warn(text: string | null): void {
@@ -1580,11 +1585,26 @@ export function renderGallery(guildId: string, canManage: boolean): void {
         remove.type = "button";
         remove.title = "Bild löschen";
         remove.append(icon("#i-x"));
-        remove.addEventListener("click", () => {
-            // Ein geloeschtes Bild ist weg - das darf keine Fingerbewegung sein.
-            if (!window.confirm(`"${image.file}" wirklich löschen?`)) return;
+        // Ein geloeschtes Bild ist weg - das darf keine Fingerbewegung sein.
+        // Zwei Klicks statt einer Systembox: der erste fragt, der zweite loescht.
+        let sure = false;
 
+        remove.addEventListener("click", () => {
             clickSound("primary");
+
+            if (!sure) {
+                sure = true;
+                remove.classList.add("is-sure");
+                remove.replaceChildren(document.createTextNode("Wirklich?"));
+                window.setTimeout(() => {
+                    sure = false;
+                    remove.classList.remove("is-sure");
+                    remove.replaceChildren(icon("#i-x"));
+                }, 4000);
+
+                return;
+            }
+
             void send("image/delete", { image: image.id }).then((ok) => ok && load());
         });
 
@@ -1596,13 +1616,23 @@ export function renderGallery(guildId: string, canManage: boolean): void {
 
     picker.addEventListener("change", paintGrid);
 
-    newButton.addEventListener("click", () => {
-        const name = window.prompt("Wie soll das Album heißen?");
+    function create(): void {
+        const wanted = name.value.trim();
 
-        if (!name) return;
+        if (!wanted) return;
 
         clickSound("primary");
-        void send("category", { category: name }).then((ok) => ok && load());
+        void send("category", { category: wanted }).then((ok) => {
+            if (!ok) return;
+
+            name.value = "";
+            void load();
+        });
+    }
+
+    newButton.addEventListener("click", create);
+    name.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") create();
     });
 
     uploadButton.addEventListener("click", () => file.click());
@@ -1681,309 +1711,15 @@ Dann `npm run dev` starten und `/guild/<id>/gallery` öffnen:
 
 ---
 
-### Task 10: Der Bild-Picker
-
-**Files:**
-- Create: `src/dashboard/client/layout/ImagePicker.ts`
-- Modify: `src/dashboard/public/guild.html` (Dialog vor `<script>`)
-- Modify: `src/dashboard/public/assets/style.css` (ans Ende)
-
-**Interfaces:**
-- Consumes: dieselben Routen wie Task 9.
-- Produces: `pickImage(guildId: string): Promise<string | null>` — liefert die URL des gewählten Bildes oder `null` bei Abbruch. **Teil 3 des Specs (Message-Editor) ruft genau diese Signatur.**
-
-- [ ] **Step 1: Dialog in `guild.html`**
-
-Direkt vor `<script type="module" src="__BASE__/assets/app.js"></script>` einfügen:
-
-```html
-<!-- Bildauswahl. Ein <dialog> statt eigener Overlay-Logik: der Browser bringt
-     Fokusfalle, Escape und den abgedunkelten Hintergrund schon mit. -->
-<dialog class="pick" id="pick">
-  <form method="dialog" class="pick__head">
-    <b>Bild auswählen</b>
-    <button class="btn btn--ghost" value="" aria-label="Schließen"><svg><use href="#i-x"/></svg></button>
-  </form>
-
-  <div class="pick__tabs">
-    <button class="tab" type="button" data-tab="gallery" aria-current="true">Galerie</button>
-    <button class="tab" type="button" data-tab="upload">Hochladen</button>
-    <button class="tab" type="button" data-tab="url">URL</button>
-  </div>
-
-  <div class="notice pick__note" id="pickNote" hidden><svg><use href="#i-warn"/></svg><span></span></div>
-
-  <div class="pick__pane" data-pane="gallery">
-    <select id="pickFolder" aria-label="Album"></select>
-    <div class="galgrid" id="pickGrid"></div>
-  </div>
-
-  <div class="pick__pane" data-pane="upload" hidden>
-    <p class="modlead">Das Bild wird verkleinert und landet im Album <code>custom</code> deines Servers.</p>
-    <input id="pickFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
-  </div>
-
-  <div class="pick__pane" data-pane="url" hidden>
-    <p class="modlead">Nur https. Der Bot lädt das Bild herunter, verkleinert es und legt es im Album <code>custom</code> ab.</p>
-    <input id="pickUrl" type="url" placeholder="https://…">
-    <button class="btn" id="pickFetch" type="button">Übernehmen</button>
-  </div>
-</dialog>
-```
-
-- [ ] **Step 2: CSS ans Ende von `style.css`**
-
-```css
-/* Bildauswahl. Teilt sich das Raster mit der Galerie-Seite. */
-.pick{
-  width:min(760px,92vw);max-height:86vh;padding:0;overflow:auto;
-  border:1px solid var(--line);border-radius:var(--r-md);
-  background:var(--bg-2,#101418);color:var(--text);
-}
-.pick::backdrop{background:rgba(0,0,0,.6)}
-.pick__head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line)}
-.pick__tabs{display:flex;gap:4px;padding:12px 18px 0}
-.pick__note{margin:12px 18px 0}
-.pick__pane{padding:14px 18px 18px;display:grid;gap:10px}
-.pick__pane select,.pick__pane input[type="url"]{
-  padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm);
-  background:var(--glass);color:var(--text);font-size:13px;
-}
-.pick .galtile{cursor:pointer}
-.pick .galtile:hover{border-color:var(--brand)}
-```
-
-- [ ] **Step 3: Den Picker schreiben**
-
-Neue Datei `src/dashboard/client/layout/ImagePicker.ts`:
-
-```ts
-/**
- * Bildauswahl mit drei Wegen: aus der Galerie, frisch hochgeladen oder von einer
- * Adresse. Alles landet in derselben Galerie - ein hochgeladenes Bild im Album
- * "custom" des Servers. Kein zweiter Bilderspeicher, und was ein Panel benutzt,
- * steht sichtbar in der Galerie statt versteckt daneben.
- *
- * Teil 3 (Nachrichten-Editor) ruft pickImage() und sonst nichts aus dieser Datei.
- */
-
-import { need } from "../core/Dom.js";
-import { BASE } from "../core/Base.js";
-
-/** Das Album, in das Custom Images gehen. */
-const CUSTOM = "custom";
-
-interface IFolder {
-    guildId: string;
-    name: string;
-    parent: string | null;
-    scope: "default" | "custom";
-    images: number;
-}
-
-interface IImage {
-    id: string;
-    url: string;
-    category: string;
-    subcategory: string | null;
-    file: string;
-}
-
-export async function pickImage(guildId: string): Promise<string | null> {
-    const dialog = need<HTMLDialogElement>("#pick");
-    const note = need<HTMLElement>("#pickNote");
-    const picker = need<HTMLSelectElement>("#pickFolder");
-    const grid = need<HTMLElement>("#pickGrid");
-    const file = need<HTMLInputElement>("#pickFile");
-    const url = need<HTMLInputElement>("#pickUrl");
-    const fetchButton = need<HTMLButtonElement>("#pickFetch");
-    const tabs = [...dialog.querySelectorAll<HTMLButtonElement>(".tab[data-tab]")];
-    const panes = [...dialog.querySelectorAll<HTMLElement>(".pick__pane")];
-
-    const api = `${BASE}/api/guild/${encodeURIComponent(guildId)}/gallery`;
-
-    let folders: IFolder[] = [];
-    let images: IImage[] = [];
-
-    function warn(text: string | null): void {
-        note.hidden = text === null;
-        note.querySelector("span")!.textContent = text ?? "";
-    }
-
-    function show(which: string): void {
-        for (const tab of tabs) tab.setAttribute("aria-current", String(tab.dataset.tab === which));
-        for (const pane of panes) pane.hidden = pane.dataset.pane !== which;
-    }
-
-    async function load(): Promise<void> {
-        const response = await fetch(api, { headers: { Accept: "application/json" } }).catch(() => null);
-
-        if (!response?.ok) {
-            warn("Die Galerie lässt sich gerade nicht laden.");
-            return;
-        }
-
-        const data = (await response.json()) as { categories: IFolder[]; images: IImage[] };
-
-        folders = data.categories;
-        images = data.images;
-
-        picker.replaceChildren(
-            ...folders.map((folder) => {
-                const option = document.createElement("option");
-
-                option.value = [folder.parent ?? folder.name, folder.parent ? folder.name : ""].join("|");
-                option.textContent = `${folder.scope === "default" ? "Vorlagen" : "Dein Server"} · ${
-                    folder.parent ? `${folder.parent}/${folder.name}` : folder.name
-                }`;
-
-                return option;
-            })
-        );
-
-        paint();
-    }
-
-    function paint(): void {
-        const [category, subcategory] = picker.value.split("|");
-        const shown = images.filter(
-            (image) => image.category === category && (image.subcategory ?? "") === subcategory
-        );
-
-        grid.replaceChildren(
-            ...shown.map((image) => {
-                const box = document.createElement("figure");
-                const picture = document.createElement("img");
-
-                box.className = "galtile";
-                picture.src = image.url;
-                picture.alt = image.file;
-                picture.loading = "lazy";
-                box.append(picture);
-                box.addEventListener("click", () => dialog.close(image.url));
-
-                return box;
-            })
-        );
-    }
-
-    // Ein hochgeladenes Bild braucht ein Album. Gibt es "custom" noch nicht,
-    // entsteht es beim ersten Mal - der Nutzer soll davon nichts wissen muessen.
-    async function intoCustom(request: Promise<Response | null>): Promise<void> {
-        await fetch(`${api}/category`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ category: CUSTOM }),
-        }).catch(() => null);
-
-        const response = await request;
-
-        if (!response?.ok) {
-            const data = (await response?.json().catch(() => ({}))) as { error?: string };
-
-            warn(data?.error ?? "Das Bild wurde nicht übernommen.");
-            return;
-        }
-
-        const data = (await response.json()) as { image?: { url?: string } };
-
-        if (data.image?.url) dialog.close(data.image.url);
-    }
-
-    for (const tab of tabs) tab.addEventListener("click", () => show(tab.dataset.tab ?? "gallery"));
-
-    picker.addEventListener("change", paint);
-
-    file.addEventListener("change", () => {
-        const chosen = file.files?.[0];
-
-        file.value = "";
-
-        if (!chosen) return;
-
-        const query = new URLSearchParams({ category: CUSTOM, name: chosen.name });
-
-        void intoCustom(
-            fetch(`${api}/image?${query}`, {
-                method: "POST",
-                headers: { "Content-Type": chosen.type },
-                body: chosen,
-            }).catch(() => null)
-        );
-    });
-
-    fetchButton.addEventListener("click", () => {
-        if (!url.value.trim()) return;
-
-        void intoCustom(
-            fetch(`${api}/image/url`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: url.value.trim(), category: CUSTOM }),
-            }).catch(() => null)
-        );
-    });
-
-    warn(null);
-    show("gallery");
-    url.value = "";
-    dialog.showModal();
-
-    await load();
-
-    return new Promise((resolve) => {
-        dialog.addEventListener("close", () => resolve(dialog.returnValue || null), { once: true });
-    });
-}
-```
-
-- [ ] **Step 4: Vorübergehend anbinden, um ihn zu sehen**
-
-Der Picker hat bis Teil 3 keinen echten Aufrufer. Zum Prüfen in `src/dashboard/client/pages/GuildGallery.ts` einen Knopf ergänzen — er bleibt stehen, der Nachrichten-Editor nutzt später dieselbe Funktion.
-
-Import ergänzen:
-
-```ts
-import { pickImage } from "../layout/ImagePicker.js";
-```
-
-In `renderGallery`, hinter `uploadButton.addEventListener(...)`:
-
-```ts
-    // Derselbe Weg, den der Nachrichten-Editor spaeter nimmt. Hier steht er, um
-    // die Auswahl ohne Editor pruefen zu koennen.
-    need<HTMLButtonElement>("#galPick").addEventListener("click", () => {
-        void pickImage(guildId).then((chosen) => {
-            if (chosen) warn(null);
-
-            void load();
-        });
-    });
-```
-
-Und in `guild.html` in die `.galbar` hinter `#galUpload`:
-
-```html
-            <button class="btn btn--ghost" id="galPick" type="button">Bildauswahl testen</button>
-```
-
-- [ ] **Step 5: Bauen und im Browser prüfen**
-
-```bash
-npm run build:dashboard && npm run typecheck && npm run check:dashboard -- --dev
-```
-
-Erwartet: alles ohne Fehler, Exit-Code 0.
-
-Dann `npm run dev` starten, `/guild/<id>/gallery` öffnen und „Bildauswahl testen" klicken:
-- Reiter **Galerie**: die Alben stehen in der Auswahl, ein Klick auf eine Kachel schließt den Dialog.
-- Reiter **Hochladen**: eine Datei wählen legt sie im Album `custom` ab und schließt den Dialog.
-- Reiter **URL**: eine https-Adresse übernehmen tut dasselbe; `http://` wird mit „Nur https-URLs werden akzeptiert." abgelehnt.
-- Escape schließt ohne Auswahl.
-- Nach dem Schließen zeigt das Raster der Seite das neue Bild im Album `custom`.
-
----
-
 ## Nach dem Plan
 
-Teil 3 (Message-Editor mit Live-Vorschau), Teil 4 (Ticket-Kern) und Teil 5 (Discord-Commands) aus dem Spec bekommen einen eigenen Plan, sobald dieser abgearbeitet ist. Teil 3 beginnt mit `pickImage()` aus Task 10 als gegebener Schnittstelle.
+Teil 3 (Message-Editor mit Live-Vorschau), Teil 4 (Ticket-Kern) und Teil 5
+(Discord-Commands) aus dem Spec bekommen einen eigenen Plan, sobald dieser
+abgearbeitet ist.
+
+Der Bild-Picker (`src/dashboard/client/layout/ImagePicker.ts`, `pickImage()`)
+gehört dorthin und nicht hierher: er hätte in Teil 2 keinen Aufrufer, und ein
+Knopf, den nur der Test drückt, ist Code ohne Grund. Er entsteht in Teil 3
+zusammen mit dem Editor, der ihn wirklich braucht — auf den Routen aus Task 7
+und 8 und dem Raster (`.galgrid`, `.galtile`) aus Task 9, die beide dafür schon
+stehen.
