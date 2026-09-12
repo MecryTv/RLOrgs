@@ -6,7 +6,7 @@ import { clone, icon, need, maybe } from "../core/Dom.js";
 import { countMembers, paintCrest } from "../layout/GuildCard.js";
 import { monthOf, numbers } from "../core/Format.js";
 import { ROLE_ICONS, ROLE_LABELS } from "../constants/Groups.js";
-import { IModulePart, MODULES } from "../constants/Modules.js";
+import { CATEGORIES, IModulePart, MODULES } from "../constants/Modules.js";
 import { clickSound } from "../core/Sound.js";
 import { BASE } from "../core/Base.js";
 import { ActivityResult, fetchActivity, renderOverview } from "./GuildOverview.js";
@@ -306,10 +306,6 @@ function bindModules(guild: IGuild): (modules: string[] | null) => void {
     const list = need<HTMLElement>("#moduleList");
     const note = need<HTMLElement>("#moduleNote");
 
-    // Je Modul: seine Einträge in der Leiste (das Modul selbst und seine Teile),
-    // seine Kachel und sein Schalter.
-    const entries = new Map<string, { links: HTMLElement[]; tile: HTMLElement; input: HTMLInputElement }>();
-
     // Bis der Stand aus der Datenbank da ist, zeigt die Leiste den aus /api/me,
     // und die Schalter bleiben gesperrt - vorher ist nicht klar, ob es überhaupt
     // eine Datenbank gibt.
@@ -333,6 +329,10 @@ function bindModules(guild: IGuild): (modules: string[] | null) => void {
     }
 
     function card(entry: IModulePart): void {
+        // Steht die Sektion schon im HTML, gehoert sie einem gebauten Modul und
+        // fuellt sich selbst. Nur was es noch nicht gibt, bekommt die Platzkarte.
+        if (document.getElementById(entry.id)) return;
+
         const box = clone("#moduleCard");
 
         box.id = entry.id;
@@ -341,9 +341,42 @@ function bindModules(guild: IGuild): (modules: string[] | null) => void {
         cards.append(box);
     }
 
-    for (const module of MODULES) {
-        const links = [link(module, false)];
+    // Je Modul: seine Eintraege in der Leiste (das Modul selbst und seine Teile),
+    // seine Kachel, sein Schalter und ob es fest dazugehoert.
+    const entries = new Map<
+        string,
+        { links: HTMLElement[]; tile: HTMLElement; input: HTMLInputElement; always: boolean }
+    >();
 
+    // Die Leiste steht nach Kategorien: erst die Ueberschrift, dann ihre Module.
+    // Die Kacheln unter "Module" bleiben flach - dort gibt es keine Kategorien.
+    const groups: { cap: HTMLElement; ids: string[] }[] = [];
+    const bars = new Map<string, HTMLElement[]>();
+
+    for (const category of CATEGORIES) {
+        const members = MODULES.filter((entry) => entry.category === category.id);
+
+        if (members.length === 0) continue;
+
+        const cap = document.createElement("p");
+
+        cap.className = "setnav__cap";
+        cap.textContent = category.name;
+        cap.hidden = true;
+        nav.append(cap);
+
+        for (const module of members) {
+            const own = [link(module, false)];
+
+            for (const part of module.parts ?? []) own.push(link(part, true));
+
+            bars.set(module.id, own);
+        }
+
+        groups.push({ cap, ids: members.map((entry) => entry.id) });
+    }
+
+    for (const module of MODULES) {
         card(module);
 
         const tile = clone("#moduleTile");
@@ -361,29 +394,46 @@ function bindModules(guild: IGuild): (modules: string[] | null) => void {
             parts.textContent = `Mit dabei: ${module.parts.map((part) => part.name).join(" · ")}`;
             tile.querySelector(".acct__text")!.append(parts);
 
-            for (const part of module.parts) {
-                links.push(link(part, true));
-                card(part);
-            }
+            for (const part of module.parts) card(part);
+        }
+
+        if (module.always) {
+            const fixed = document.createElement("span");
+
+            fixed.className = "modalways";
+            fixed.textContent = "Immer an – dieses Modul gehört fest dazu.";
+            tile.querySelector(".acct__text")!.append(fixed);
         }
 
         list.append(tile);
 
         const input = tile.querySelector<HTMLInputElement>("input")!;
-        input.addEventListener("change", () => toggle(module.id, input.checked));
 
-        entries.set(module.id, { links, tile, input });
+        if (!module.always) input.addEventListener("change", () => toggle(module.id, input.checked));
+
+        entries.set(module.id, {
+            links: bars.get(module.id) ?? [],
+            tile,
+            input,
+            always: Boolean(module.always),
+        });
     }
 
     function paint(): void {
         for (const [id, entry] of entries) {
-            const on = shown.has(id);
+            const on = shown.has(id) || entry.always;
 
             for (const anchor of entry.links) anchor.hidden = !on;
 
             entry.input.checked = on;
-            entry.input.disabled = !ready || !guild.canManage;
+            entry.input.disabled = entry.always || !ready || !guild.canManage;
             entry.tile.classList.toggle("acct--on", on);
+        }
+
+        // Eine Ueberschrift ohne eingeschaltetes Modul darunter waere eine
+        // Zeile, die auf nichts zeigt.
+        for (const group of groups) {
+            group.cap.hidden = !group.ids.some((id) => shown.has(id) || entries.get(id)?.always);
         }
     }
 

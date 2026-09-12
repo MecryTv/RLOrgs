@@ -1327,6 +1327,17 @@ body[data-page="guild"]{--shell:1440px}
    Schalter: sie kommen mit ihrem Modul und gehen mit ihm. */
 .setnav a.is-sub{padding-left:34px;font-size:13px}
 .setnav a.is-sub svg{width:13px;height:13px}
+/* Ueberschrift einer Modulgruppe. Kein Link, nur Beschriftung - sie
+   verschwindet, solange kein Modul darunter eingeschaltet ist. Der erste
+   Abstand faellt weg, damit sie nicht vom Rand abrutscht. */
+.setnav__cap{
+  margin:14px 0 4px;padding:0 12px;
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text-3);
+}
+.setnav__cap:first-of-type{margin-top:10px}
+/* Ein festes Modul: der Schalter steht da, laesst sich aber nicht bewegen. */
+.modlist .modalways{display:block;margin-top:4px;color:var(--text-2)}
 /* "Module": ein Raster aus Kacheln mit Schalter, ohne Kategorien. Die Kacheln
    sind die Konto-Zeilen der Einstellungen (.acct) - an ist, was rot markiert
    ist, wie dort. */
