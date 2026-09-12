@@ -703,6 +703,16 @@ In `package.json` den Skript-Block um eine Zeile ergänzen, alphabetisch hinter 
         "check:image": "tsx src/scripts/CheckImage.ts",
 ```
 
+> **Korrektur nach dem Review (12.09.2026).** Die oben gezeigte Prüfung
+> „Ergebnis ist kleiner als das Original" taugt nicht: PNG→WebP@80 schrumpft
+> die Beispieldatei schon ohne jedes Skalieren von 102389 auf 14490 Bytes, also
+> besteht sie auch bei völlig kaputtem Resize. Sie wurde ersetzt durch
+> „Verkleinerung spart Bytes gegenüber WebP in Originalgröße" — verglichen wird
+> gegen dieselbe Quelle in Originalgröße bei gleicher Qualität. Dazu kam
+> „Kleines Bild wird trotzdem zu WebP", weil die zweite Hälfte der Spec-Regel
+> ungeprüft war. Der gebaute Stand steht in `src/scripts/CheckImage.ts`, nicht
+> mehr hier.
+
 - [ ] **Step 3: Prüfung laufen lassen, Fehlschlag bestätigen**
 
 ```bash
