@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RL Nexus · Zwei-Faktor nötig</title>
+<meta name="color-scheme" content="dark">
+<!-- Die Hauptseite. Steht in der .env als SITE_PUBLIC_URL und wird beim Ausliefern eingesetzt. -->
+<meta name="rlnexus-site" content="__SITE__">
+<meta name="robots" content="noindex">
+<link rel="icon" href="__BASE__/assets/images/RL Nexus N Logo.png" type="image/png">
+<link rel="stylesheet" href="__BASE__/assets/style.css">
+</head>
+<body>
+
+<div class="ambient" aria-hidden="true"><i class="ambient__warm"></i><i class="ambient__cool"></i><i class="ambient__bands"></i><i class="ambient__grid"></i><i class="ambient__vignette"></i></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><path d="M12 14.8v2.4"/></symbol>
+</svg>
+
+<main class="stage">
+  <div class="empty empty--error mfa">
+    <span class="empty__mark"><svg><use href="#i-lock"/></svg></span>
+    <h2>Dein Discord-Konto braucht Zwei-Faktor</h2>
+    <p>
+      RL Nexus lässt nur Konten herein, bei denen die Zwei-Faktor-Anmeldung eingeschaltet ist. Deine
+      hängt an Discord — RL Nexus selbst hat kein Passwort und keinen eigenen zweiten Faktor.
+    </p>
+
+    <!-- Kein "wende dich an den Support": das kann jeder in zwei Minuten selbst
+         erledigen, und der Weg dorthin ist derselbe wie bei jedem Discord-Konto. -->
+    <ol class="mfa__steps">
+      <li>Discord öffnen, unten links auf das Zahnrad neben deinem Namen.</li>
+      <li><b>Mein Konto</b> wählen.</li>
+      <li>Bei <b>Zwei-Faktor-Authentifizierung</b> auf <b>Aktivieren</b> gehen und der App folgen.</li>
+      <li>Danach hier neu anmelden.</li>
+    </ol>
+
+    <p class="hintline">
+      Eine Authenticator-App reicht — eine hinterlegte Telefonnummer allein zählt bei Discord nicht als
+      Zwei-Faktor.
+    </p>
+
+    <a href="__BASE__/login">Erneut anmelden</a>
+  </div>
+</main>
+
+</body>
+</html>

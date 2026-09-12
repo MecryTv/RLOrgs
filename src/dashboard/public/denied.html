@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RL Nexus · Anmeldung abgebrochen</title>
+<meta name="color-scheme" content="dark">
+<!-- Die Hauptseite. Steht in der .env als SITE_PUBLIC_URL und wird beim Ausliefern eingesetzt. -->
+<meta name="rlnexus-site" content="__SITE__">
+<meta name="robots" content="noindex">
+<link rel="icon" href="__BASE__/assets/images/RL Nexus N Logo.png" type="image/png">
+<link rel="stylesheet" href="__BASE__/assets/style.css">
+</head>
+<body>
+
+<div class="ambient" aria-hidden="true"><i class="ambient__warm"></i><i class="ambient__cool"></i><i class="ambient__bands"></i><i class="ambient__grid"></i><i class="ambient__vignette"></i></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></symbol>
+</svg>
+
+<main class="stage">
+  <div class="empty empty--error">
+    <span class="empty__mark"><svg><use href="#i-warn"/></svg></span>
+    <h2>Anmeldung nicht abgeschlossen</h2>
+    <p>Discord hat den Login abgebrochen oder der Rückweg war nicht mehr gültig – das passiert zum Beispiel, wenn der Tab zu lange offen lag.</p>
+    <a href="__BASE__/login">Noch einmal anmelden</a>
+  </div>
+</main>
+
+</body>
+</html>

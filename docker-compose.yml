@@ -1,0 +1,49 @@
+# MariaDB und phpMyAdmin für RL Nexus.
+#
+#   docker compose up -d      startet beide
+#   docker compose down       stoppt sie, die Daten bleiben
+#   docker compose down -v    stoppt sie UND löscht die Daten
+#
+# phpMyAdmin liegt danach auf http://localhost:8080, die Datenbank auf 3306.
+# Die Zugangsdaten stehen in der .env - dieselben, die auch der Bot benutzt.
+
+services:
+    mariadb:
+        image: mariadb:11.4
+        container_name: rlnexus-mariadb
+        restart: unless-stopped
+        environment:
+            MARIADB_DATABASE: ${DATABASE_NAME:-rlnexus}
+            MARIADB_USER: ${DATABASE_USER:-rlnexus}
+            MARIADB_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD fehlt in der .env}
+            MARIADB_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD:?DATABASE_ROOT_PASSWORD fehlt in der .env}
+        ports:
+            # Nur auf dem eigenen Rechner erreichbar, nicht im ganzen Netz.
+            - "127.0.0.1:${DATABASE_PORT:-3306}:3306"
+        volumes:
+            - mariadb-data:/var/lib/mysql
+        healthcheck:
+            # Startet erst als "healthy", wenn die Datenbank wirklich antwortet -
+            # sonst läuft phpMyAdmin in eine tote Verbindung.
+            test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+            interval: 10s
+            timeout: 5s
+            retries: 12
+            start_period: 30s
+
+    phpmyadmin:
+        image: phpmyadmin:5
+        container_name: rlnexus-phpmyadmin
+        restart: unless-stopped
+        environment:
+            PMA_HOST: mariadb
+            PMA_PORT: 3306
+            UPLOAD_LIMIT: 64M
+        ports:
+            - "127.0.0.1:8080:80"
+        depends_on:
+            mariadb:
+                condition: service_healthy
+
+volumes:
+    mariadb-data:

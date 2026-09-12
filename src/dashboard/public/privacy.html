@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RL Nexus · Datenschutz</title>
+<meta name="color-scheme" content="dark">
+<!-- Die Hauptseite. Steht in der .env als SITE_PUBLIC_URL und wird beim Ausliefern eingesetzt. -->
+<meta name="rlnexus-site" content="__SITE__">
+<meta name="description" content="Welche Daten RL Nexus verarbeitet, warum, und wie lange.">
+<link rel="icon" href="__BASE__/assets/images/RL Nexus N Logo.png" type="image/png">
+<link rel="stylesheet" href="__BASE__/assets/style.css">
+</head>
+<body data-page="static">
+
+<div class="ambient" aria-hidden="true"><i class="ambient__warm"></i><i class="ambient__cool"></i><i class="ambient__bands"></i><i class="ambient__grid"></i><i class="ambient__vignette"></i></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="shell topbar__inner">
+    <a class="brand" href="__BASE__/" aria-label="RL Nexus Startseite">
+      <span class="brand__mark"><img src="__BASE__/assets/images/RL Nexus N Logo.png" alt="" width="38" height="38" decoding="async"></span>
+      <span>
+        <span class="brand__name">RL <em>Nexus</em></span>
+        <span class="brand__sub">Esports Management Bot</span>
+      </span>
+    </a>
+  </div>
+</header>
+
+<main class="shell doc">
+  <a class="backlink" href="__BASE__/"><svg><use href="#i-arrow"/></svg>Zurück zum Dashboard</a>
+
+  <h1>Datenschutz</h1>
+  <p class="doc__lead">
+    Was RL Nexus speichert, warum, wie lange, und wie du es wieder loswirst. Diese Seite beschreibt den
+    tatsächlichen Stand der Software, nicht eine Absichtserklärung.
+  </p>
+
+  <div class="notice">
+    <svg><use href="#i-warn"/></svg>
+    <div>
+      <b>Noch zu ergänzen</b>
+      <p>
+        Name und Kontaktdaten des Betreibers fehlen hier, ebenso die Rechtsgrundlage nach Art.&nbsp;6 DSGVO.
+        Beides hängt davon ab, wer RL Nexus betreibt und in welchem Rahmen. Diese Seite ist eine technisch
+        korrekte Grundlage, aber keine Rechtsberatung: vor einem öffentlichen Betrieb sollte sie jemand
+        prüfen, der das darf.
+      </p>
+    </div>
+  </div>
+
+  <h2>Wer verarbeitet</h2>
+  <p>
+    Der Betreiber dieser RL-Nexus-Instanz. Die Software läuft auf seinem Server, die Datenbank liegt dort.
+    RL Nexus ist ein freies Projekt und steht mit Psyonix, Epic Games oder Discord in keiner Verbindung.
+  </p>
+
+  <h2>Was gespeichert wird</h2>
+
+  <h3>Von Discord</h3>
+  <p>Beim Login fragt RL Nexus diese Berechtigungen an:</p>
+  <table class="doc__table">
+    <thead><tr><th>Berechtigung</th><th>Wofür</th></tr></thead>
+    <tbody>
+      <tr><td><code>identify</code></td><td>Deine Discord-ID, dein Name und dein Avatar. Damit weiß das Dashboard, wer du bist.</td></tr>
+      <tr><td><code>guilds</code></td><td>Deine Serverliste. Daraus entsteht die Auswahl auf der Startseite.</td></tr>
+      <tr><td><code>guilds.members.read</code></td><td>Dein Nickname, Beitrittsdatum und deine Rollen auf einem Server, dessen Detailseite du öffnest.</td></tr>
+      <tr><td><code>email</code></td><td>Deine Adresse. Sie steht nur in den Einstellungen unter „Konto“ und wird nirgends verschickt.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    <b>Dauerhaft gespeichert wird davon nur deine Discord-ID</b>, und auch die nur, wenn dir jemand eine
+    Gruppe zuweist, du ein Spielerkonto verknüpfst, du eine Benachrichtigung bekommst oder du auf einem Server
+    mit RL Nexus aktiv bist (14 Tage, siehe „Auf den Servern“). Name, Avatar,
+    E-Mail und Serverliste liegen ausschließlich in der Sitzung und im Arbeitsspeicher und sind mit dem
+    Abmelden weg.
+  </p>
+
+  <h3>Von Epic Games</h3>
+  <p>
+    Wenn du dein Spielerkonto verknüpfst, holt RL Nexus von Epic ausschließlich deine <b>Konto-ID</b>
+    (Berechtigung <code>basic_profile</code>). Kein Passwort, keine E-Mail, keine Freundesliste. Gespeichert
+    werden die ID und dein Anzeigename in der Tabelle <code>player_accounts</code>.
+  </p>
+
+  <h3>Von Rocket League</h3>
+  <p>
+    Über <a href="https://prime.rocketplanet.gg" target="_blank" rel="noopener">prime.rocketplanet.gg</a>
+    ruft RL Nexus zu deinem Konto ab und speichert:
+  </p>
+  <table class="doc__table">
+    <thead><tr><th>Tabelle</th><th>Inhalt</th></tr></thead>
+    <tbody>
+      <tr><td><code>player_ranks</code></td><td>MMR, Rang, Division, Spiele und Serie für 1v1, 2v2 und 3v3, dazu die höchste je erreichte MMR</td></tr>
+      <tr><td><code>player_profiles</code></td><td>Season-Reward-Stufe, Karriere-Werte (Siege, Tore, Vorlagen, Paraden, Schüsse, MVP) und dein Ingame-Club</td></tr>
+      <tr><td><code>player_accounts</code></td><td>Epic-Konto-ID, Anzeigename, Zeitpunkt der Verknüpfung</td></tr>
+      <tr><td><code>notifications</code></td><td>Meldungen an dich, etwa über eine geänderte Gruppe oder ein verknüpftes Konto</td></tr>
+      <tr><td><code>dashboard_groups</code></td><td>Deine Gruppe im Dashboard, wer sie vergeben hat und wann</td></tr>
+    </tbody>
+  </table>
+  <p class="hintline">
+    Diese Daten sind in Rocket League öffentlich einsehbar. RL Nexus holt sie höchstens alle zehn Minuten
+    und legt sie ab, damit die Seite nicht bei jedem Aufruf einen fremden Dienst belastet.
+  </p>
+
+  <h2>Auf den Servern</h2>
+  <p>
+    Läuft RL Nexus auf einem Server, zählt der Bot mit, wie viel dort los ist — daraus entsteht die Übersicht,
+    die das Team dieses Servers im Dashboard sieht. Vom Inhalt einer Nachricht wird dabei nichts gespeichert:
+    gezählt wird, <b>dass</b> sie kam, nicht was drinstand.
+  </p>
+  <table class="doc__table">
+    <thead><tr><th>Tabelle</th><th>Inhalt</th><th>Dauer</th></tr></thead>
+    <tbody>
+      <tr><td><code>guild_activity</code></td><td>Je Server und Stunde: Anzahl der Nachrichten, Minuten im Sprachkanal, Beitritte und Abgänge — ohne Discord-IDs</td><td>90 Tage</td></tr>
+      <tr><td><code>channel_activity</code></td><td>Je Kanal und Tag: Anzahl der Nachrichten — ohne Discord-IDs von Personen</td><td>90 Tage</td></tr>
+      <tr><td><code>member_activity</code></td><td>Je Mitglied und Tag: wie viele Nachrichten und wie viele Minuten im Sprachkanal. Daraus entsteht die Liste der aktivsten Mitglieder</td><td>14 Tage</td></tr>
+    </tbody>
+  </table>
+  <p class="hintline">
+    Bots zählen nicht mit, und der AFK-Kanal zählt nicht als Sprachkanal. <code>member_activity</code> ist die
+    einzige dieser drei Tabellen, in der deine Discord-ID steht.
+  </p>
+
+  <h2>Cookies</h2>
+  <p>
+    RL Nexus setzt <b>ausschließlich technisch notwendige Cookies</b>. Kein Tracking, keine Werbung, keine
+    Reichweitenmessung, keine Weitergabe an Dritte. Deshalb gibt es hier auch keinen Einwilligungsdialog:
+    ohne diese Cookies gäbe es keine Anmeldung und damit keine Seite.
+  </p>
+  <table class="doc__table">
+    <thead><tr><th>Name</th><th>Zweck</th><th>Dauer</th></tr></thead>
+    <tbody>
+      <tr><td><code>rlnexus_session</code></td><td>Hält dich angemeldet. Enthält ein signiertes Token mit deiner Discord-ID.</td><td>7 Tage</td></tr>
+      <tr><td><code>rlnexus_oauth_state</code></td><td>Schützt den Discord-Login gegen untergeschobene Anfragen.</td><td>10 Minuten</td></tr>
+      <tr><td><code>rlnexus_epic_state</code></td><td>Dasselbe für die Epic-Anmeldung.</td><td>10 Minuten</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Alle drei sind <code>HttpOnly</code> und <code>SameSite=Lax</code>, im Betrieb über HTTPS zusätzlich
+    <code>Secure</code>. Sie sind für JavaScript nicht lesbar.
+  </p>
+
+  <h3>Im Browser gespeichert</h3>
+  <p>
+    Zwei Einträge liegen zusätzlich in deinem <code>localStorage</code>. Sie verlassen deinen Rechner nie
+    und erreichen den Server nicht:
+  </p>
+  <ul class="doc__bullets">
+    <li><code>rlnexus.prefs</code> für Töne, Lautstärke, reduzierte Bewegung und Hinweise</li>
+    <li><code>rlnexus.cookies</code> dafür, dass der Hinweis unten nur einmal erscheint</li>
+  </ul>
+
+  <h2>Wohin Daten gehen</h2>
+  <p>
+    RL Nexus gibt keine Daten weiter und verkauft keine. Beim Betrieb entstehen unvermeidlich Verbindungen
+    zu drei Stellen, die eigene Datenschutzbestimmungen haben:
+  </p>
+  <ul class="doc__bullets">
+    <li><b>Discord</b> für Anmeldung und Serverdaten</li>
+    <li><b>Epic Games</b> für die Anmeldung mit dem Spielerkonto</li>
+    <li><b>prime.rocketplanet.gg</b> für Ränge, Karriere-Werte und den Club</li>
+  </ul>
+  <p class="hintline">
+    Die Schriftarten liefert das Dashboard selbst aus. Beim Laden einer Seite entsteht deshalb keine
+    Verbindung zu Google oder einem anderen Schriftenanbieter.
+  </p>
+
+  <h2>Wie lange</h2>
+  <p>
+    Bis du sie löschst. Ränge und Karriere-Werte werden bei jedem Abruf überschrieben, nicht angehäuft:
+    es gibt keinen Verlauf, nur den jeweils letzten Stand und den Höchstwert. Die Zahlen zur Aktivität auf einem
+    Server verfallen von selbst: nach 90 Tagen, die je Mitglied schon nach 14.
+  </p>
+
+  <h2>Deine Rechte</h2>
+  <p>
+    Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit und Widerspruch nach Art.&nbsp;15
+    bis 21 DSGVO. In der Praxis:
+  </p>
+  <ul class="doc__bullets">
+    <li><b>Auskunft:</b> Alles, was über dich gespeichert ist, steht auf deiner Tracking-Seite und in den Einstellungen.</li>
+    <li><b>Löschung:</b> Wende dich an den Betreiber. Deine Verknüpfung und die daran hängenden Rang- und Karriere-Daten werden dann entfernt.</li>
+    <li><b>Abmelden</b> beendet nur die Sitzung und löscht das Cookie. Gespeicherte Daten bleiben davon unberührt.</li>
+  </ul>
+
+  <p class="hintline">
+    Stand dieser Seite: sie beschreibt die Software zum Zeitpunkt des letzten Deployments. Was tatsächlich
+    in der Datenbank steht, lässt sich im Quelltext unter <code>src/database/migrations</code> nachlesen.
+  </p>
+</main>
+
+<div class="toasts" id="toasts"></div>
+
+<script type="module" src="__BASE__/assets/app.js"></script>
+</body>
+</html>

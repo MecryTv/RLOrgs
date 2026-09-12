@@ -1,0 +1,20 @@
+node_modules
+.git
+dist
+.claude
+# Nur das Log-Verzeichnis im Wurzelordner - sonst verschluckt das Muster
+# auch Quellcode-Ordner wie src/events/logs
+/logs
+atlas-credentials.env
+.tmp-preview
+# Ergebnis von npm run check:card - nur zum Ansehen
+card-check.png
+card-check-stale.png
+# Galerie: Default- und Privacy-Bilder kommen mit, Guild-Uploads nicht
+/src/images/*
+!/src/images/default
+!/src/images/privacy
+.vscode
+# Geheimnisse - Vorlage ist .env.example
+.env
+

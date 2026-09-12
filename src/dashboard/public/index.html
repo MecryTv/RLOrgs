@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RL Nexus · Server auswählen</title>
+<meta name="description" content="Wähle einen Discord-Server, um RL Nexus zu konfigurieren, oder lade den Bot dort ein, wo er noch fehlt.">
+<meta name="color-scheme" content="dark">
+<!-- Die Hauptseite. Steht in der .env als SITE_PUBLIC_URL und wird beim Ausliefern eingesetzt. -->
+<meta name="rlnexus-site" content="__SITE__">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/png" href="__BASE__/assets/images/RL Nexus Logo.png">
+<link rel="stylesheet" href="__BASE__/assets/style.css">
+</head>
+<body data-page="servers">
+
+<div class="ambient" aria-hidden="true"><i class="ambient__warm"></i><i class="ambient__cool"></i><i class="ambient__bands"></i><i class="ambient__grid"></i><i class="ambient__vignette"></i></div>
+
+<!-- icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-boost" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></symbol>
+  <symbol id="i-crown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 7 4 4 5-7 5 7 4-4-2 12H5z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17 5 12l5-5M5 12h11"/></symbol>
+  <symbol id="i-badge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"/><path d="m8.5 14-1.5 7 5-2.6 5 2.6-1.5-7"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12 5 5L20 6"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2.6M12 18.9v2.6M4.9 4.9l1.9 1.9M17.2 17.2l1.9 1.9M2.5 12h2.6M18.9 12h2.6M4.9 19.1l1.9-1.9M17.2 6.8l1.9-1.9"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 17-5-5 5-5M16 7l5 5-5 5M13.5 3.5l-3 17"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5h5M10 3v6.2L4.9 18a2 2 0 0 0 1.7 3h10.8a2 2 0 0 0 1.7-3L14 9.2V3"/><path d="M7.4 15.5h9.2"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8.5" width="18" height="12" rx="3.5"/><path d="M12 8.5V5.5M12 4.4h.01"/><path d="M8.5 13.5h.01M15.5 13.5h.01"/><path d="M9.5 17h5"/><path d="M1.5 12.5v3M22.5 12.5v3"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.45 6.2 20.5l1.1-6.45-4.7-4.6 6.5-.95z"/></symbol>
+  <symbol id="i-gem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M11 3 8 9l4 13 4-13-3-6"/><path d="M2 9h20"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></symbol>
+  <symbol id="i-gamepad" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 7.5h11a4.5 4.5 0 0 1 4.4 3.6l.8 4.3A2.8 2.8 0 0 1 20 18.8a2.8 2.8 0 0 1-2.3-1.2L16.4 15.8H7.6L6.3 17.6A2.8 2.8 0 0 1 4 18.8a2.8 2.8 0 0 1-2.7-3.4l.8-4.3A4.5 4.5 0 0 1 6.5 7.5z"/><path d="M7 10.5v3M5.5 12h3M15.5 11h.01M17.5 13h.01"/></symbol>
+  <symbol id="i-stats" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V11M10 20V4M16 20v-6M22 20H2"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5.5 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v.5"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+</svg>
+
+<header class="topbar" id="topbar">
+  <div class="shell topbar__inner">
+    <a class="brand" href="__BASE__/" aria-label="RL Nexus Startseite">
+      <span class="brand__mark"><img src="__BASE__/assets/images/RL Nexus N Logo.png" alt="" width="38" height="38" decoding="async"></span>
+      <span>
+        <span class="brand__name">RL <em>Nexus</em></span>
+        <span class="brand__sub">Esports Management Bot</span>
+      </span>
+    </a>
+
+    <div class="topbar__end">
+      <!-- Ton, Einstellungen und Abmelden stecken im Nutzermenue - das haengt
+           app.ts unter diesen Knopf. -->
+      <div class="userbox" id="userbox">
+        <button class="profile" id="profile" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="userMenu">
+          <span class="avatar" id="avatar" aria-hidden="true"></span>
+          <span class="profile__text">
+            <span class="profile__name" id="profileName"></span>
+            <span class="profile__meta" id="profileGroup"></span>
+          </span>
+          <svg class="profile__chev" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="hero__art" aria-hidden="true"><svg class="hero__field" viewBox="0 0 1240 430" preserveAspectRatio="xMidYMin slice">
+      <!-- Grundriss der Arena. --len ist die Länge der Linie, daran hängt der
+           Strich, der sie beim Laden zeichnet. -->
+      <circle class="ln ln--warm" cx="620" cy="120" r="330" style="--len:2074"/>
+      <circle class="ln" cx="620" cy="120" r="232" style="--len:1458"/>
+      <circle class="ln ln--warm" cx="620" cy="120" r="150" style="--len:943;--in:.3s"/>
+      <circle class="ln" cx="620" cy="120" r="70" style="--len:440;--in:.45s"/>
+
+      <path class="ln" d="M20 120h268M952 120h268" style="--len:536;--in:.2s"/>
+      <path class="ln ln--warm" d="M620 -40v110M620 190v190" style="--len:300;--in:.35s"/>
+
+      <rect class="ln" x="24" y="34" width="122" height="172" rx="16" style="--len:568;--in:.5s"/>
+      <rect class="ln" x="1094" y="34" width="122" height="172" rx="16" style="--len:568;--in:.5s"/>
+
+      <path class="ln ln--warm" d="M96 300a124 124 0 0 0 124 124" style="--len:195;--in:.6s"/>
+      <path class="ln ln--warm" d="M1144 300a124 124 0 0 1-124 124" style="--len:195;--in:.6s"/>
+
+      <!-- Läufer: ein kurzes helles Stück, das dauerhaft auf der Bahn kreist. -->
+      <circle class="run" cx="620" cy="120" r="232" style="--dash:60 1398;--to:-1458;--dur:13s"/>
+      <circle class="run run--warm" cx="620" cy="120" r="330" style="--dash:84 1990;--to:2074;--dur:19s;--delay:-4s"/>
+      <circle class="run" cx="620" cy="120" r="150" style="--dash:38 905;--to:-943;--dur:9s;--delay:-2s"/>
+      <path class="run run--warm" d="M20 120h268M952 120h268" style="--dash:44 492;--to:-536;--dur:7s"/>
+
+      <!-- Boost-Pads: gehen an und wieder aus, wie im Spiel. -->
+      <path class="pad" d="m300 250 9 9-9 9-9-9z" style="--in:1.1s"/>
+      <path class="pad" d="m940 250 9 9-9 9-9-9z" style="--in:1.9s"/>
+      <path class="pad" d="m470 44 8 8-8 8-8-8z" style="--in:2.6s"/>
+      <path class="pad" d="m770 44 8 8-8 8-8-8z" style="--in:1.5s"/>
+      <path class="pad pad--big" d="m180 168 12 12-12 12-12-12z" style="--in:2.2s"/>
+      <path class="pad pad--big" d="m1060 168 12 12-12 12-12-12z" style="--in:3s"/>
+      <path class="pad" d="m620 336 8 8-8 8-8-8z" style="--in:3.4s"/>
+    </svg></div>
+
+    <div class="shell hero__inner">
+      <div>
+        <h1>Wähle deine <em>Arena</em></h1>
+        <p class="hero__lead">Hier stehen alle Discord-Server, die du verwalten kannst. Öffne einen Server, um RL Nexus einzurichten, oder lade den Bot dort ein, wo er noch fehlt.</p>
+      </div>
+
+      <div class="scoreboard">
+        <div class="scoreboard__cell">
+          <div class="scoreboard__val" id="statTotal">0</div>
+          <div class="scoreboard__key">Server insgesamt</div>
+        </div>
+        <div class="scoreboard__cell scoreboard__cell--live">
+          <div class="scoreboard__val" id="statActive">0</div>
+          <div class="scoreboard__key">Mit RL Nexus</div>
+        </div>
+        <div class="scoreboard__cell">
+          <div class="scoreboard__val" id="statTeams">0</div>
+          <div class="scoreboard__key">Erfasste Teams</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="controls">
+    <div class="shell controls__inner">
+      <div class="search" id="search">
+        <svg><use href="#i-search"/></svg>
+        <label class="sr" for="q">Server nach Namen suchen</label>
+        <input id="q" type="text" placeholder="Server suchen" autocomplete="off" spellcheck="false">
+        <span class="search__key" aria-hidden="true">/</span>
+        <button class="search__clear" id="clearSearch" aria-label="Suche leeren"><svg><use href="#i-x"/></svg></button>
+      </div>
+
+      <div class="tabs" role="group" aria-label="Server filtern" id="tabs">
+        <span class="tabs__glide" id="glide" aria-hidden="true"></span>
+        <!-- --tab traegt die Farbe des Reiters: Markierung und Zaehler holen sie
+             sich daraus, statt jede Farbe einzeln im Stylesheet zu wiederholen. -->
+        <button class="tab" id="tab-all" data-filter="all" aria-pressed="true" style="--tab:var(--brand)">
+          <svg><use href="#i-grid"/></svg>Alle Server <span class="tab__count" id="count-all">0</span>
+        </button>
+        <button class="tab" id="tab-active" data-filter="active" aria-pressed="false" style="--tab:var(--live)">
+          <svg><use href="#i-boost"/></svg>Bot aktiv <span class="tab__count" id="count-active">0</span>
+        </button>
+        <button class="tab" id="tab-invite" data-filter="idle" aria-pressed="false" style="--tab:var(--blue)">
+          <svg><use href="#i-plus"/></svg>Zum Einladen <span class="tab__count" id="count-idle">0</span>
+        </button>
+        <!-- Nur fuer Administrator und Developer - app.ts blendet ihn ein. -->
+        <button class="tab" id="tab-staff" data-filter="staff" aria-pressed="false" style="--tab:#9b8bff" hidden>
+          <svg><use href="#i-badge"/></svg>Fremde Server <span class="tab__count" id="count-staff">0</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="shell">
+    <div class="banner" id="staffBanner" hidden>
+      <svg><use href="#i-badge"/></svg>
+      <span id="staffText"></span>
+      <button class="banner__more" id="staffShow" type="button">Nur diese zeigen</button>
+    </div>
+
+    <p class="resultline" id="resultline" role="status" aria-live="polite">Server werden geladen</p>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty">
+      <span class="empty__mark"><svg id="emptyIcon"><use href="#i-search"/></svg></span>
+      <h2 id="emptyTitle">Kein Server passt zu diesem Namen</h2>
+      <p id="emptyText">Prüfe die Schreibweise oder leere die Suche, um alle Server zu sehen.</p>
+      <button id="emptyReset">Suche leeren</button>
+    </div>
+  </section>
+</main>
+
+<div class="toasts" id="toasts"></div>
+
+<!-- Vorlagen: gefüllt wird ausschließlich über textContent, damit ein Servername
+     niemals als HTML im Dokument landet. -->
+<template id="tpl-card">
+  <article class="card">
+    <span class="card__boost"></span>
+    <div class="card__head">
+      <span class="crest" data-crest aria-hidden="true"></span>
+      <div>
+        <h3 class="card__name" data-name></h3>
+        <div class="card__meta">
+          <span class="pill pill--role"><svg><use data-role-icon href="#i-shield"/></svg><span data-role></span></span>
+          <span class="pill"><svg><use href="#i-users"/></svg><span data-members></span></span>
+          <span class="pill pill--bots" data-bots hidden><svg><use href="#i-bot"/></svg><span data-botcount></span></span>
+          <span class="pill pill--view" data-view hidden><svg><use href="#i-eye"/></svg>Nur Ansicht</span>
+        </div>
+      </div>
+    </div>
+    <div class="card__body">
+      <div class="status"><span class="status__dot"></span><span data-status></span></div>
+      <dl class="facts" data-facts>
+        <div class="fact"><dt>Aktive Teams</dt><dd data-teams></dd></div>
+        <div class="fact"><dt>Aktive Module</dt><dd data-modules></dd></div>
+        <div class="fact"><dt>Server erstellt</dt><dd data-created></dd></div>
+      </dl>
+      <p class="hint" data-hint hidden></p>
+    </div>
+    <div class="card__foot" data-foot></div>
+  </article>
+</template>
+
+<template id="tpl-skel">
+  <div class="skel" aria-hidden="true">
+    <div class="skel__row">
+      <div class="sb" style="width:52px;height:52px;border-radius:16px"></div>
+      <div style="flex:1">
+        <div class="sb" style="height:14px;width:62%;margin-bottom:9px"></div>
+        <div class="sb" style="height:11px;width:40%"></div>
+      </div>
+    </div>
+    <div class="sb" style="height:40px;margin-bottom:16px"></div>
+    <div class="sb" style="height:11px;width:88%;margin-bottom:9px"></div>
+    <div class="sb" style="height:11px;width:70%;margin-bottom:26px"></div>
+    <div class="sb" style="height:42px;border-radius:10px"></div>
+  </div>
+</template>
+
+<script type="module" src="__BASE__/assets/app.js"></script>
+</body>
+</html>

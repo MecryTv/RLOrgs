@@ -1,0 +1,54 @@
+{
+    "name": "rl-nexus",
+    "version": "1.0.0",
+    "description": "RL Nexus - Discord Bot to manage your Rocket League Organization",
+    "keywords": [
+        "RL Nexus",
+        "TypeScript",
+        "Discord.JS",
+        "MecryTv",
+        "Discord",
+        "Bot"
+    ],
+    "homepage": "https://github.com/MecryTv/RLOrgs#readme",
+    "bugs": {
+        "url": "https://github.com/MecryTv/RLOrgs/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/MecryTv/RLOrgs.git"
+    },
+    "license": "MIT",
+    "author": "MecryTv",
+    "type": "commonjs",
+    "main": "dist/index.js",
+    "scripts": {
+        "build": "tsc && npm run build:dashboard",
+        "build:dashboard": "tsc -p src/dashboard/tsconfig.json",
+        "check:card": "tsx src/scripts/CheckCard.ts",
+        "check:dashboard": "tsx src/scripts/CheckDashboard.ts",
+        "check:db": "tsx src/scripts/CheckDatabase.ts",
+        "check:prime": "tsx src/scripts/CheckPrime.ts",
+        "dev": "npm run build:dashboard && tsx watch src/index.ts --dev",
+        "dev:dashboard": "tsc -p src/dashboard/tsconfig.json --watch",
+        "icons:ranks": "tsx src/scripts/MakeRankIcons.ts",
+        "start": "node .",
+        "token": "tsx src/scripts/GenerateToken.ts",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@fastify/rate-limit": "^11.2.0",
+        "@napi-rs/canvas": "^1.0.9",
+        "axios": "^1.19.0",
+        "discord.js": "^14.27.0",
+        "fastify": "^5.12.0",
+        "glob": "^13.0.6",
+        "lru-cache": "^11.5.2",
+        "mariadb": "^3.5.4"
+    },
+    "devDependencies": {
+        "@types/node": "^26.2.0",
+        "tsx": "^4.23.12",
+        "typescript": "^7.0.2"
+    }
+}

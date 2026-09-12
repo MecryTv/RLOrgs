@@ -1,0 +1,35 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "src/dashboard/public/index.html"
+        ],
+        "createdAt": "2026-09-11T15:09:56.865Z",
+        "reason": "Claude-Triage: Fehlalarm, Detektor kann __BASE__/assets/style.css nicht aufloesen und rechnet alle Rollen mit 16px; real ist h1 clamp(38px,6.2vw,60px) bei 15px Fliesstext"
+      },
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "src/dashboard/public/docu.html"
+        ],
+        "createdAt": "2026-09-11T15:09:56.935Z",
+        "reason": "Claude-Triage: Fehlalarm, Detektor kann __BASE__/assets/style.css nicht aufloesen und rechnet alle Rollen mit 16px; real ist h1 clamp(28px,4vw,38px), h2 20px, Text 14.5px"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "src/dashboard/public/assets/style.css"
+        ],
+        "createdAt": "2026-09-11T18:24:58.736Z",
+        "reason": "Claude-Triage: absichtlich und vor dieser Session vorhanden - .tabs__glide (L531) passt beim Gleiten die Breite an den aktiven Reiter an, .reward__bar i (L1562) ist die Fortschrittsanzeige des Season-Rewards; beides einzelne Elemente ohne Reflow der Nachbarn, scaleX wuerde 1px-Rahmen, Abschraegung und Pill-Enden verzerren"
+      }
+    ]
+  }
+}

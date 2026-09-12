@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RL Nexus · Dokumentation</title>
+<meta name="color-scheme" content="dark">
+<!-- Die Hauptseite. Steht in der .env als SITE_PUBLIC_URL und wird beim Ausliefern eingesetzt. -->
+<meta name="rlnexus-site" content="__SITE__">
+<meta name="description" content="Wie RL Nexus arbeitet: Ränge und Karriere, die WTSI-Rechnung hinter der Club-MMR, Gruppen und Rechte, Verknüpfungen und Einstellungen.">
+<link rel="icon" href="__BASE__/assets/images/RL Nexus N Logo.png" type="image/png">
+<link rel="stylesheet" href="__BASE__/assets/style.css">
+</head>
+<body data-page="static">
+
+<div class="ambient" aria-hidden="true"><i class="ambient__warm"></i><i class="ambient__cool"></i><i class="ambient__bands"></i><i class="ambient__grid"></i><i class="ambient__vignette"></i></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></symbol>
+  <symbol id="i-stats" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V11M10 20V4M16 20v-6M22 20H2"/></symbol>
+  <symbol id="i-gem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M11 3 8 9l4 13 4-13-3-6"/><path d="M2 9h20"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><path d="M12 14.8v2.4"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2.6M12 18.9v2.6M4.9 4.9l1.9 1.9M17.2 17.2l1.9 1.9M2.5 12h2.6M18.9 12h2.6M4.9 19.1l1.9-1.9M17.2 6.8l1.9-1.9"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 17-5-5 5-5M16 7l5 5-5 5M13.5 3.5l-3 17"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.45 6.2 20.5l1.1-6.45-4.7-4.6 6.5-.95z"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5h5M10 3v6.2L4.9 18a2 2 0 0 0 1.7 3h10.8a2 2 0 0 0 1.7-3L14 9.2V3"/><path d="M7.4 15.5h9.2"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="shell topbar__inner">
+    <a class="brand" href="__BASE__/" aria-label="RL Nexus Startseite">
+      <span class="brand__mark"><img src="__BASE__/assets/images/RL Nexus N Logo.png" alt="" width="38" height="38" decoding="async"></span>
+      <span>
+        <span class="brand__name">RL <em>Nexus</em></span>
+        <span class="brand__sub">Esports Management Bot</span>
+      </span>
+    </a>
+  </div>
+</header>
+
+<main class="shell docpage">
+  <div class="setpage">
+    <!-- Die ganze linke Spalte steht mit, nicht nur das Verzeichnis: die Seite
+         ist lang, und wer unten in einem Kapitel steht, soll weder nach oben
+         scrollen muessen, um woandershin zu springen, noch um wieder aus der
+         Doku herauszukommen. Der Rueckweg gehoert deshalb hierher. -->
+    <div class="docside">
+      <div class="docside__inner">
+        <a class="backlink" href="__BASE__/"><svg><use href="#i-arrow"/></svg>Zurück zum Dashboard</a>
+
+        <nav class="setnav" id="docNav" aria-label="Inhalt">
+          <a href="#ueberblick"><svg><use href="#i-grid"/></svg>Überblick</a>
+          <a href="#tracking"><svg><use href="#i-stats"/></svg>Rang-Tracking</a>
+          <a href="#wtsi"><svg><use href="#i-gem"/></svg>WTSI</a>
+          <a href="#club"><svg><use href="#i-users"/></svg>Club</a>
+          <a href="#gruppen"><svg><use href="#i-shield"/></svg>Gruppen</a>
+          <a href="#anmeldung"><svg><use href="#i-lock"/></svg>Anmeldung</a>
+          <a href="#verknuepfung"><svg><use href="#i-link"/></svg>Verknüpfungen</a>
+          <a href="#einstellungen"><svg><use href="#i-settings"/></svg>Einstellungen</a>
+          <a href="#datenschutz"><svg><use href="#i-shield"/></svg>Daten &amp; Sicherheit</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="doc">
+  <h1>Dokumentation</h1>
+  <p class="doc__lead">
+    Was RL Nexus anzeigt, woher die Zahlen kommen und was die Begriffe bedeuten. Kein Handbuch für
+    Entwickler; das steht auf <a href="https://github.com/MecryTv/RLOrgs#readme" target="_blank" rel="noopener">GitHub</a>.
+    Diese Seite steht ohne Anmeldung offen: Wer einen Wert in einem geteilten Screenshot sieht, soll ihn
+    nachlesen können.
+  </p>
+
+  <h2 id="ueberblick">Überblick</h2>
+  <p>
+    RL Nexus ist ein Discord-Bot mit Dashboard für Rocket-League-Organisationen. Er verbindet ein
+    Discord-Konto mit einem Epic-Konto, holt daraus Ränge, Karrierewerte und den Club und rechnet
+    aus, wie stark ein Spieler und ein Club tatsächlich sind.
+  </p>
+  <dl class="doc__list">
+    <dt><a href="#tracking">Rang-Tracking</a></dt>
+    <dd>Ränge in 1v1, 2v2 und 3v3, der Season-Reward, die Karrierewerte und der Club, alles auf einer Seite.</dd>
+
+    <dt><a href="#wtsi">WTSI</a></dt>
+    <dd>Eine Zahl statt drei Rängen. Sie beantwortet, wie stark jemand ist, und trägt die Club-MMR.</dd>
+
+    <dt><a href="#gruppen">Gruppen</a></dt>
+    <dd>Wer im Dashboard was sieht. Fünf Stufen, von Testphase bis Administrator.</dd>
+
+    <dt><a href="#anmeldung">Anmeldung</a></dt>
+    <dd>Nur über Discord, keine Registrierung — und nur mit eingeschalteter Zwei-Faktor-Anmeldung.</dd>
+
+    <dt><a href="#verknuepfung">Verknüpfung</a></dt>
+    <dd>Wie das Epic-Konto an das Discord-Konto kommt und warum es nur alle 3 Tage wechselt.</dd>
+  </dl>
+
+  <h2 id="tracking">Rang-Tracking</h2>
+  <p>
+    Die Seite unter <code>__BASE__/user/&lt;deine-id&gt;/tracking</code> zeigt alles, was Rocket League
+    über ein Konto hergibt. Der Weg dorthin führt über das Nutzermenü oben rechts, Eintrag
+    <b>RL Tracker</b>. Eigene Ränge sieht jeder, fremde nur Administratoren und Developer.
+  </p>
+
+  <h3>Die drei Rangkarten</h3>
+  <p>
+    1v1&nbsp;Duell, 2v2&nbsp;Doppel und 3v3&nbsp;Standard, jeweils mit MMR, Stufe, Division und der Zahl
+    der gespielten Partien. Eine laufende Serie steht als Marke darunter.
+  </p>
+  <p>
+    Solange die zehn Platzierungsspiele einer Playlist nicht durch sind, steht dort <b>Platzierung x/10</b>
+    und kein Abzeichen. Das ist keine fehlende Information, sondern dieselbe Zurückhaltung wie im Spiel:
+    vor dem zehnten Spiel steht die Stufe nicht fest.
+  </p>
+
+  <h3>Season-Reward</h3>
+  <p>
+    Die Stufe, die am Saisonende die Belohnung bestimmt, und wie viele der zehn nötigen Siege schon
+    stehen. Sie hängt am höchsten erreichten Rang der Saison, nicht am aktuellen.
+  </p>
+
+  <h3>Karriere</h3>
+  <p>
+    Siege, Tore, Vorlagen, Paraden, Schüsse und MVPs über alle Spiele hinweg. Diese Zahlen sinken nie:
+    sie zählen, was insgesamt passiert ist, nicht was gerade läuft.
+  </p>
+
+  <h3>Wie frisch die Zahlen sind</h3>
+  <p>
+    Ränge, Karriere und Club holt RL Nexus <b>höchstens alle zehn Minuten</b> neu und zeigt dazwischen
+    den gespeicherten Stand. Der Zähler oben rechts auf der Tracking-Seite sagt, wie lange der aktuelle
+    Stand noch gilt. Er macht sichtbar, warum eine Zahl gerade stehenbleibt, obwohl das letzte Spiel
+    schon vorbei ist. Läuft er ab, holt sich die Seite den neuen Stand von selbst.
+  </p>
+  <p class="hintline">
+    Der Knopf daneben lädt neu. Ist die Sperre noch nicht abgelaufen, kommt derselbe Stand zurück.
+    Das ist Absicht: sonst löste jeder Seitenaufruf einen neuen Abruf aus.
+  </p>
+
+  <h2 id="wtsi">WTSI: der Weighted True Skill Index</h2>
+  <p class="doc__lead">
+    Die Zahl, die in der Club-Karte unter <b>Ø Club-MMR</b> und <b>Dein WTSI</b> steht. Sie beantwortet
+    eine Frage, die eine einzelne MMR nicht beantworten kann: <em>wie stark ist dieser Spieler eigentlich?</em>
+  </p>
+
+  <h3>Warum nicht einfach die MMR?</h3>
+  <p>
+    Ein Spieler hat drei Ränge, und sie sagen nicht dasselbe. Wer 2v2 fast nie spielt, hat dort eine
+    niedrige Zahl, ohne schwächer zu sein. Wer gerade eine Pechsträhne hat, steht unter seinem
+    eigentlichen Niveau. Und wer nur den höchsten Wert nimmt, belohnt den, der einen guten Tag hatte.
+  </p>
+  <p>
+    WTSI nimmt deshalb <b>2v2 und 3v3</b>, die beiden Modi, in denen Organisationen tatsächlich spielen,
+    und gewichtet sie danach, wo der Spieler wirklich zu Hause ist. 1v1 bleibt außen vor: es ist ein anderes
+    Spiel und sagt über Teamstärke wenig aus.
+  </p>
+
+  <h3>Die Rechnung</h3>
+  <pre class="doc__code"><code>Rel_2s = Peak_2s / (Peak_2s + Peak_3s)     Gewicht des Modus
+K_2s   = √(Current_2s / Peak_2s)           gedämpfte Konsistenz
+TS_2s  = Peak_2s × K_2s                    Stärke in diesem Modus
+
+WTSI   = TS_2s × Rel_2s + TS_3s × Rel_3s</code></pre>
+
+  <p>Drei Gedanken stecken darin:</p>
+
+  <dl class="doc__list">
+    <dt>Der Peak ist die Aussage, nicht der Tagesstand.</dt>
+    <dd>
+      Die höchste je erreichte MMR verschwindet nicht, wenn ein Abend schiefgeht. RL Nexus schreibt sie in
+      <code>player_ranks.peak_mmr</code> mit und lässt sie nur wachsen.
+    </dd>
+
+    <dt>Die Wurzel dämpft Pech.</dt>
+    <dd>
+      Wer auf 80&nbsp;% seines Peaks steht, verliert nicht 20&nbsp;%, sondern 10,6&nbsp;%. Ein schlechter Lauf
+      drückt den Wert, aber er wirft ihn nicht weg. Wer dauerhaft unter seinem Peak bleibt, rutscht trotzdem.
+    </dd>
+
+    <dt>Die Gewichtung kommt vom Spieler selbst.</dt>
+    <dd>
+      Niemand legt fest, ob 2v2 oder 3v3 mehr zählt. Wer den höheren Peak in 3v3 hat, wird stärker über 3v3
+      bewertet. Die eigene Spielhistorie bestimmt das Gewicht.
+    </dd>
+  </dl>
+
+  <h3>Ein Beispiel</h3>
+  <table class="doc__table">
+    <thead><tr><th>Modus</th><th>Aktuell</th><th>Peak</th><th>Gewicht</th><th>Beitrag</th></tr></thead>
+    <tbody>
+      <tr><td>2v2</td><td>1.350</td><td>1.400</td><td>52 %</td><td>1.375 × 0,52 = 715</td></tr>
+      <tr><td>3v3</td><td>1.180</td><td>1.300</td><td>48 %</td><td>1.239 × 0,48 = 595</td></tr>
+      <tr><th colspan="4">WTSI</th><th>1.310</th></tr>
+    </tbody>
+  </table>
+  <p class="hintline">
+    Trotz 1.180 in 3v3 liegt der WTSI über dem Wert der schwächeren Playlist, weil der Peak
+    zeigt, was der Spieler schon konnte, und die aktuelle MMR nah genug dran ist.
+  </p>
+
+  <h3>Drei Fälle, die abgefangen sind</h3>
+  <table class="doc__table">
+    <thead><tr><th>Fall</th><th>Verhalten</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Eine Playlist fehlt ganz (Peak 0)</td>
+        <td>Die andere trägt allein. Sonst käme durch Teilen durch null ein <code>NaN</code> heraus, das sich still durch jeden Durchschnitt zieht.</td>
+      </tr>
+      <tr>
+        <td>Aktuell über Peak (neuer Höchststand)</td>
+        <td>Zählt als Peak, statt einen Faktor über 1 zu erzeugen.</td>
+      </tr>
+      <tr>
+        <td>Spieler ohne Daten</td>
+        <td>Zählt nicht mit, statt den Schnitt auf 0 zu ziehen.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Eine Einschränkung, ehrlich gesagt</h3>
+  <p>
+    Für <b>fremde Club-Mitglieder</b> kennt RL Nexus keinen Peak, weil Rocket League nur den aktuellen
+    Stand liefert. Für sie rechnet die Formel mit <code>aktuell = Peak</code>, der Schutz gegen einen schlechten Lauf
+    fällt also weg. Für alle, die ihr Konto hier verknüpft haben, wird der echte Peak mitgeschrieben und
+    die Rechnung stimmt vollständig.
+  </p>
+  <p class="hintline">
+    Die Rechnung steht in <code>src/constants/WTSI.ts</code> und wird bei jedem <code>npm run check:db</code>
+    gegen von Hand nachgerechnete Werte geprüft.
+  </p>
+
+  <h2 id="club">Club</h2>
+  <p>
+    Der Club kommt aus Rocket League selbst, nicht aus RL Nexus: angelegt und verwaltet wird er im Spiel.
+    Die Karte auf der Tracking-Seite zeigt Name, Tag, Owner, Gründungsdatum, die Mitglieder und zwei Zahlen.
+  </p>
+  <dl class="doc__list">
+    <dt>Ø Club-MMR · WTSI</dt>
+    <dd>
+      Der Durchschnitt der <a href="#wtsi">WTSI-Werte</a> aller Mitglieder. <b>Spieler ohne verwertbare Daten
+      zählen nicht mit</b>. Sie würden den Schnitt nach unten ziehen, obwohl über sie schlicht nichts
+      bekannt ist. Steht dort ein Strich, liegt zu niemandem im Club etwas vor.
+    </dd>
+
+    <dt>Dein WTSI</dt>
+    <dd>Der eigene Wert, mit dem man in diesen Schnitt eingeht. Daneben ist auf einen Blick zu sehen, ob man den Club hebt oder zieht.</dd>
+  </dl>
+  <p class="hintline">
+    Ein von Psyonix bestätigter Club wird gesondert markiert. Das haben sehr wenige.
+  </p>
+
+  <h2 id="gruppen">Gruppen und Rechte</h2>
+  <p>
+    Jedes Konto sitzt in genau einer Gruppe. Sie entscheidet, welche Server im Dashboard auftauchen und
+    wer die Administration öffnen darf. Die eigene Gruppe steht oben rechts neben dem Namen und im
+    Profil der Einstellungen.
+  </p>
+
+  <!-- Dieselben Zeilen, die früher in den Einstellungen standen. Sie gehören
+       hierher: was eine Gruppe bedeutet, ändert niemand an sich selbst, das
+       liest man einmal nach. -->
+  <div class="glist">
+    <div class="grow" style="--group:var(--brand)">
+      <span class="grow__mark"><svg><use href="#i-shield"/></svg></span>
+      <div class="grow__text">
+        <b>Administrator</b>
+        <span>Sieht jeden Server, auf dem RL Nexus läuft, und jede fremde Rang-Seite. Vergibt Gruppen.</span>
+      </div>
+    </div>
+    <div class="grow" style="--group:#9b8bff">
+      <span class="grow__mark"><svg><use href="#i-code"/></svg></span>
+      <div class="grow__text">
+        <b>Developer</b>
+        <span>Wie Administrator, dazu die Entwickler-Befehle. Steht in der <code>.env</code>, nicht in der Datenbank.</span>
+      </div>
+    </div>
+    <div class="grow" style="--group:var(--blue)">
+      <span class="grow__mark"><svg><use href="#i-gem"/></svg></span>
+      <div class="grow__text">
+        <b>Partner</b>
+        <span>Kennzeichnung für Partner-Organisationen.</span>
+      </div>
+    </div>
+    <div class="grow" style="--group:#ffd166">
+      <span class="grow__mark"><svg><use href="#i-star"/></svg></span>
+      <div class="grow__text">
+        <b>Premium</b>
+        <span>Kennzeichnung für Premium-Zugang. Freigeschaltet ist daran heute noch nichts.</span>
+      </div>
+    </div>
+    <div class="grow" style="--group:var(--text-2)">
+      <span class="grow__mark"><svg><use href="#i-flask"/></svg></span>
+      <div class="grow__text">
+        <b>Testphase</b>
+        <span>Der Standard, solange RL Nexus in der Testphase läuft. Sichtbar sind die Server, auf denen man selbst Owner oder Admin ist.</span>
+      </div>
+    </div>
+  </div>
+
+  <h3>Wer vergibt sie</h3>
+  <p>
+    Administrator, Partner und Premium vergeben Administratoren unter <b>Administration</b>. Sie stehen in
+    der Datenbank. <b>Developer</b> steht bewusst woanders, nämlich in der <code>.env</code>: käme auch
+    diese Gruppe aus der Datenbank, käme nach einem frischen Aufsetzen niemand mehr hinein, der die erste
+    Berechtigung vergeben könnte.
+  </p>
+  <p>
+    Wer eine Gruppe bekommt, erfährt es im Postfach; die Meldung steht dort auf jedem Gerät.
+  </p>
+
+  <h2 id="anmeldung">Anmeldung</h2>
+  <p class="doc__lead">
+    Ein Weg hinein, und <b>keine Registrierung</b>: Discord. Ein Konto entsteht dadurch, dass man sich
+    zum ersten Mal dort anmeldet. Discord bestätigt, wer man ist, und RL Nexus legt dazu an, was es
+    braucht.
+  </p>
+  <p>
+    Ein eigenes Passwort stand hier einmal daneben, samt Zwei-Faktor-Anmeldung. Beides ist wieder weg,
+    und zwar aus einem Grund, der auch für alles Weitere gilt: Das Konto hängt ohnehin an Discord. Wer
+    dort einen zweiten Faktor gesetzt hat, hat ihn damit auch hier. Ein eigenes Passwort war also eine
+    zweite Tür in denselben Raum, mit eigener Sperre und eigenem Vergessen-Ablauf, aber ohne
+    zusätzlichen Nutzen. Und es brachte etwas mit, das es vorher nicht gab: gespeicherte Passwörter,
+    die jemand stehlen kann.
+  </p>
+
+  <h3>Zwei-Faktor ist Pflicht</h3>
+  <p>
+    <b>Ohne eingeschaltete Zwei-Faktor-Anmeldung bei Discord kommt niemand herein.</b> Der Grund folgt
+    aus dem Absatz darüber: Wenn die Anmeldung vollständig an einem Discord-Konto hängt, ist das
+    Dashboard genau so gut gesichert wie dieses Konto. Ein schwach gesichertes Konto wäre damit auch
+    ein schwach gesichertes Dashboard.
+  </p>
+  <p>
+    Geprüft wird beim Anmelden. Fehlt der Schutz, zeigt RL Nexus statt der Serverauswahl eine kurze
+    Anleitung: in Discord unten links auf das Zahnrad, <b>Mein Konto</b>, dort
+    <b>Zwei-Faktor-Authentifizierung</b> aktivieren. Eine Authenticator-App reicht; eine hinterlegte
+    Telefonnummer allein zählt bei Discord nicht.
+  </p>
+  <p class="hintline">
+    Wer den Schutz später wieder abschaltet, kommt bis zum Ablauf seiner Sitzung weiter herein —
+    höchstens sieben Tage. Bei der nächsten Anmeldung greift die Regel wieder.
+  </p>
+
+  <h3>Was RL Nexus dabei bekommt</h3>
+  <p>
+    Discord fragt einmal, ob RL Nexus Name, Bild, Adresse und die Serverliste sehen darf. Zurück kommt
+    ein Zugriffstoken, mit dem das Dashboard genau diese vier Dinge holt, und sonst nichts.
+  </p>
+  <table class="doc__table">
+    <thead><tr><th>Freigabe</th><th>Wofür</th></tr></thead>
+    <tbody>
+      <tr><td><code>identify</code></td><td>Name und Bild in der Kopfzeile.</td></tr>
+      <tr><td><code>guilds</code></td><td>Die Serverauswahl.</td></tr>
+      <tr><td><code>guilds.members.read</code></td><td>Deine Rolle und dein Beitrittsdatum auf der Serverseite.</td></tr>
+      <tr><td><code>email</code></td><td>Die Adresse im Profil. Fällt weg, wenn du sie nicht brauchst.</td></tr>
+    </tbody>
+  </table>
+  <p class="hintline">
+    Ein Passwort kennt und speichert RL Nexus nicht. Es gibt keins.
+  </p>
+
+  <h2 id="verknuepfung">Konto verknüpfen</h2>
+  <p>
+    RL Nexus kennt genau eine Anmeldung für Spieldaten: <b>Epic Games</b>. Steam, Xbox, PlayStation und
+    Switch hängen bei Rocket League ohnehin an einem Epic-Konto und kommen von dort mit. Eigene Knöpfe
+    dafür gibt es nicht, weil es dafür keinen öffentlichen Login gibt. Sie hätten eine Wahl versprochen,
+    die es nicht gibt.
+  </p>
+  <dl class="doc__list">
+    <dt>Anmelden statt eintippen</dt>
+    <dd>
+      Der Weg führt über den Epic-Login: Nur er beweist, dass das Konto einem selbst gehört. Verknüpfte
+      Konten tragen deshalb die Marke <b>geprüft</b>.
+    </dd>
+
+    <dt>Der Notweg</dt>
+    <dd>
+      Ist der Epic-Login auf diesem Server nicht eingerichtet, bleibt das Eintragen des Epic-Namens.
+      Der holt dieselben Daten, beweist aber nichts, und entsprechend fehlt die Marke.
+    </dd>
+
+    <dt>3 Tage Sperre</dt>
+    <dd>
+      Ein verknüpftes Konto lässt sich erst nach 3 Tagen wechseln — und ebenso lange nicht trennen, sonst
+      wäre die Frist mit einem Zwischenschritt umgangen. Sonst ließe sich der WTSI eines Clubs
+      hochhalten, indem man kurz vor dem Blick auf ein stärkeres Konto umhängt.
+    </dd>
+  </dl>
+
+  <h2 id="einstellungen">Einstellungen und Postfach</h2>
+  <p>
+    Die Einstellungen liegen unter <code>__BASE__/user/&lt;deine-id&gt;/settings</code>, erreichbar über das
+    Nutzermenü. Drei Abschnitte, jeweils als eigener Reiter: Profil, Töne &amp; Oberfläche und
+    Verknüpfungen. Töne, Lautstärke, reduzierte Bewegung und Hinweise
+    gelten <b>je Browser</b>: sie liegen im lokalen Speicher, nicht auf dem Server, und wandern deshalb
+    nicht auf ein anderes Gerät mit.
+  </p>
+  <p>
+    Das Postfach dagegen liegt beim Bot. Meldungen über eine neue Gruppe oder eine geänderte Verknüpfung
+    stehen auf jedem Gerät gleich da und bleiben, bis sie gelöscht werden.
+  </p>
+
+  <h2 id="datenschutz">Daten und Sicherheit</h2>
+  <p>
+    Wie die <a href="#anmeldung">Anmeldung</a> funktioniert, steht oben. Was danach im Browser liegt, ist
+    genau eine Sache: die Sitzung, verschlüsselt in einem <code>HttpOnly</code>-Cookie mit
+    <code>SameSite=Lax</code>. Kein Skript kommt daran, keine fremde Seite schickt es mit, und nach
+    sieben Tagen verfällt sie.
+  </p>
+  <p>
+    Der Bot hält dafür keinen Sitzungsspeicher: der Inhalt steht im Cookie selbst. Deshalb überlebt eine
+    Anmeldung den Neustart des Bots — und deshalb gibt es hier auch keine Liste offener Sitzungen, die
+    sich zentral beenden ließe. Abmelden beendet den Browser, in dem man es tut.
+  </p>
+  <p>
+    Cookies setzt RL Nexus ausschließlich für die Anmeldung: kein Tracking, keine Werbung, keine
+    Weitergabe. Was genau gespeichert wird und wie lange, steht im
+    <a href="__BASE__/privacy">Datenschutz</a>.
+  </p>
+
+  <p class="hintline">
+    Etwas fehlt hier oder stimmt nicht mehr?
+    <a href="https://github.com/MecryTv/RLOrgs/issues" target="_blank" rel="noopener">Melde es als Fehler</a>.
+  </p>
+    </div>
+  </div>
+</main>
+
+<div class="toasts" id="toasts"></div>
+
+<script type="module" src="__BASE__/assets/app.js"></script>
+</body>
+</html>
