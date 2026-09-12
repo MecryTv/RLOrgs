@@ -198,7 +198,7 @@ async function checkSettings(client: BotClient): Promise<void> {
 
     const saved = await model.Of(GUILD);
     check("Gespeichertes kommt zurück", saved.matchChannel === "456", String(saved.matchChannel));
-    check("JSON-Spalte wird ausgepackt", Array.isArray(saved.modules) && saved.modules[0] === "queues");
+    check("JSON-Spalte wird ausgepackt", Array.isArray(saved.modules) && saved.modules.includes("queues"), saved.modules.join(","));
     check("Verschachteltes JSON überlebt", saved.rankRoles.gc === "123", JSON.stringify(saved.rankRoles));
 
     // Zweites Save auf denselben Schlüssel: Upsert, kein doppelter Datensatz.
@@ -216,7 +216,8 @@ async function checkSettings(client: BotClient): Promise<void> {
 
     const many = await model.ModulesOf([GUILD, "1"]);
     check("Sammelabfrage findet den Server", many.get(GUILD)?.includes("leaderboard") === true);
-    check("Sammelabfrage erfindet nichts", many.has("1") === false);
+    const modules1 = many.get("1");
+    check("Unbekannter Server bekommt genau die festen Module", modules1 ? modules1.length === permanent.length && permanent.every((id) => modules1.includes(id)) : false, modules1 ? modules1.join(",") : "undefined");
 }
 
 async function checkTeams(client: BotClient): Promise<number> {
