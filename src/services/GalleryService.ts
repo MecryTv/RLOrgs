@@ -1,5 +1,6 @@
 import path from "path";
 import { mkdir, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
+import https from "node:https";
 import axios from "axios";
 import { AttachmentBuilder } from "discord.js";
 import BotClient from "../client/BotClient";
@@ -13,11 +14,13 @@ import IGalleryService, {
     IListOptions,
 } from "../interfaces/services/gallery/IGalleryService";
 import {
+    CheckRedirect,
     DEFAULT_SCOPE,
     GALLERY_ROOT,
     IMAGE_TYPES,
     IsImageFile,
     IsScope,
+    LookupPublic,
     MAX_IMAGE_BYTES,
     ParseSource,
     PRIVATE_SCOPE,
@@ -27,6 +30,11 @@ import { Shrink } from "../utils/image";
 import logger from "../utils/logger";
 
 const DOWNLOAD_TIMEOUT = 15_000;
+
+// Jede https-Verbindung des Downloads fragt DNS ueber LookupPublic - die Sperre
+// gegen das interne Netz sitzt dort, im Moment des Verbindens.
+const DOWNLOAD_AGENT = new https.Agent({ lookup: LookupPublic });
+
 const EXTENSION_BY_MIME = new Map<string, string>();
 for (const [extension, mime] of Object.entries(IMAGE_TYPES)) {
     if (!EXTENSION_BY_MIME.has(mime)) EXTENSION_BY_MIME.set(mime, extension);
@@ -159,6 +167,9 @@ export default class GalleryService implements IGalleryService {
     }
 
     async AddImage(target: IGalleryTarget, url: string, fileName?: string): Promise<IGalleryEntry> {
+        // Prueft nur den eingetippten Text - fuer eine lesbare Meldung, bevor
+        // ueberhaupt etwas passiert. Wohin wirklich verbunden wird, entscheidet sich
+        // erst unten, und dort sitzt auch die Sperre (Begruendung bei LookupPublic).
         const source = ParseSource(url);
 
         const response = await axios.get<ArrayBuffer>(source.href, {
@@ -167,6 +178,17 @@ export default class GalleryService implements IGalleryService {
             maxRedirects: 3,
             maxContentLength: MAX_IMAGE_BYTES,
             validateStatus: (status) => status === 200,
+            // httpsAgent und beforeRedirect kennt nur der Node-Adapter; der fetch-Adapter
+            // uebergeht beide still - und mit ihnen die Sperre. Also fest dieser.
+            adapter: "http",
+            // axios reicht den Agent an follow-redirects weiter, das ihn fuer jeden
+            // https-Sprung neu einsetzt; CheckRedirect laeuft vor jedem Sprung.
+            httpsAgent: DOWNLOAD_AGENT,
+            beforeRedirect: CheckRedirect,
+            // Sonst nimmt axios einen Proxy aus HTTPS_PROXY: dann verbindet der Agent
+            // nur zum Proxy, der Proxy loest das Ziel selbst auf, und LookupPublic
+            // bekaeme die Zieladresse nie zu sehen.
+            proxy: false,
         });
 
         const mime = String(response.headers["content-type"] ?? "")

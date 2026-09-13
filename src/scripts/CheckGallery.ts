@@ -30,18 +30,25 @@
  * dass Traversal abgewiesen wird und dass ein interner Fehler keinen
  * Serverpfad verraet - war bis Task 8 ungeprueft. Wieder zwei eigene
  * Fake-Guild-IDs, aus demselben Grund.
+ *
+ * Seit dem SSRF-Fix zusaetzlich, ganz am Ende: checkDownloadGuard() - dass
+ * AddImage nicht ins interne Netz verbindet, auch nicht ueber einen DNS-Namen
+ * oder eine Weiterleitung. Ohne Netz: DNS wird dort, wo es noetig ist,
+ * nachgestellt.
  */
 
 import path from "path";
+import dns, { LookupAddress, LookupOptions } from "node:dns";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { createCanvas } from "@napi-rs/canvas";
+import axios from "axios";
 import fastify from "fastify";
 import GalleryService from "../services/GalleryService";
 import BotClient from "../client/BotClient";
 import RouteManager from "../handler/RouteManager";
 import DashboardApiGalleryEdit from "../routes/DashboardApiGalleryEdit";
 import { IGalleryEntry } from "../interfaces/services/gallery/IGalleryService";
-import { GALLERY_ROOT, UPLOAD_TYPES } from "../constants/Gallery";
+import { CheckRedirect, GALLERY_ROOT, IsInternalAddress, LookupPublic, UPLOAD_TYPES } from "../constants/Gallery";
 import { DASHBOARD_PATH, SESSION_COOKIE } from "../constants/Dashboard";
 
 // Eine Snowflake, die es bei Discord nicht gibt.
@@ -452,6 +459,173 @@ async function checkWriteRoute(): Promise<void> {
     }
 }
 
+// LookupPublic als Promise, in beiden Formen, in denen Node ihn aufruft.
+function Lookup(hostname: string, all: boolean): Promise<{ error: Error | null; address: string | LookupAddress[] }> {
+    return new Promise((resolve) => LookupPublic(hostname, { all }, (error, address) => resolve({ error, address })));
+}
+
+// CheckRedirect mit den Feldern, die follow-redirects vor jedem Sprung setzt.
+// Liefert den Fehlertext, oder null, wenn der Sprung durchgeht.
+function RedirectError(href: string): string | null {
+    const url = new URL(href);
+    const hop = { protocol: url.protocol, hostname: url.hostname, href: url.href };
+
+    try {
+        CheckRedirect(hop);
+        return null;
+    } catch (error) {
+        return (error as Error).message;
+    }
+}
+
+/**
+ * ============================================================================
+ * Download-Schutz: AddImage verbindet nicht ins interne Netz (SSRF)
+ * ============================================================================
+ *
+ * ParseSource prueft vorab nur den eingetippten Namen. Ein oeffentlicher Name,
+ * dessen DNS auf 127.0.0.1 zeigt, und eine Weiterleitung auf eine interne Adresse
+ * kamen daran vorbei - die Sperre sitzt deshalb jetzt beim Verbinden (LookupPublic
+ * im https.Agent, CheckRedirect vor jedem Sprung; Begruendung in
+ * constants/Gallery.ts). Geprueft wird ohne Netz: die Adress-Regel direkt, der
+ * lookup mit "localhost", die Weiterleitung mit von Hand gebauten Sprung-Optionen -
+ * und einmal der ganze Weg durch AddImage und die Route, mit nachgestellter
+ * DNS-Antwort. Auf die Platte kommt dabei nichts: jeder Download hier scheitert.
+ */
+async function checkDownloadGuard(): Promise<void> {
+    console.log("\n🛡️  Download-Schutz: kein Weg ins interne Netz\n");
+
+    console.log("\n  — Adress-Regel —");
+
+    const intern = [
+        "127.0.0.1",
+        "10.1.2.3",
+        "169.254.169.254",
+        "100.64.0.1",
+        "::1",
+        "::ffff:127.0.0.1",
+        "fd00::1",
+        "::127.0.0.1", // veraltet IPv4-kompatibel - ["::", 96] in constants/Gallery.ts
+    ];
+
+    for (const address of intern) {
+        check(`${address} gilt als intern`, IsInternalAddress(address), "wird als oeffentlich durchgelassen");
+    }
+
+    for (const address of ["93.184.216.34", "2606:4700::1111"]) {
+        check(`${address} gilt als oeffentlich`, !IsInternalAddress(address), "wird als intern gesperrt");
+    }
+
+    console.log("\n  — lookup beim Verbinden —");
+
+    // "localhost" direkt an den lookup, an ParseSource vorbei - so, wie ein
+    // oeffentlicher Name ankaeme, dessen DNS gerade auf 127.0.0.1 zeigt.
+    for (const all of [false, true]) {
+        const { error, address } = await Lookup("localhost", all);
+
+        check(
+            `lookup fuer localhost endet mit Fehler (all: ${all})`,
+            error?.message === "Diese Adresse liegt im internen Netz.",
+            error ? error.message : `kein Fehler, Adresse ${JSON.stringify(address)}`
+        );
+    }
+
+    // Gegenprobe, ebenfalls ohne Netz - eine IP beantwortet dns.lookup selbst. Node
+    // braucht die Antwort in genau der Form zurueck, in der es gefragt hat.
+    const einzeln = await Lookup("93.184.216.34", false);
+    const alle = await Lookup("93.184.216.34", true);
+
+    check(
+        "Oeffentliche Adresse kommt in beiden Formen unveraendert durch",
+        einzeln.error === null &&
+            einzeln.address === "93.184.216.34" &&
+            alle.error === null &&
+            Array.isArray(alle.address) &&
+            alle.address.length === 1 &&
+            alle.address[0].address === "93.184.216.34",
+        JSON.stringify({ einzeln: [einzeln.error?.message, einzeln.address], alle: [alle.error?.message, alle.address] })
+    );
+
+    console.log("\n  — Weiterleitungen —");
+
+    const nachHttp = RedirectError("http://example.com/bild.png");
+
+    check(
+        "Weiterleitung auf http: wird abgewiesen",
+        nachHttp === "Nur https-URLs werden akzeptiert.",
+        nachHttp ?? "geht durch"
+    );
+
+    const nachHttps = RedirectError("https://example.com/bild.png");
+
+    check("Weiterleitung auf https: geht durch", nachHttps === null, nachHttps ?? "");
+
+    // Eine nackte IP fragt kein DNS, Node verbindet ohne lookup - hier bleibt nur
+    // CheckRedirect. Die URL macht aus der Schreibweise ausserdem [::ffff:7f00:1].
+    const nachIp = RedirectError("https://[::ffff:127.0.0.1]/bild.png");
+
+    check(
+        "Weiterleitung auf eine interne IP ohne DNS wird abgewiesen",
+        nachIp === "Diese Adresse liegt im internen Netz.",
+        nachIp ?? "geht durch"
+    );
+
+    console.log("\n  — Der ganze Weg: AddImage und die Route —");
+
+    // DNS-Rebinding offline nachgestellt: dns.lookup antwortet fuer diesen
+    // erfundenen Namen mit 127.0.0.1. ParseSource laesst ihn durch, er sieht
+    // oeffentlich aus - aufhalten muss ihn der lookup im Agent von AddImage, der
+    // dns.lookup erst beim Aufruf nachschlaegt. Fehlt dieser Agent, verbindet Node
+    // zu 127.0.0.1:1, und der Fehler heisst ECONNREFUSED statt der Sperre.
+    const rebind = "https://rebind.invalid:1/bild.png";
+    const original = dns.lookup;
+
+    Object.assign(dns, {
+        lookup: (hostname: string, options: LookupOptions, callback: (...args: unknown[]) => void) => {
+            if (hostname !== "rebind.invalid") return original(hostname, options, callback as never);
+
+            process.nextTick(() =>
+                options.all ? callback(null, [{ address: "127.0.0.1", family: 4 }]) : callback(null, "127.0.0.1", 4)
+            );
+        },
+    });
+
+    try {
+        const fehler = await new GalleryService(FakeClient())
+            .AddImage({ guildId: ROUTE_GUILD, category: "rebind" }, rebind)
+            .then(
+                () => null,
+                (error: unknown) => error
+            );
+
+        check(
+            "AddImage bricht beim Verbinden ab, als axios-Fehler mit der Sperre als Text",
+            axios.isAxiosError(fehler) && fehler.message === "Diese Adresse liegt im internen Netz.",
+            fehler instanceof Error ? fehler.message : "kein Fehler"
+        );
+
+        const instance = BuildApp(FakeDashboardService(true));
+
+        const response = await instance.inject({
+            method: "POST",
+            url: GalleryURL(ROUTE_GUILD, "image/url"),
+            headers: WithCookie("application/json"),
+            payload: JSON.stringify({ url: rebind, category: "rebind" }),
+        });
+
+        check(
+            "Die Route antwortet darauf 400 mit festem Text, nicht 500",
+            response.statusCode === 400 &&
+                (response.json() as { error?: string }).error === "Das Bild ließ sich von dieser Adresse nicht laden.",
+            `${response.statusCode} ${response.body}`
+        );
+
+        await instance.close();
+    } finally {
+        Object.assign(dns, { lookup: original });
+    }
+}
+
 async function main(): Promise<void> {
     console.log("\n🖼️  Galerie: Store() und der Weg auf die Platte\n");
 
@@ -654,6 +828,7 @@ async function main(): Promise<void> {
     }
 
     await checkWriteRoute();
+    await checkDownloadGuard();
 
     console.log(failures === 0 ? "\n✅ Alle Prüfungen bestanden.\n" : `\n❌ ${failures} Prüfung(en) fehlgeschlagen.\n`);
     process.exit(failures === 0 ? 0 : 1);

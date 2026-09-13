@@ -1,5 +1,6 @@
 import path from "path";
-import { isIP } from "node:net";
+import { lookup } from "node:dns";
+import { BlockList, isIP, LookupFunction } from "node:net";
 
 export const GALLERY_ROOT = path.join(process.cwd(), "src", "images");
 
@@ -56,31 +57,89 @@ export function ResolveImagePath(relative: string): string | null {
     return TypeOf(file) ? file : null;
 }
 
+/**
+ * Was als internes Netz gilt - eine Liste fuer beide Stellen, die danach fragen:
+ * IsPrivateHost (die eingetippte URL, vorab) und LookupPublic (die Adresse, zu der
+ * wirklich verbunden wird). Zwei Listen liefen irgendwann auseinander.
+ *
+ * IPv4-gemappte IPv6-Adressen (::ffff:127.0.0.1, von der URL als ::ffff:7f00:1
+ * geschrieben) gleicht BlockList selbst mit den IPv4-Regeln ab - so steht es in
+ * der Node-Doku, unter Node 24.15 nachgeprueft, und check:gallery haelt es fest.
+ * Ohne das kaeme 127.0.0.1 in IPv6-Schreibweise einfach durch.
+ */
+const INTERNAL_NETWORKS: Array<[network: string, prefix: number]> = [
+    ["0.0.0.0", 8], // "dieses Netz" - wer zu 0.0.0.0 verbindet, landet beim eigenen Rechner
+    ["10.0.0.0", 8],
+    ["100.64.0.0", 10], // Carrier-grade NAT, dort wohnen auch Tailscale & Co.
+    ["127.0.0.0", 8],
+    ["169.254.0.0", 16], // Link-local, darunter die Metadaten-Dienste der Clouds
+    ["172.16.0.0", 12],
+    ["192.168.0.0", 16],
+    // :: (das IPv6-Gegenstueck zu 0.0.0.0), ::1 und die veralteten IPv4-kompatiblen
+    // ::a.b.c.d - ein Linux mit aktivem sit0 fuehrt ::127.0.0.1 als eigene Adresse.
+    ["::", 96],
+    ["fc00::", 7], // Unique local
+    ["fe80::", 10], // Link-local
+];
+
+const INTERNAL = new BlockList();
+
+for (const [network, prefix] of INTERNAL_NETWORKS) {
+    INTERNAL.addSubnet(network, prefix, isIP(network) === 6 ? "ipv6" : "ipv4");
+}
+
+export function IsInternalAddress(address: string): boolean {
+    const family = isIP(address);
+
+    // Keine IP-Adresse - das liefert kein Resolver, der funktioniert. BlockList
+    // antwortete darauf still mit false, also lieber gleich sperren.
+    if (family === 0) return true;
+
+    return INTERNAL.check(address, family === 6 ? "ipv6" : "ipv4");
+}
+
+// Nur der schnelle Weg fuer eine lesbare Meldung, bevor ueberhaupt etwas
+// passiert. Die Sperre, auf die es ankommt, sitzt in LookupPublic.
 export function IsPrivateHost(hostname: string): boolean {
     const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
     if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return true;
 
-    const version = isIP(host);
-
-    if (version === 4) {
-        const [first, second] = host.split(".").map(Number);
-
-        return (
-            first === 0 ||
-            first === 10 ||
-            first === 127 ||
-            (first === 169 && second === 254) ||
-            (first === 172 && second >= 16 && second <= 31) ||
-            (first === 192 && second === 168)
-        );
-    }
-
-    if (version === 6) {
-        return host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80");
-    }
-
-    return false;
+    return isIP(host) !== 0 && IsInternalAddress(host);
 }
+
+/**
+ * dns.lookup mit Pruefung - fuer den https.Agent, ueber den AddImage herunterlaedt.
+ *
+ * Die Pruefung sitzt hier, im Moment des Verbindens, und nicht vorab in
+ * ParseSource: IsPrivateHost sieht nur den Namen, den jemand eingetippt hat. Ein
+ * oeffentlicher Name kann auf 10.0.0.5 oder 169.254.169.254 zeigen, und DNS darf
+ * beim zweiten Fragen anders antworten als beim ersten (Rebinding). Wer vor der
+ * Anfrage selbst aufloest und prueft, prueft also eine Adresse, zu der danach
+ * womoeglich gar nicht verbunden wird. Diesen lookup ruft Node unmittelbar vor
+ * dem Verbinden, fuer die erste Anfrage wie fuer jede Weiterleitung - und die
+ * Adresse, die er zurueckgibt, ist die, zu der verbunden wird. Bitte nicht zu
+ * einer Vorab-Pruefung "vereinfachen".
+ *
+ * Node ruft ihn in zwei Formen: mit all: false zurueck an (err, address, family),
+ * mit all: true (Happy Eyeballs, unter Node 24 der Standard) an (err, addresses).
+ * Im zweiten Fall probiert Node jede Adresse der Liste, deshalb sperrt schon eine
+ * einzige interne die ganze Antwort.
+ *
+ * Eine nackte IP in der URL erreicht diesen lookup nie - Node verbindet dann
+ * sofort. Die faengt ParseSource bzw. CheckRedirect am Text ab.
+ */
+export const LookupPublic: LookupFunction = (hostname, options, callback) => {
+    lookup(hostname, options, (error, address, family) => {
+        if (error) return callback(error, address, family);
+
+        const addresses = typeof address === "string" ? [address] : address.map((entry) => entry.address);
+
+        // Ohne die Adresse im Text - der landet sonst bis im Discord-Panel.
+        if (addresses.some(IsInternalAddress)) return callback(new Error("Diese Adresse liegt im internen Netz."), "");
+
+        callback(null, address, family);
+    });
+};
 
 export function ParseSource(url: string): URL {
     let source: URL;
@@ -95,4 +154,16 @@ export function ParseSource(url: string): URL {
     if (IsPrivateHost(source.hostname)) throw new Error("Diese Adresse liegt im internen Netz.");
 
     return source;
+}
+
+/**
+ * Fuer axios' beforeRedirect: jeder Sprung muss dieselben Regeln erfuellen wie die
+ * eingetippte URL. Zwei Luecken schliesst nur diese Stelle, nicht LookupPublic:
+ * - ein Sprung auf http: liefe ueber den http-Agent, an dem LookupPublic nicht haengt;
+ * - ein Sprung auf eine nackte IP (https://127.0.0.1/) fragt kein DNS, Node
+ *   verbindet ohne lookup. Bei einer IP ist der Text aber schon die Adresse - hier
+ *   gibt es nichts, was sich zwischen Pruefen und Verbinden noch aendern koennte.
+ */
+export function CheckRedirect(options: { href?: string }): void {
+    ParseSource(options.href ?? "");
 }
