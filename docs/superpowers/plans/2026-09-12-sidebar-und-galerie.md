@@ -1185,6 +1185,20 @@ In `src/scripts/CheckDashboard.ts` hinter dem Galerie-Check aus Task 7 einfügen
     });
     check("Galerie weist unbekannte Aktionen ab", galerieErfunden.status === 400, `${galerieErfunden.status}`);
 
+    const galerieAlsText = await fetch(`${BASE}${P}/api/guild/${id}/gallery/category`, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "text/plain" },
+        body: JSON.stringify({ category: "csrf" }),
+    });
+    check("Galerie-Schreiben nimmt nur JSON (CSRF)", galerieAlsText.status === 415, `${galerieAlsText.status}`);
+
+    const uploadAlsJson = await fetch(`${BASE}${P}/api/guild/${id}/gallery/image?category=test&name=x`, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "application/json" },
+        body: "{}",
+    });
+    check("Galerie-Upload nimmt nur Bilder", uploadAlsJson.status === 415, `${uploadAlsJson.status}`);
+
     // Gegenstueck zum 413 auf der Modul-Route: hier muss ein Bild ueber 1 MiB
     // durchkommen. Welcher Status danach folgt, haengt an der Test-Sitzung -
     // nur 413 waere falsch, dann fehlt der Route ihr bodyLimit.
@@ -1209,6 +1223,7 @@ Erwartet: beide neuen Zeilen `FAIL` mit `404`.
 Neue Datei `src/routes/DashboardApiGalleryEdit.ts`:
 
 ```ts
+import axios from "axios";
 import { FastifyReply, FastifyRequest } from "fastify";
 import BotClient from "../client/BotClient";
 import Route from "../structures/Route";
@@ -1216,8 +1231,12 @@ import { SessionExpired } from "../services/DashboardService";
 import { ClearCookie, DASHBOARD_PATH, SESSION_COOKIE } from "../constants/Dashboard";
 import { SNOWFLAKE } from "../constants/Discord";
 import { MAX_IMAGE_BYTES, UPLOAD_TYPES } from "../constants/Gallery";
+import { WantsJSON } from "../utils/admin";
 import { SessionOf } from "../utils/dashboard";
 import logger from "../utils/logger";
+
+/** Was hinter /gallery/ stehen darf. Alles andere ist 400, noch vor den Rechten. */
+const ACTIONS = new Set(["category", "category/delete", "image", "image/url", "image/move", "image/delete"]);
 
 interface IBody {
     category?: unknown;
@@ -1228,6 +1247,10 @@ interface IBody {
 
 function Text(value: unknown): string | null {
     return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function MimeOf(request: FastifyRequest): string {
+    return String(request.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
 }
 
 /**
@@ -1262,7 +1285,22 @@ export default class DashboardApiGalleryEdit extends Route {
 
         if (!id || !SNOWFLAKE.test(id)) return reply.code(404).send({ error: "Not Found" });
 
+        // Erst die Adresse, dann der Inhalt, dann die Rechte: eine Aktion, die es
+        // nicht gibt, soll keinen Umlauf zu Discord kosten. Nebenbei ist die 400
+        // so auch ohne gueltige Sitzung erreichbar - check:dashboard prueft sie.
         const action = (request.params as { "*"?: string })["*"] ?? "";
+
+        if (!ACTIONS.has(action)) return reply.code(400).send({ error: "Unbekannte Aktion." });
+
+        // Derselbe CSRF-Schutz wie bei den anderen schreibenden Routen (WantsJSON
+        // in utils/admin.ts): nur Inhaltstypen, fuer die ein fremder Browser erst
+        // eine Preflight-Anfrage stellen muesste. Der Upload traegt statt JSON
+        // sein Bild - image/* ist genauso wenig ein einfacher Typ.
+        const upload = action === "image";
+
+        if (upload ? !UPLOAD_TYPES.includes(MimeOf(request)) : !WantsJSON(request)) {
+            return reply.code(415).send({ error: upload ? "Nur Bilder" : "Nur application/json" });
+        }
 
         try {
             if (!(await service.CanManage(session, id))) {
@@ -1280,14 +1318,27 @@ export default class DashboardApiGalleryEdit extends Route {
         try {
             const result = await this.Run(id, action, request);
 
-            if (result === null) return reply.code(400).send({ error: "Unbekannte Aktion oder fehlende Angaben." });
+            if (result === null) return reply.code(400).send({ error: "Es fehlen Angaben." });
 
             logger.user(`🖼️  Galerie ${action} auf ${id} (von ${session.userId})`);
 
             return reply.header("Cache-Control", "no-store").send({ ok: true, ...result });
         } catch (error) {
-            // Was der Dienst ablehnt, ist eine Angabe des Nutzers - kein Ausfall.
-            return reply.code(400).send({ error: error instanceof Error ? error.message : "Das ging nicht." });
+            // Was der Dienst ablehnt, ist eine Angabe des Nutzers: seine Fehler
+            // sind schlichte Error-Objekte ohne code, mit einem Text fuer Menschen.
+            // Ein Download, der scheitert, gehoert ebenfalls dazu. Alles andere -
+            // eine volle Platte, fehlende Rechte - traegt einen code und oft einen
+            // absoluten Pfad im Text. Das geht nicht an den Browser, sondern als
+            // 500 ins Log (RouteManager.Dispatch).
+            if (axios.isAxiosError(error)) {
+                return reply.code(400).send({ error: "Das Bild ließ sich von dieser Adresse nicht laden." });
+            }
+
+            if (error instanceof Error && !("code" in error)) {
+                return reply.code(400).send({ error: error.message });
+            }
+
+            throw error;
         }
     }
 
@@ -1317,9 +1368,11 @@ export default class DashboardApiGalleryEdit extends Route {
         }
 
         if (action === "image") {
-            const mime = String(request.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+            const mime = MimeOf(request);
 
-            if (!Buffer.isBuffer(request.body) || !UPLOAD_TYPES.includes(mime)) return null;
+            // Der Typ ist in Handle schon geprueft; ein Buffer muss es trotzdem
+            // sein, sonst hat kein Bild-Parser den Body gelesen.
+            if (!Buffer.isBuffer(request.body)) return null;
 
             const query = request.query as { category?: string; subcategory?: string; name?: string };
             const target = Text(query.category);
