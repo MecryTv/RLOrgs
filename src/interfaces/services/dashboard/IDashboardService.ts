@@ -34,6 +34,8 @@ export default interface IDashboardService {
     Detail(session: IDashboardSession, guildId: string): Promise<IDashboardGuildDetail | null>;
     /** Schaltet ein Modul an oder aus. null heißt "darf diesen Server nicht verwalten". Wirft SessionExpired. */
     SetModule(session: IDashboardSession, guildId: string, moduleId: ModuleId, on: boolean): Promise<string[] | null>;
+    /** Darf diese Sitzung den Server verwalten? Wirft SessionExpired. */
+    CanManage(session: IDashboardSession, guildId: string): Promise<boolean>;
     /**
      * Die Aktivität eines Servers für die Übersicht. null heißt "darf diesen
      * Server nicht sehen", "offline" heißt: ohne Datenbank wird nicht gezählt.

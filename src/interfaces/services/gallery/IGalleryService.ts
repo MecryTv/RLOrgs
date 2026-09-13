@@ -41,6 +41,7 @@ export default interface IGalleryService {
     GetSubcategories(guildId: string, category: string, options?: IListOptions): Promise<ICategoryEntry[]>;
     GetImages(target: IGalleryTarget): Promise<IGalleryEntry[]>;
     GetImage(id: string): Promise<IGalleryEntry | null>;
+    Overview(guildId: string): Promise<{ categories: ICategoryEntry[]; images: IGalleryEntry[] }>;
     Attach(images: IGalleryEntry[]): IAttachedMedia;
 
     CreateCategory(target: IGalleryTarget): Promise<boolean>;

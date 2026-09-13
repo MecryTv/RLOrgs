@@ -46,38 +46,6 @@ export default class DashboardApiGallery extends Route {
                 .send({ error: "Unauthorized" });
         }
 
-        const gallery = this.client.galleryService;
-
-        // Auch leere Alben: ohne das verschwaende ein frisch angelegtes Album
-        // sofort wieder aus der Liste, und "Anlegen" saehe aus, als taete es
-        // nichts. Das Discord-Panel blendet leere Alben aus, das Dashboard nicht.
-        const all = { requireImages: false };
-
-        // GetCategories(id) liefert Vorlagen und Server schon zusammen - ein
-        // zweiter Aufruf fuer "default" haette jede Vorlage doppelt gezeigt.
-        const categories = await gallery.GetCategories(id, all);
-
-        // Unterordner je Name nur einmal abfragen: GetSubcategories schaut
-        // ebenfalls in beide Bereiche, und ein Name kann in beiden vorkommen.
-        const names = [...new Set(categories.map((entry) => entry.name))];
-        const nested = (await Promise.all(names.map((name) => gallery.GetSubcategories(id, name, all)))).flat();
-
-        // Unterordner stehen gleichberechtigt in derselben Liste; ihr Feld
-        // "parent" sagt, wohin sie gehoeren.
-        const folders = [...categories, ...nested];
-
-        const images = (
-            await Promise.all(
-                folders.map((entry) =>
-                    gallery.GetImages({
-                        guildId: entry.guildId,
-                        category: entry.parent ?? entry.name,
-                        subcategory: entry.parent ? entry.name : null,
-                    })
-                )
-            )
-        ).flat();
-
-        return reply.header("Cache-Control", "no-store").send({ categories: folders, images });
+        return reply.header("Cache-Control", "no-store").send(await this.client.galleryService.Overview(id));
     }
 }
