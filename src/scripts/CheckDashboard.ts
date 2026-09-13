@@ -684,6 +684,46 @@ async function main(): Promise<void> {
     const galerieApi = await fetch(`${BASE}${P}/api/guild/${id}/gallery`, MANUAL);
     check("Galerie ohne Sitzung ist 401", galerieApi.status === 401, `${galerieApi.status}`);
 
+    const galerieSchreiben = `${BASE}${P}/api/guild/${id}/gallery/image/delete`;
+
+    const galerieOhneSitzung = await fetch(galerieSchreiben, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: `${id}/test/bild.webp` }),
+    });
+    check("Galerie-Schreiben ohne Sitzung ist 401", galerieOhneSitzung.status === 401, `${galerieOhneSitzung.status}`);
+
+    const galerieErfunden = await fetch(`${BASE}${P}/api/guild/${id}/gallery/gibt-es-nicht`, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "application/json" },
+        body: "{}",
+    });
+    check("Galerie weist unbekannte Aktionen ab", galerieErfunden.status === 400, `${galerieErfunden.status}`);
+
+    const galerieAlsText = await fetch(`${BASE}${P}/api/guild/${id}/gallery/category`, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "text/plain" },
+        body: JSON.stringify({ category: "csrf" }),
+    });
+    check("Galerie-Schreiben nimmt nur JSON (CSRF)", galerieAlsText.status === 415, `${galerieAlsText.status}`);
+
+    const uploadAlsJson = await fetch(`${BASE}${P}/api/guild/${id}/gallery/image?category=test&name=x`, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "application/json" },
+        body: "{}",
+    });
+    check("Galerie-Upload nimmt nur Bilder", uploadAlsJson.status === 415, `${uploadAlsJson.status}`);
+
+    // Gegenstueck zum 413 auf der Modul-Route: hier muss ein Bild ueber 1 MiB
+    // durchkommen. Welcher Status danach folgt, haengt an der Test-Sitzung -
+    // nur 413 waere falsch, dann fehlt der Route ihr bodyLimit.
+    const grossesBild = await fetch(`${BASE}${P}/api/guild/${id}/gallery/image?category=test&name=gross`, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "image/png" },
+        body: new Uint8Array(1024 * 1024 + 1),
+    });
+    check("Galerie nimmt Bilder ueber 1 MiB an", grossesBild.status !== 413, `${grossesBild.status}`);
+
     const health = await fetch(`${BASE}/dcapi/health`);
     check("Bestehende API bleibt tokenpflichtig", health.status === 401, `${health.status}`);
 

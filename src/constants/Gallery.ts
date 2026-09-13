@@ -23,8 +23,14 @@ export type ImageExtension = keyof typeof IMAGE_TYPES;
  */
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
-/** Die Typen, die ein Upload tragen darf - ohne Dubletten. */
-export const UPLOAD_TYPES = [...new Set(Object.values(IMAGE_TYPES))];
+/**
+ * Die Typen, die ein Upload tragen darf - ohne Dubletten.
+ *
+ * Als string[] und nicht als literal getyptes Array: der einzige Zweck ist der
+ * Vergleich mit einem Inhaltstyp aus einer Anfrage (ein einfacher string), und
+ * genau dafuer braucht es die Weite.
+ */
+export const UPLOAD_TYPES: string[] = [...new Set(Object.values(IMAGE_TYPES))];
 
 export function IsScope(value: string): boolean {
     return value === DEFAULT_SCOPE || /^\d{17,20}$/.test(value);

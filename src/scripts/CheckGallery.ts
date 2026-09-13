@@ -20,15 +20,29 @@
  * zweite Fake-Guild-ID, aus demselben Grund vorher und in einem finally entfernt -
  * die Checks oben fuellen ihren Fake-Ordner bereits mit eigenen Kategorien, die
  * hier nur stoeren wuerden.
+ *
+ * Seit Task 8 zusaetzlich: DashboardApiGalleryEdit selbst, ganz unten in
+ * checkWriteRoute() - die Schreib-Route Ende-zu-Ende ueber instance.inject(),
+ * mit gefakter Sitzung/Rechtepruefung und echtem GalleryService dahinter.
+ * CheckDashboard.ts prueft dieselbe Route nur bis zur Rechtepruefung (401/400/
+ * 415/413, ohne echte Discord-Sitzung); was dahinter liegt - dass die sechs
+ * Aktionen wirklich etwas tun, dass kein Server an ein fremdes Bild kommt,
+ * dass Traversal abgewiesen wird und dass ein interner Fehler keinen
+ * Serverpfad verraet - war bis Task 8 ungeprueft. Wieder zwei eigene
+ * Fake-Guild-IDs, aus demselben Grund.
  */
 
 import path from "path";
-import { readdir, readFile, rm } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { createCanvas } from "@napi-rs/canvas";
+import fastify from "fastify";
 import GalleryService from "../services/GalleryService";
 import BotClient from "../client/BotClient";
+import RouteManager from "../handler/RouteManager";
+import DashboardApiGalleryEdit from "../routes/DashboardApiGalleryEdit";
 import { IGalleryEntry } from "../interfaces/services/gallery/IGalleryService";
-import { GALLERY_ROOT } from "../constants/Gallery";
+import { GALLERY_ROOT, UPLOAD_TYPES } from "../constants/Gallery";
+import { DASHBOARD_PATH, SESSION_COOKIE } from "../constants/Dashboard";
 
 // Eine Snowflake, die es bei Discord nicht gibt.
 const GUILD = "100000000000000001";
@@ -39,6 +53,14 @@ const ROOT = path.join(GALLERY_ROOT, GUILD);
 // oben (bilder, wettlauf, ...) die Overview()-Checks nicht verfaelschen.
 const GUILD2 = "100000000000000002";
 const ROOT2 = path.join(GALLERY_ROOT, GUILD2);
+
+// Dritte und vierte erfundene Snowflake, nur fuer den Abschnitt "Schreib-Route"
+// ganz unten - wieder eigene Fake-Ordner, damit sich keiner der drei Abschnitte
+// mit einem anderen in die Quere kommt.
+const ROUTE_GUILD = "200000000000000001";
+const ROUTE_ROOT = path.join(GALLERY_ROOT, ROUTE_GUILD);
+const ROUTE_OTHER_GUILD = "200000000000000002";
+const ROUTE_OTHER_ROOT = path.join(GALLERY_ROOT, ROUTE_OTHER_GUILD);
 
 let failures = 0;
 
@@ -75,6 +97,359 @@ function FakeClient(): BotClient {
         server: { BaseURL: "http://127.0.0.1" },
         developerMode: false,
     } as unknown as BotClient;
+}
+
+async function FileExists(file: string): Promise<boolean> {
+    return stat(file)
+        .then(() => true)
+        .catch(() => false);
+}
+
+// Der Cookie-Wert, den der gefakte dashboardService als "eingeloggt" erkennt -
+// beliebig, denn Session() unten prueft nur auf Gleichheit, nicht auf ein
+// echtes Siegel wie in DashboardService.Sign()/Session().
+const ROUTE_SESSION_COOKIE = "gueltig";
+
+// SessionOf() (utils/dashboard.ts) ruft nur Session() auf, DashboardApiGalleryEdit
+// selbst nur noch CanManage() - mehr braucht der gefakte Dienst hier nicht.
+// Secure liegt nur fuer den (hier nie genommenen) SessionExpired-Zweig bereit.
+function FakeDashboardService(canManage: boolean) {
+    return {
+        Session: (cookie: string | undefined) =>
+            cookie === ROUTE_SESSION_COOKIE
+                ? {
+                      id: "route-check",
+                      userId: "1",
+                      username: "check",
+                      avatar: null,
+                      accessToken: "x",
+                      mfa: true as const,
+                      expiresAt: Date.now() + 60_000,
+                  }
+                : null,
+        CanManage: async () => canManage,
+        Secure: false,
+    };
+}
+
+// Wie FakeClient() oben, nur zusaetzlich mit einem dashboardService und einem
+// galleryService - fuer Check 6 (Leck) laesst sich Letzterer durch einen Stub
+// ersetzen, der eine Aktion mit einem systemnahen Fehler scheitern laesst.
+function FakeRouteClient(dashboardService: unknown, galleryService?: unknown): BotClient {
+    const client = {
+        guilds: { cache: new Map() },
+        server: { BaseURL: "http://127.0.0.1" },
+        developerMode: false,
+    } as unknown as BotClient;
+
+    const mutable = client as unknown as Record<string, unknown>;
+    mutable.dashboardService = dashboardService;
+    mutable.galleryService = galleryService ?? new GalleryService(client);
+
+    return client;
+}
+
+// Baut Fastify genauso auf wie Server.ts: derselbe Bild-Parser, dieselbe
+// RouteManager-Klasse - nur mit genau einer registrierten Route, damit ihr
+// bodyLimit ueber IRouteOptions.bodyLimit denselben Weg nimmt wie im echten
+// Server statt an einem von Hand gebauten fastify.route() vorbei.
+function BuildApp(dashboardService: unknown, galleryService?: unknown) {
+    const client = FakeRouteClient(dashboardService, galleryService);
+    const instance = fastify({ logger: false });
+
+    instance.addContentTypeParser(UPLOAD_TYPES, { parseAs: "buffer" }, (_request, body, done) => done(null, body));
+
+    const manager = new RouteManager(client);
+    manager.Register(new DashboardApiGalleryEdit(client));
+    manager.Apply(instance);
+
+    return instance;
+}
+
+function GalleryURL(guildId: string, action: string): string {
+    return `${DASHBOARD_PATH}/api/guild/${guildId}/gallery/${action}`;
+}
+
+function WithCookie(contentType: string): Record<string, string> {
+    return { "content-type": contentType, cookie: `${SESSION_COOKIE}=${ROUTE_SESSION_COOKIE}` };
+}
+
+/**
+ * ============================================================================
+ * Schreib-Route: DashboardApiGalleryEdit Ende-zu-Ende, ohne Netz oder Discord
+ * ============================================================================
+ *
+ * CheckDashboard.ts prueft dieselbe Route, kommt aber ohne echte Discord-Sitzung
+ * nur bis zur Rechtepruefung (401 ohne Sitzung, 400 fuer unbekannte Aktionen,
+ * 415 ohne JSON/Bild, 413 als Gegenprobe zum bodyLimit). Alles dahinter - dass
+ * die sechs Aktionen wirklich etwas tun, dass ein Server nicht an ein fremdes
+ * Bild kommt, dass Traversal abgewiesen wird und dass ein interner Fehler
+ * keinen Serverpfad verraet - hatte bisher keine feste Absicherung. Das holt
+ * dieser Abschnitt nach: ein bare fastify(), der Bild-Parser aus Server.ts und
+ * eine RouteManager mit genau dieser einen Route, angesprochen ueber
+ * instance.inject(). SessionOf()/CanManage() werden gefaked (siehe
+ * FakeDashboardService oben), die Galerie-Aktionen selbst laufen ueber den
+ * echten GalleryService.
+ */
+async function checkWriteRoute(): Promise<void> {
+    console.log("\n🔐 Schreib-Route: DashboardApiGalleryEdit Ende-zu-Ende\n");
+
+    // Ein abgestuerzter vorheriger Lauf darf diesen hier nicht vergiften.
+    await rm(ROUTE_ROOT, { recursive: true, force: true });
+    await rm(ROUTE_OTHER_ROOT, { recursive: true, force: true });
+
+    try {
+        console.log("\n  — Erlaubt: anlegen, hochladen, loeschen —");
+
+        {
+            const instance = BuildApp(FakeDashboardService(true));
+
+            const created = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "category"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ category: "neu" }),
+            });
+
+            check(
+                "Kategorie anlegen antwortet 200",
+                created.statusCode === 200,
+                `${created.statusCode} ${created.body}`
+            );
+
+            const uploaded = await instance.inject({
+                method: "POST",
+                url: `${GalleryURL(ROUTE_GUILD, "image")}?category=neu&name=upload`,
+                headers: WithCookie("image/png"),
+                payload: Sample(300, 200),
+            });
+
+            check(
+                "Bild-Upload antwortet 200",
+                uploaded.statusCode === 200,
+                `${uploaded.statusCode} ${uploaded.body}`
+            );
+
+            const hochgeladen =
+                uploaded.statusCode === 200 ? (uploaded.json() as { image: IGalleryEntry }).image : null;
+
+            check(
+                "Hochgeladenes Bild landet als .webp auf der Platte",
+                hochgeladen !== null &&
+                    hochgeladen.file.endsWith(".webp") &&
+                    (await FileExists(path.join(ROUTE_ROOT, "neu", hochgeladen.file))),
+                JSON.stringify(hochgeladen)
+            );
+
+            const deleted = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "image/delete"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ image: hochgeladen?.id }),
+            });
+
+            check(
+                "Bild-Loeschen antwortet 200",
+                deleted.statusCode === 200,
+                `${deleted.statusCode} ${deleted.body}`
+            );
+
+            check(
+                "Geloeschtes Bild liegt nicht mehr auf der Platte",
+                hochgeladen !== null && !(await FileExists(path.join(ROUTE_ROOT, "neu", hochgeladen.file)))
+            );
+
+            await instance.close();
+        }
+
+        console.log("\n  — Verboten: CanManage antwortet false —");
+
+        {
+            const instance = BuildApp(FakeDashboardService(false));
+
+            const response = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "category"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ category: "verboten" }),
+            });
+
+            check(
+                "Ohne Verwaltungsrecht kommt 403",
+                response.statusCode === 403,
+                `${response.statusCode} ${response.body}`
+            );
+
+            check(
+                "Ohne Verwaltungsrecht wird nichts angelegt",
+                !(await FileExists(path.join(ROUTE_ROOT, "verboten")))
+            );
+
+            await instance.close();
+        }
+
+        console.log("\n  — Fremder Server: Bild-ID aus einer anderen Guild —");
+
+        {
+            // Direkt ueber den echten Dienst angelegt, nicht ueber die Route - das
+            // Bild soll schon existieren, bevor der fragliche Aufruf ueberhaupt
+            // startet.
+            const seed = new GalleryService(FakeClient());
+            const fremdesBild = await seed.AddUpload(
+                { guildId: ROUTE_OTHER_GUILD, category: "fremd" },
+                Sample(300, 200),
+                "image/png",
+                "fremd"
+            );
+
+            const instance = BuildApp(FakeDashboardService(true));
+
+            const moved = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "image/move"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ image: fremdesBild.id, category: "neu" }),
+            });
+
+            check(
+                "Verschieben eines fremden Bildes ist 400",
+                moved.statusCode === 400,
+                `${moved.statusCode} ${moved.body}`
+            );
+
+            const geloescht = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "image/delete"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ image: fremdesBild.id }),
+            });
+
+            check(
+                "Loeschen eines fremden Bildes ist 400",
+                geloescht.statusCode === 400,
+                `${geloescht.statusCode} ${geloescht.body}`
+            );
+
+            check(
+                "Das fremde Bild liegt weiterhin auf der Platte",
+                await FileExists(path.join(ROUTE_OTHER_ROOT, "fremd", fremdesBild.file))
+            );
+
+            await instance.close();
+        }
+
+        console.log("\n  — Traversal: '..' in der Bild-ID —");
+
+        {
+            const seed = new GalleryService(FakeClient());
+            const echtesBild = await seed.AddUpload(
+                { guildId: ROUTE_GUILD, category: "echt" },
+                Sample(300, 200),
+                "image/png",
+                "echt"
+            );
+
+            const instance = BuildApp(FakeDashboardService(true));
+
+            // Faengt mit ".." an: das allein reicht, damit die ID nicht mehr mit
+            // "${guildId}/" beginnt - derselbe Schutz wie beim fremden Server oben,
+            // hier an einer ID erprobt, die einen echten Guild-Namen und Dateinamen
+            // im Text traegt, um zu zeigen, wonach die Pruefung wirklich schaut.
+            const traversal = `../${ROUTE_GUILD}/echt/${echtesBild.file}`;
+
+            const response = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "image/delete"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ image: traversal }),
+            });
+
+            check(
+                "Bild-ID mit '..' wird abgewiesen (400)",
+                response.statusCode === 400,
+                `${response.statusCode} ${response.body}`
+            );
+
+            check(
+                "Das Bild liegt weiterhin auf der Platte",
+                await FileExists(path.join(ROUTE_ROOT, "echt", echtesBild.file))
+            );
+
+            await instance.close();
+        }
+
+        console.log("\n  — Nur https: image/url mit http:// —");
+
+        {
+            const instance = BuildApp(FakeDashboardService(true));
+
+            const response = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "image/url"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ url: "http://example.com/bild.png", category: "neu" }),
+            });
+
+            check(
+                "http:// wird abgewiesen (400)",
+                response.statusCode === 400,
+                `${response.statusCode} ${response.body}`
+            );
+
+            check(
+                "Fehlertext stammt vom Dienst (ParseSource)",
+                (response.json() as { error?: string }).error === "Nur https-URLs werden akzeptiert.",
+                response.body
+            );
+
+            await instance.close();
+        }
+
+        console.log("\n  — Kein Leck: interner Fehler mit code und Serverpfad —");
+
+        {
+            const geheimerPfad = "C:\\Users\\check\\geheim\\datenbank.sqlite";
+            const systemFehler = Object.assign(new Error(`EACCES: permission denied, open '${geheimerPfad}'`), {
+                code: "EACCES",
+            });
+
+            // Ein Stub statt des echten Dienstes: der Fehler soll deterministisch
+            // kommen, nicht von einer echten, nur unter bestimmten Rechten
+            // scheiternden Schreiboperation abhaengen.
+            const stubGallery = {
+                CreateCategory: async () => {
+                    throw systemFehler;
+                },
+            };
+
+            const instance = BuildApp(FakeDashboardService(true), stubGallery);
+
+            const response = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "category"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ category: "leck" }),
+            });
+
+            check(
+                "Interner Fehler kommt als 500 an",
+                response.statusCode === 500,
+                `${response.statusCode} ${response.body}`
+            );
+
+            // Ueber das geparste Feld statt den rohen Body-Text: JSON entschaerft
+            // Rueckstriche im Pfad zu "\\\\", ein Vergleich am rohen Text faende den
+            // Pfad deshalb nie, selbst wenn er drinsteckt.
+            const geleckt = (response.json() as { error?: string }).error ?? "";
+
+            check("Der Serverpfad steht nicht in der Antwort", !geleckt.includes(geheimerPfad), geleckt);
+
+            await instance.close();
+        }
+    } finally {
+        await rm(ROUTE_ROOT, { recursive: true, force: true });
+        await rm(ROUTE_OTHER_ROOT, { recursive: true, force: true });
+    }
 }
 
 async function main(): Promise<void> {
@@ -277,6 +652,8 @@ async function main(): Promise<void> {
         await rm(ROOT, { recursive: true, force: true });
         await rm(ROOT2, { recursive: true, force: true });
     }
+
+    await checkWriteRoute();
 
     console.log(failures === 0 ? "\n✅ Alle Prüfungen bestanden.\n" : `\n❌ ${failures} Prüfung(en) fehlgeschlagen.\n`);
     process.exit(failures === 0 ? 0 : 1);
