@@ -1440,7 +1440,7 @@ Erwartet: beide neuen Zeilen `ok`, Exit-Code 0.
 - Modify: `src/dashboard/public/assets/style.css` (ans Ende)
 
 **Interfaces:**
-- Consumes: `GET /api/guild/:id/gallery` (Task 7), `POST /api/guild/:id/gallery/*` (Task 8), `card()`-Hook (Task 2).
+- Consumes: `GET /api/guild/:id/gallery` (Task 7), `POST /api/guild/:id/gallery/*` mit **allen sechs** Aktionen (Task 8), `card()`-Hook (Task 2).
 - Produces: `renderGallery(guildId: string, canManage: boolean): void` — von `renderGuild` gerufen.
 
 - [ ] **Step 1: Sektion in `guild.html`**
@@ -1824,7 +1824,85 @@ export function renderGallery(guildId: string, canManage: boolean): void {
 }
 ```
 
-- [ ] **Step 5: In `Guild.ts` aufrufen**
+- [ ] **Step 5: Gleichstand mit dem Discord-Panel**
+
+> **Ergänzung vor dem Bau (13.09.2026).** Die Spec verlangt für diese Seite
+> „dieselben Funktionen wie `/gallery` in Discord: durchblättern, hochladen,
+> verschieben, löschen, Kategorien anlegen und löschen". Der Code aus Step 4
+> kann nur Album anlegen, Datei hochladen und Bild löschen. Das Discord-Panel
+> (`src/events/gallery/GalleryHandler.ts`) kann zusätzlich: Bilder
+> verschieben, Alben löschen, Unteralben anlegen und Bilder per URL holen. Die
+> Routen dafür stehen seit Task 8 alle. Dieser Schritt schließt die Lücke —
+> auf dem Code aus Step 4 aufbauend, mit dessen `send()`, `load()`, `warn()`,
+> `current()`, `tile()` und `keyOf()`.
+
+**`guild.html`** — die `.galbar` bekommt, in dieser Reihenfolge nach `#galFolder`:
+
+```html
+            <select id="galParent" aria-label="Neues Album anlegen unter"></select>
+            <input id="galName" type="text" maxlength="32" placeholder="Neues Album…" aria-label="Name des neuen Albums">
+            <button class="btn" id="galNew" type="button"><svg><use href="#i-plus"/></svg>Anlegen</button>
+            <button class="btn btn--ghost" id="galDelCat" type="button"><svg><use href="#i-x"/></svg>Album löschen</button>
+            <button class="btn" id="galUpload" type="button"><svg><use href="#i-image"/></svg>Bild hochladen</button>
+            <input id="galFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+            <input id="galUrl" type="url" placeholder="https://…" aria-label="Bild-Adresse">
+            <button class="btn" id="galFetch" type="button"><svg><use href="#i-link"/></svg>Von URL holen</button>
+```
+
+(`#galName`, `#galNew`, `#galUpload`, `#galFile` gibt es aus Step 1 schon — sie
+wandern nur an diese Stelle.)
+
+**`style.css`** — die bestehende Regel `.galbar select,.galbar input[type="text"]`
+um `.galbar input[type="url"]` erweitern, und ergänzen:
+
+```css
+/* Verschieben sitzt als Auswahl in der Leiste einer Kachel. Schmal, weil
+   dort auch der Loeschknopf steht. */
+.galtile__move{
+  flex:1;min-width:0;padding:3px 4px;border:1px solid var(--line);border-radius:var(--r-sm);
+  background:rgba(0,0,0,.6);color:var(--text);font-size:11px;
+}
+```
+
+**`GuildGallery.ts`** — Verhalten, das genau so gebaut wird:
+
+1. **Unteralben anlegen.** `#galParent` enthält als erste Option „Oberste Ebene"
+   (Wert leer) und danach jedes **eigene Hauptalbum** (`scope === "custom"`,
+   `parent === null`) mit seinem Namen. Wird es bei jedem `load()` neu gefüllt
+   und behält eine noch gültige Auswahl. `create()` schickt bei leerer Auswahl
+   `{ category: name }`, sonst `{ category: <gewähltes Hauptalbum>, subcategory: name }`.
+   **Nach erfolgreichem Anlegen ist das neue Album in `#galFolder` ausgewählt**
+   — sonst sieht der Nutzer nach dem Klick keine Veränderung außer einer Zahl
+   in der Liste.
+2. **Album löschen.** `#galDelCat` löscht das in `#galFolder` gewählte Album mit
+   `send("category/delete", { category, subcategory })`. Zwei Klicks wie beim
+   Bild: der erste ändert die Beschriftung auf
+   „Wirklich? Löscht alle Bilder darin" — bei einem Hauptalbum
+   „Wirklich? Löscht auch alle Unteralben" —, nach 4 Sekunden ohne zweiten
+   Klick springt sie zurück. Ein Hauptalbum löscht der Dienst rekursiv samt
+   Unteralben (`DeleteCategory` → `rm(..., { recursive: true })`); genau das
+   muss die Frage sagen.
+3. **Verschieben.** Jede bearbeitbare Kachel bekommt in `.galtile__bar` vor dem
+   Löschknopf ein `<select class="galtile__move">`: erste Option
+   „Verschieben nach…" (Wert leer, ausgewählt), danach jedes **eigene** Album
+   außer dem aktuellen, beschriftet wie in `#galFolder`. Eine Auswahl schickt
+   `send("image/move", { image: image.id, category, subcategory })` und lädt neu.
+4. **Von URL holen.** `#galFetch` schickt
+   `send("image/url", { url: <#galUrl getrimmt>, category, subcategory })` in das
+   gewählte Album, leert bei Erfolg `#galUrl` und lädt neu. Eine leere Eingabe
+   tut nichts. Fehlermeldungen kommen unverändert aus der Antwort der Route
+   (sie sind deutsch und pfadfrei).
+5. **Vorlagen sind nur zum Ansehen.** Ist ein Album aus `default` gewählt
+   (`current().own === false`), sind `#galDelCat`, `#galUpload`, `#galUrl` und
+   `#galFetch` gesperrt, und seine Kacheln haben keine Leiste. Ohne
+   Verwaltungsrecht (`canManage === false`) sind **alle** verändernden Elemente
+   gesperrt, auch `#galParent`. Die Sperren werden bei jedem Albumwechsel und
+   nach jedem `load()` neu gesetzt — ein Wechsel von einem eigenen Album zu
+   einer Vorlage darf keinen Knopf offen lassen.
+6. Der Hinweis „Vorlagen lassen sich nicht verändern – lege zuerst ein eigenes
+   Album an." aus Step 4 bleibt als Rückfall im Upload-Handler stehen.
+
+- [ ] **Step 6: In `Guild.ts` aufrufen**
 
 Import ergänzen:
 
@@ -1838,7 +1916,7 @@ In `renderGuild`, direkt hinter `void renderOverview(guild, data.user.id, waitin
     renderGallery(guild.id, guild.canManage);
 ```
 
-- [ ] **Step 6: Bauen und prüfen**
+- [ ] **Step 7: Bauen und prüfen**
 
 ```bash
 npm run build:dashboard && npm run typecheck && npm run check:dashboard -- --dev
@@ -1852,6 +1930,11 @@ Dann `npm run dev` starten und `/guild/<id>/gallery` öffnen:
 - „Bild hochladen" in einem eigenen Album legt das Bild ab; es erscheint im Raster und liegt als `.webp` unter `src/images/<guildId>/`.
 - Ein Upload in ein Vorlagen-Album wird mit Hinweis abgelehnt.
 - Das Löschen fragt nach und entfernt die Kachel.
+- „Anlegen" mit gewähltem Hauptalbum legt ein Unteralbum an, und das neue Album ist danach ausgewählt.
+- „Verschieben nach…" auf einer Kachel verschiebt das Bild; es erscheint im Zielalbum.
+- „Album löschen" fragt nach — bei einem Hauptalbum mit dem Hinweis auf Unteralben — und entfernt das Album aus der Auswahl.
+- „Von URL holen" legt ein Bild ab; `http://…` wird mit Meldung abgelehnt.
+- Bei einem Vorlagen-Album sind Löschen, Hochladen und URL gesperrt, Kacheln haben keine Leiste.
 
 ---
 
