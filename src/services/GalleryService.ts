@@ -167,9 +167,11 @@ export default class GalleryService implements IGalleryService {
     }
 
     async AddImage(target: IGalleryTarget, url: string, fileName?: string): Promise<IGalleryEntry> {
-        // Prueft nur den eingetippten Text - fuer eine lesbare Meldung, bevor
-        // ueberhaupt etwas passiert. Wohin wirklich verbunden wird, entscheidet sich
-        // erst unten, und dort sitzt auch die Sperre (Begruendung bei LookupPublic).
+        // Prueft den eingetippten Text vorab. Fuer einen DNS-Namen nur fuer eine
+        // lesbare Meldung - die Sperre, auf die es ankommt, sitzt dann unten beim
+        // Verbinden (LookupPublic). Bei einer nackten IP in der URL ruft Node dort
+        // nie ein lookup auf; dann ist diese Pruefung hier - und CheckRedirect bei
+        // jeder Weiterleitung - die einzige Sperre.
         const source = ParseSource(url);
 
         const response = await axios.get<ArrayBuffer>(source.href, {

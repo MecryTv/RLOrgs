@@ -98,8 +98,11 @@ export function IsInternalAddress(address: string): boolean {
     return INTERNAL.check(address, family === 6 ? "ipv6" : "ipv4");
 }
 
-// Nur der schnelle Weg fuer eine lesbare Meldung, bevor ueberhaupt etwas
-// passiert. Die Sperre, auf die es ankommt, sitzt in LookupPublic.
+// Der schnelle Weg fuer eine lesbare Meldung, bevor ueberhaupt etwas passiert.
+// Fuer einen DNS-Namen ist LookupPublic die Sperre, auf die es ankommt - bei
+// einer nackten IP in der URL ruft Node lookup aber nie auf, dann ist diese
+// Pruefung (hier und, bei einer Weiterleitung, ueber CheckRedirect) die einzige
+// Sperre.
 export function IsPrivateHost(hostname: string): boolean {
     const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
     if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return true;

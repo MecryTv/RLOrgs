@@ -41,7 +41,7 @@ import path from "path";
 import dns, { LookupAddress, LookupOptions } from "node:dns";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { createCanvas } from "@napi-rs/canvas";
-import axios from "axios";
+import axios, { InternalAxiosRequestConfig } from "axios";
 import fastify from "fastify";
 import GalleryService from "../services/GalleryService";
 import BotClient from "../client/BotClient";
@@ -488,9 +488,13 @@ function RedirectError(href: string): string | null {
  * kamen daran vorbei - die Sperre sitzt deshalb jetzt beim Verbinden (LookupPublic
  * im https.Agent, CheckRedirect vor jedem Sprung; Begruendung in
  * constants/Gallery.ts). Geprueft wird ohne Netz: die Adress-Regel direkt, der
- * lookup mit "localhost", die Weiterleitung mit von Hand gebauten Sprung-Optionen -
- * und einmal der ganze Weg durch AddImage und die Route, mit nachgestellter
- * DNS-Antwort. Auf die Platte kommt dabei nichts: jeder Download hier scheitert.
+ * lookup mit "localhost" und mit einer gemischten Adressliste (oeffentlich vor
+ * intern - das entlarvt eine Pruefung, die nur addresses[0] oder .every() statt
+ * .some() anschaut), die Weiterleitung mit von Hand gebauten Sprung-Optionen,
+ * dass AddImage diese Sperren ueberhaupt in seine axios-Konfiguration einsetzt
+ * (per Interceptor abgefangen, bevor je ein Adapter laeuft) - und einmal der
+ * ganze Weg durch AddImage und die Route, mit nachgestellter DNS-Antwort. Auf
+ * die Platte kommt dabei nichts: jeder Download hier scheitert.
  */
 async function checkDownloadGuard(): Promise<void> {
     console.log("\n🛡️  Download-Schutz: kein Weg ins interne Netz\n");
@@ -502,9 +506,14 @@ async function checkDownloadGuard(): Promise<void> {
         "10.1.2.3",
         "169.254.169.254",
         "100.64.0.1",
+        "0.0.0.0", // "dieses Netz" - erreicht die eigene Maschine, siehe Gallery.ts
+        "172.16.0.1",
+        "192.168.1.1",
         "::1",
         "::ffff:127.0.0.1",
         "fd00::1",
+        "fe80::1",
+        "::",
         "::127.0.0.1", // veraltet IPv4-kompatibel - ["::", 96] in constants/Gallery.ts
     ];
 
@@ -512,7 +521,9 @@ async function checkDownloadGuard(): Promise<void> {
         check(`${address} gilt als intern`, IsInternalAddress(address), "wird als oeffentlich durchgelassen");
     }
 
-    for (const address of ["93.184.216.34", "2606:4700::1111"]) {
+    // 172.32.0.1 liegt direkt hinter 172.16.0.0/12 - zusammen mit 172.16.0.1 oben
+    // ist damit die Grenze dieses Bereichs von beiden Seiten abgesteckt.
+    for (const address of ["93.184.216.34", "172.32.0.1", "2606:4700::1111"]) {
         check(`${address} gilt als oeffentlich`, !IsInternalAddress(address), "wird als intern gesperrt");
     }
 
@@ -546,6 +557,47 @@ async function checkDownloadGuard(): Promise<void> {
         JSON.stringify({ einzeln: [einzeln.error?.message, einzeln.address], alle: [alle.error?.message, alle.address] })
     );
 
+    // Der all:true-Fall oben loest mit "localhost" auf, wo jede Adresse intern ist -
+    // das besteht auch eine Pruefung, die nur addresses[0] anschaut, oder eine mit
+    // .every() statt .some(). Ein eigener, eng auf einen erfundenen Namen begrenzter
+    // Stub (unten in einem eigenen finally wieder entfernt, unabhaengig vom Stub
+    // fuer "rebind.invalid" weiter unten in "Der ganze Weg") antwortet stattdessen
+    // mit einer gemischten Liste.
+    const MIXED_HOST = "mixed.invalid";
+    const originalMixedLookup = dns.lookup;
+
+    Object.assign(dns, {
+        lookup: (hostname: string, options: LookupOptions, callback: (...args: unknown[]) => void) => {
+            if (hostname !== MIXED_HOST) return originalMixedLookup(hostname, options, callback as never);
+
+            // Oeffentlich zuerst, intern an zweiter Stelle: das entlarvt sowohl eine
+            // Pruefung, die nur addresses[0] anschaut (saehe nur die oeffentliche
+            // erste Adresse), als auch eine mit .every() statt .some() (saehe keine
+            // durchgehend interne Liste) - LookupPublic muss mit all: true trotzdem
+            // ablehnen, siehe die Begruendung dort.
+            const addresses = [
+                { address: "93.184.216.34", family: 4 },
+                { address: "127.0.0.1", family: 4 },
+            ];
+
+            process.nextTick(() =>
+                options.all ? callback(null, addresses) : callback(null, addresses[0].address, addresses[0].family)
+            );
+        },
+    });
+
+    try {
+        const gemischt = await Lookup(MIXED_HOST, true);
+
+        check(
+            "lookup mit gemischter Adressliste (oeffentlich vor intern) schlaegt bei all: true fehl",
+            gemischt.error?.message === "Diese Adresse liegt im internen Netz.",
+            gemischt.error ? gemischt.error.message : `kein Fehler, Adresse ${JSON.stringify(gemischt.address)}`
+        );
+    } finally {
+        Object.assign(dns, { lookup: originalMixedLookup });
+    }
+
     console.log("\n  — Weiterleitungen —");
 
     const nachHttp = RedirectError("http://example.com/bild.png");
@@ -569,6 +621,67 @@ async function checkDownloadGuard(): Promise<void> {
         nachIp === "Diese Adresse liegt im internen Netz.",
         nachIp ?? "geht durch"
     );
+
+    console.log("\n  — Verdrahtung: die Sperren stecken wirklich im axios-Request —");
+
+    // Alles oben prueft die Bausteine fuer sich. Hier geht es nur darum, ob
+    // AddImage sie tatsaechlich einsetzt - ein geloeschtes beforeRedirect oder
+    // proxy: false faellt sonst nirgends auf, haelt check:gallery aber gruen und
+    // reisst die Sperre wieder auf. Ein Request-Interceptor auf axios'
+    // Standardinstanz (GalleryService.ts importiert dieselbe: "import axios from
+    // axios", ein einziges axios im node_modules-Baum) zeichnet die Konfiguration
+    // auf, die AddImage baut, und wirft danach selbst - so laeuft nie ein Adapter,
+    // es geht nichts ins Netz, und Store() wird nie erreicht. Der Fehler wird
+    // unten aufgefangen, der Interceptor in einem finally wieder entfernt, sonst
+    // finge er auch die Downloads der anderen Abschnitte ab.
+    // Ein Objekt statt einer blossen Variable: die Zuweisung passiert im
+    // Interceptor, gelesen wird erst danach - ueber eine Objekteigenschaft bleibt
+    // der Typ dabei InternalAxiosRequestConfig | null statt sich auf den Stand vor
+    // dem Interceptor-Aufruf zu versteifen.
+    const aufgezeichnet: { config: InternalAxiosRequestConfig | null } = { config: null };
+    const abbruch = new Error("Nur die Konfiguration wird geprueft, kein echter Download.");
+
+    const interceptorId = axios.interceptors.request.use((config) => {
+        aufgezeichnet.config = config;
+        throw abbruch;
+    });
+
+    try {
+        await new GalleryService(FakeClient())
+            .AddImage({ guildId: ROUTE_GUILD, category: "wiring" }, "https://config-check.example/bild.png")
+            .then(
+                () => null,
+                (error: unknown) => error
+            );
+
+        const konfiguration = aufgezeichnet.config;
+
+        check(
+            "AddImage setzt beforeRedirect auf CheckRedirect",
+            konfiguration?.beforeRedirect === CheckRedirect,
+            "beforeRedirect fehlt oder zeigt auf einen anderen Handler"
+        );
+
+        check(
+            "AddImage setzt proxy fest auf false",
+            konfiguration?.proxy === false,
+            `proxy ist ${JSON.stringify(konfiguration?.proxy)} statt false`
+        );
+
+        check(
+            "AddImage erzwingt den http-Adapter",
+            konfiguration?.adapter === "http",
+            `adapter ist ${JSON.stringify(konfiguration?.adapter)} statt "http"`
+        );
+
+        check(
+            "Der httpsAgent im Request traegt LookupPublic als lookup",
+            konfiguration?.httpsAgent?.options?.lookup === LookupPublic,
+            "httpsAgent fehlt, oder sein lookup ist nicht LookupPublic"
+        );
+    } finally {
+        axios.interceptors.request.eject(interceptorId);
+    }
 
     console.log("\n  — Der ganze Weg: AddImage und die Route —");
 
