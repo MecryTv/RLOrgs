@@ -221,6 +221,34 @@
             </div>
           </div>
         </section>
+
+        <!-- Die Galerie. Sie steht fest im HTML statt als Platzkarte aus dem
+             Template: das Modul ist gebaut, und card() in Guild.ts ueberspringt
+             jede Sektion, die es schon gibt. -->
+        <section class="setcard" id="gallery" hidden>
+          <h2 class="modhead"><svg><use href="#i-image"/></svg>Gallery System</h2>
+          <p class="modlead">Logos, Grafiken und Vorlagen in Alben sortieren. Was hier liegt, steht in Discord unter <code>/gallery</code> und später im Nachrichten-Editor zur Auswahl.</p>
+
+          <div class="notice galnote" id="galNote" hidden>
+            <svg><use href="#i-warn"/></svg>
+            <span></span>
+          </div>
+
+          <div class="galbar">
+            <select id="galFolder" aria-label="Album"></select>
+            <select id="galParent" aria-label="Neues Album anlegen unter"></select>
+            <input id="galName" type="text" maxlength="32" placeholder="Neues Album…" aria-label="Name des neuen Albums">
+            <button class="btn" id="galNew" type="button"><svg><use href="#i-plus"/></svg>Anlegen</button>
+            <button class="btn btn--ghost" id="galDelCat" type="button"><svg><use href="#i-x"/></svg>Album löschen</button>
+            <button class="btn" id="galUpload" type="button"><svg><use href="#i-image"/></svg>Bild hochladen</button>
+            <input id="galFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+            <input id="galUrl" type="url" placeholder="https://…" aria-label="Bild-Adresse">
+            <button class="btn" id="galFetch" type="button"><svg><use href="#i-link"/></svg>Von URL holen</button>
+          </div>
+
+          <div class="galgrid" id="galGrid"></div>
+          <p class="galempty" id="galEmpty" hidden>In diesem Album liegt noch kein Bild.</p>
+        </section>
       </div>
     </div>
   </div>

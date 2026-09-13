@@ -7,6 +7,7 @@ import { CATEGORIES, MODULES } from "../constants/Modules.js";
 import { clickSound } from "../core/Sound.js";
 import { BASE } from "../core/Base.js";
 import { fetchActivity, renderOverview } from "./GuildOverview.js";
+import { renderGallery } from "./GuildGallery.js";
 /* ----------------------------------------------------------
    Seite: Serverdetail
 
@@ -143,6 +144,7 @@ export function renderGuild(data) {
     const loadModules = bindModules(guild);
     const show = bindSections(guild.id);
     void renderOverview(guild, data.user.id, waiting.activity);
+    renderGallery(guild.id, guild.canManage);
     void waiting.detail.then((detail) => {
         paintDetails(detail);
         // Kommt keiner der beiden Blöcke an, sagt die Übersicht das, statt leer

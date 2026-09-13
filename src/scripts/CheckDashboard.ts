@@ -529,12 +529,21 @@ async function main(): Promise<void> {
         symbols.length > 0 && missing.length === 0,
         missing.join(", ")
     );
+    // Eine Modul-ID darf im HTML vorkommen - aber nur als die Karte dieses
+    // Moduls. card() in Guild.ts ueberspringt sie dann, statt eine Platzkarte
+    // darueberzulegen. Auf irgendetwas anderem waere dieselbe ID ein Anker,
+    // der ins Leere zeigt.
+    const misplaced = ids.filter(
+        (id) =>
+            !/^[a-z][a-z0-9-]*$/.test(id) ||
+            (guildPage.includes(`id="${id}"`) &&
+                !guildPage.includes(`<section class="setcard" id="${id}"`))
+    );
+
     check(
         `Modul-Anker sind eindeutig und brauchbar (${ids.length})`,
-        ids.length > 0 &&
-            new Set(ids).size === ids.length &&
-            ids.every((id) => /^[a-z][a-z0-9-]*$/.test(id) && !guildPage.includes(`id="${id}"`)),
-        ids.join(", ")
+        ids.length > 0 && new Set(ids).size === ids.length && misplaced.length === 0,
+        misplaced.join(", ")
     );
 
     // Jedes Modul steht unter einer Ueberschrift der Leiste. Ohne Kategorie
