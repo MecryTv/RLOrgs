@@ -529,16 +529,21 @@ async function main(): Promise<void> {
         symbols.length > 0 && missing.length === 0,
         missing.join(", ")
     );
-    // Eine Modul-ID darf im HTML vorkommen - aber nur als die Karte dieses
-    // Moduls. card() in Guild.ts ueberspringt sie dann, statt eine Platzkarte
-    // darueberzulegen. Auf irgendetwas anderem waere dieselbe ID ein Anker,
-    // der ins Leere zeigt.
-    const misplaced = ids.filter(
-        (id) =>
-            !/^[a-z][a-z0-9-]*$/.test(id) ||
-            (guildPage.includes(`id="${id}"`) &&
-                !guildPage.includes(`<section class="setcard" id="${id}"`))
-    );
+    // Eine Modul-ID darf in guild.html gar nicht vorkommen (das Modul ist noch
+    // nicht gebaut, card() setzt spaeter eine Platzkarte) oder genau einmal -
+    // und dann nur als die Karte dieses Moduls. Zaehlen statt "kommt sie vor":
+    // ein zweites, falsches Element mit derselben ID kaeme an einer reinen
+    // Praesenzpruefung vorbei, sobald die echte Karte schon existiert - includes()
+    // ist dann fuer beide Seiten schon true, und das Falsche faellt nie auf.
+    const misplaced = ids.filter((id) => {
+        if (!/^[a-z][a-z0-9-]*$/.test(id)) return true;
+
+        const count = guildPage.split(`id="${id}"`).length - 1;
+
+        if (count === 0) return false;
+
+        return count !== 1 || !guildPage.includes(`<section class="setcard" id="${id}"`);
+    });
 
     check(
         `Modul-Anker sind eindeutig und brauchbar (${ids.length})`,

@@ -48,7 +48,14 @@ import BotClient from "../client/BotClient";
 import RouteManager from "../handler/RouteManager";
 import DashboardApiGalleryEdit from "../routes/DashboardApiGalleryEdit";
 import { IGalleryEntry } from "../interfaces/services/gallery/IGalleryService";
-import { CheckRedirect, GALLERY_ROOT, IsInternalAddress, LookupPublic, UPLOAD_TYPES } from "../constants/Gallery";
+import {
+    CheckRedirect,
+    GALLERY_ROOT,
+    IsInternalAddress,
+    LookupPublic,
+    SanitizeName,
+    UPLOAD_TYPES,
+} from "../constants/Gallery";
 import { DASHBOARD_PATH, SESSION_COOKIE } from "../constants/Dashboard";
 
 // Eine Snowflake, die es bei Discord nicht gibt.
@@ -264,6 +271,170 @@ async function checkWriteRoute(): Promise<void> {
             check(
                 "Geloeschtes Bild liegt nicht mehr auf der Platte",
                 hochgeladen !== null && !(await FileExists(path.join(ROUTE_ROOT, "neu", hochgeladen.file)))
+            );
+
+            await instance.close();
+        }
+
+        // Finding 1 (Task-9-Review): CreateCategory/MoveImage/DeleteImage gaben
+        // false zurueck, ohne zu werfen - die Route antwortete trotzdem 200
+        // ({ok:true, created:false}), und keine der Seiten liest das Feld. Ab
+        // jetzt wirft Run() bei false selbst, mit einem deutschen Text; der
+        // bestehende catch in Handle() (oben, "error instanceof Error && !("code"
+        // in error)") macht daraus 400 - kein zweiter Fehlerpfad noetig.
+        console.log("\n  — Ehrlich bei false: Dublette, fehlendes Hauptalbum, verschwundene Bilder —");
+
+        {
+            const instance = BuildApp(FakeDashboardService(true));
+
+            const ersteAnlage = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "category"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ category: "dublette" }),
+            });
+
+            check(
+                "Erstes Anlegen von 'dublette' antwortet 200",
+                ersteAnlage.statusCode === 200,
+                `${ersteAnlage.statusCode} ${ersteAnlage.body}`
+            );
+
+            const zweiteAnlage = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "category"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ category: "dublette" }),
+            });
+
+            check(
+                "Zweites Anlegen desselben Albums ist jetzt 400 statt 200",
+                zweiteAnlage.statusCode === 400,
+                `${zweiteAnlage.statusCode} ${zweiteAnlage.body}`
+            );
+            check(
+                "  mit der deutschen Dubletten-Meldung",
+                (zweiteAnlage.json() as { error?: string }).error === "Ein Album mit diesem Namen gibt es schon.",
+                zweiteAnlage.body
+            );
+
+            const ohneHauptalbum = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "category"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ category: "kein-hauptalbum-hier", subcategory: "unter" }),
+            });
+
+            check(
+                "Unteralbum unter einem nicht existierenden Hauptalbum ist 400",
+                ohneHauptalbum.statusCode === 400,
+                `${ohneHauptalbum.statusCode} ${ohneHauptalbum.body}`
+            );
+            check(
+                "  mit der deutschen Meldung fuers fehlende Hauptalbum",
+                (ohneHauptalbum.json() as { error?: string }).error ===
+                    "Das Hauptalbum gibt es nicht, oder es gibt darin schon ein Unteralbum mit diesem Namen.",
+                ohneHauptalbum.body
+            );
+
+            // Ein erfolgreiches Anlegen muss die gespeicherten Namen zurueckgeben,
+            // nicht die Rohtexteingabe - gegen die echte SanitizeName geprueft
+            // (Finding 3), nicht gegen einen von Hand hingeschriebenen String.
+            const grossHauptalbum = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "category"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ category: "Team A" }),
+            });
+
+            check(
+                "Anlegen mit Grossbuchstaben/Leerzeichen antwortet 200",
+                grossHauptalbum.statusCode === 200,
+                `${grossHauptalbum.statusCode} ${grossHauptalbum.body}`
+            );
+
+            const hauptalbumKoerper =
+                grossHauptalbum.statusCode === 200
+                    ? (grossHauptalbum.json() as { category?: string; subcategory?: string | null })
+                    : null;
+
+            check(
+                `Die Antwort traegt den echten SanitizeName("Team A") = "${SanitizeName("Team A")}"`,
+                hauptalbumKoerper?.category === SanitizeName("Team A") && hauptalbumKoerper.category === "teama",
+                JSON.stringify(hauptalbumKoerper)
+            );
+            check(
+                "  subcategory ist null, ohne Unteralbum",
+                hauptalbumKoerper?.subcategory === null,
+                JSON.stringify(hauptalbumKoerper)
+            );
+
+            const grossUnteralbum = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "category"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ category: "teama", subcategory: "Unter Album" }),
+            });
+
+            check(
+                "Unteralbum darunter antwortet ebenfalls 200",
+                grossUnteralbum.statusCode === 200,
+                `${grossUnteralbum.statusCode} ${grossUnteralbum.body}`
+            );
+
+            const unteralbumKoerper =
+                grossUnteralbum.statusCode === 200
+                    ? (grossUnteralbum.json() as { category?: string; subcategory?: string | null })
+                    : null;
+
+            check(
+                `  und die gespeicherten Namen fuer beide Ebenen (SanitizeName("Unter Album") = "${SanitizeName("Unter Album")}")`,
+                unteralbumKoerper?.category === "teama" &&
+                    unteralbumKoerper.subcategory === SanitizeName("Unter Album"),
+                JSON.stringify(unteralbumKoerper)
+            );
+
+            // Ein Bild, dessen ID gueltig aussieht, das aber nie auf der Platte lag.
+            // Ziel bewusst ein anderes Album als das in der ID selbst ("teama" statt
+            // "dublette"): MoveImage gibt bei gleichem Ziel (from === to) frueh true
+            // zurueck, ohne je Exists() zu pruefen - das waere sonst ein falscher
+            // Treffer, der nichts ueber den zu pruefenden Zweig aussagt.
+            const geisterbild = `${ROUTE_GUILD}/dublette/geist-${Date.now()}.webp`;
+
+            const verschieben = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "image/move"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ image: geisterbild, category: "teama" }),
+            });
+
+            check(
+                "Verschieben eines nie vorhandenen Bildes ist 400 statt 200",
+                verschieben.statusCode === 400,
+                `${verschieben.statusCode} ${verschieben.body}`
+            );
+            check(
+                "  mit der deutschen 'gibt es nicht mehr'-Meldung",
+                (verschieben.json() as { error?: string }).error === "Dieses Bild gibt es nicht mehr.",
+                verschieben.body
+            );
+
+            const loeschen = await instance.inject({
+                method: "POST",
+                url: GalleryURL(ROUTE_GUILD, "image/delete"),
+                headers: WithCookie("application/json"),
+                payload: JSON.stringify({ image: geisterbild }),
+            });
+
+            check(
+                "Loeschen eines nie vorhandenen Bildes ist 400 statt 200",
+                loeschen.statusCode === 400,
+                `${loeschen.statusCode} ${loeschen.body}`
+            );
+            check(
+                "  mit derselben Meldung",
+                (loeschen.json() as { error?: string }).error === "Dieses Bild gibt es nicht mehr.",
+                loeschen.body
             );
 
             await instance.close();

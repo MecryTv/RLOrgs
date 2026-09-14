@@ -2,48 +2,107 @@
 import { icon, need } from "../core/Dom.js";
 import { BASE } from "../core/Base.js";
 import { clickSound } from "../core/Sound.js";
-/** Ein Album ist eine Kategorie oder ein Unterordner - beides eine Zeile. */
-function labelOf(folder) {
-    const where = folder.scope === "default" ? "Vorlagen" : "Dein Server";
-    return `${where} · ${folder.parent ? `${folder.parent}/${folder.name}` : folder.name}`;
+import { toast } from "../core/Toast.js";
+// Warum eine Antwort dieser Seite abgelehnt wurde. Vorbild: FAILED in Guild.ts -
+// derselbe Gedanke (Sitzung/Recht/Ansturm/Datenbank werden zu einem deutschen
+// Satz statt zum rohen "Unauthorized"/"Forbidden"), eigener Wortlaut fuer die
+// Galerie und absichtlich nicht dieselbe Konstante: Guild.ts spricht von
+// "Schaltern", hier gibt es keine.
+const FAILED = {
+    401: "Deine Sitzung ist abgelaufen, lade die Seite neu.",
+    403: "Diesen Server darfst du nicht verwalten.",
+    429: "Zu viele Anfragen auf einmal, warte einen Moment.",
+    503: "Der Bot erreicht gerade seine Datenbank nicht.",
+};
+// Einzige Stelle, die eine Antwort dieser Seite liest - send(), load() und der
+// Upload lesen sie alle, statt je ihren eigenen Fehler zu uebersetzen. null
+// heisst Erfolg; der Rumpf ist dann noch ungelesen, der Aufrufer liest ihn
+// selbst (ein Response-Rumpf laesst sich nur einmal lesen). 400/415 zeigen die
+// Meldung der Route selbst (data.error), ein unbekannter Code einen festen
+// Rueckfalltext.
+async function failureText(response) {
+    if (response.ok)
+        return null;
+    const data = (await response.json().catch(() => ({})));
+    return FAILED[response.status] ?? data.error ?? `Der Bot hat abgelehnt (${response.status}).`;
 }
+// Identitaet eines Albums fuer die Auswahl - guildId traegt den Scope schon
+// mit (Vorlagen liegen unter "default", eigene Alben unter der echten Guild-ID),
+// ein drittes Feld dafuer braucht es nicht.
 function keyOf(folder) {
-    return [folder.guildId, folder.parent ?? folder.name, folder.parent ? folder.name : ""].join("|");
+    return `${folder.guildId}|${folder.parent ?? ""}|${folder.name}`;
 }
-// Muss genau wie SanitizeName() in src/constants/Gallery.ts rechnen: der Dienst
-// legt ein neues Album unter dem sanitisierten Namen an, nicht unter der
-// Rohtexteingabe. Der Dashboard-Client baut eigenstaendig (rootDir client/,
-// nichts von ausserhalb) und kann diese Funktion deshalb nicht importieren -
-// hier steht dieselbe Regel noch einmal, absichtlich, statt sie zu erraten.
-function sanitized(value) {
-    return value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 32);
+// Ein Unteralbum ist in der API sein eigener Eintrag mit parent gesetzt - fuer
+// Anfragen an die Route braucht es dagegen category/subcategory des Hauptalbums.
+function targetOf(folder) {
+    return { category: folder.parent ?? folder.name, subcategory: folder.parent ? folder.name : null };
+}
+// Kachel-Titel: Dateiname ohne Endung.
+function stem(file) {
+    const dot = file.lastIndexOf(".");
+    return dot > 0 ? file.slice(0, dot) : file;
+}
+// Zeile unter dem Titel: bei Vorlagen immer "Vorlage" (das sagt mehr als ihre
+// tatsaechliche Endung), bei eigenen Bildern die Art der Datei - GalleryService
+// speichert eigene Uploads immer als .webp ausser bei einem echten GIF, die
+// Grossbuchstaben-Endung ist nur ein Auffangnetz fuer alles andere.
+function kindOf(file, own) {
+    if (!own)
+        return "Vorlage";
+    const dot = file.lastIndexOf(".");
+    const extension = dot >= 0 ? file.slice(dot + 1).toLowerCase() : "";
+    if (extension === "gif")
+        return "GIF · animiert";
+    if (extension === "webp")
+        return "WebP";
+    return extension.toUpperCase();
+}
+// Ohne Vorauswahl: zuerst ein eigenes Hauptalbum, sonst irgendein eigenes,
+// sonst eine Vorlage - nur wenn eine Guild wirklich nichts hat, bleibt null.
+function defaultPick(list) {
+    return (list.find((folder) => folder.scope === "custom" && folder.parent === null) ??
+        list.find((folder) => folder.scope === "custom") ??
+        list.find((folder) => folder.scope === "default" && folder.parent === null) ??
+        list.find((folder) => folder.scope === "default") ??
+        null);
 }
 export function renderGallery(guildId, canManage) {
     const note = need("#galNote");
-    const picker = need("#galFolder");
-    const parentPicker = need("#galParent");
+    const treeNav = need("#galTree");
+    const pane = need("#galPane");
+    const crumb = need("#galCrumb");
+    const title = need("#galTitle");
+    const meta = need("#galMeta");
+    const backdropButton = need("#galBackdrop");
+    const galActions = need("#galActions");
+    const uploadButton = need("#galUpload");
+    const urlToggleButton = need("#galUrlToggle");
+    const delCatButton = need("#galDelCat");
+    const delCatLabel = need("#galDelCat span");
+    const urlForm = need("#galUrl");
+    const urlInput = need("#galUrlInput");
+    const urlCloseButton = need("#galUrlClose");
+    const galReadonly = need("#galReadonly");
     const grid = need("#galGrid");
     const empty = need("#galEmpty");
+    const emptyUploadButton = need("#galEmpty button");
     const file = need("#galFile");
-    const newButton = need("#galNew");
-    const name = need("#galName");
-    const delCatButton = need("#galDelCat");
-    const uploadButton = need("#galUpload");
-    const urlInput = need("#galUrl");
-    const fetchButton = need("#galFetch");
+    const moveDialog = need("#galMove");
+    const moveFileText = need("#galMoveFile");
+    const moveList = need("#galMoveList");
+    const moveGoButton = need("#galMoveGo");
     let folders = [];
     let images = [];
-    // Zwei-Klick-Bestaetigung fuers Album-Loeschen (siehe resetDeleteConfirm/
-    // delCatButton weiter unten). Als eigener Zustand, weil der Knopf - anders
-    // als eine Bild-Kachel - bei einem Albumwechsel nicht neu gebaut wird: ohne
-    // Rueckstellung bliebe eine scharfgestellte Frage ueber den Wechsel hinweg
-    // stehen und der naechste Klick loeschte das falsche Album.
-    let deleteArmed = false;
-    let deleteTimer = null;
+    let busy = [];
+    let busyId = 0;
+    let current = null;
     function warn(text) {
         note.hidden = text === null;
         note.querySelector("span").textContent = text ?? "";
     }
+    // T ist der Erfolgs-Rumpf der jeweiligen Aktion (category liefert die
+    // gespeicherten Namen, die anderen Aktionen braucht niemand ausgewertet -
+    // Record<string, unknown> reicht ihnen als Vorgabe).
     async function send(action, body) {
         try {
             const response = await fetch(`${BASE}/api/guild/${encodeURIComponent(guildId)}/gallery/${action}`, {
@@ -51,276 +110,583 @@ export function renderGallery(guildId, canManage) {
                 headers: { "Content-Type": "application/json", Accept: "application/json" },
                 body: JSON.stringify(body),
             });
-            if (response.ok)
-                return true;
-            const data = (await response.json().catch(() => ({})));
-            warn(data.error ?? `Der Bot hat abgelehnt (${response.status}).`);
+            const failure = await failureText(response);
+            if (failure !== null) {
+                warn(failure);
+                return null;
+            }
+            return (await response.json().catch(() => ({})));
         }
         catch {
             warn("Der Bot antwortet gerade nicht.");
         }
-        return false;
+        return null;
     }
-    function current() {
-        const folder = folders.find((entry) => keyOf(entry) === picker.value);
-        if (!folder)
-            return null;
-        return {
-            category: folder.parent ?? folder.name,
-            subcategory: folder.parent ? folder.name : null,
-            own: folder.scope === "custom",
-        };
+    // Nur ein eigenes Album, das der Nutzer auch verwalten darf, laesst sich
+    // aendern - eine Vorlage nie, ein eigenes Album ohne canManage genauso
+    // wenig wie eine Vorlage (der Grund dafuer steht im Hinweis #readonly der
+    // Serverseite, nicht hier).
+    function isWritable() {
+        return canManage && current !== null && current.scope === "custom";
     }
-    // Vorlagen sind nur zum Ansehen: was am gewaehlten Album haengt, sperrt mit
-    // ihm. #galParent/#galName/#galNew haengen an keinem bestimmten Album -
-    // die duerfen nur am Verwaltungsrecht scheitern, nicht an der Vorlage.
-    function updateLocks() {
-        const own = Boolean(current()?.own);
-        parentPicker.disabled = !canManage;
-        name.disabled = !canManage;
-        newButton.disabled = !canManage;
-        delCatButton.disabled = !canManage || !own;
-        uploadButton.disabled = !canManage || !own;
-        urlInput.disabled = !canManage || !own;
-        fetchButton.disabled = !canManage || !own;
+    /* ------------------------------------------------------------
+       Baum
+       ------------------------------------------------------------ */
+    function cap(text, lock) {
+        const el = document.createElement("div");
+        el.className = "galtree__cap";
+        if (lock)
+            el.append(icon("#i-lock"));
+        el.append(text);
+        return el;
     }
+    function row(folder) {
+        const wrap = document.createElement("div");
+        wrap.className = "galtree__row";
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = folder.parent ? "galtree__item is-sub" : "galtree__item";
+        item.setAttribute("aria-current", String(folder === current));
+        const name = document.createElement("span");
+        name.className = "galtree__name";
+        name.textContent = folder.name;
+        const num = document.createElement("span");
+        num.className = "galtree__count";
+        num.textContent = String(folder.images);
+        item.append(icon("#i-folder"), name, num);
+        item.addEventListener("click", () => select(folder));
+        wrap.append(item);
+        // Ein Unteralbum anlegen geht nur an einem eigenen Hauptalbum, und nur
+        // mit Verwaltungsrecht - ohne das fehlt auch "Neues Album" unten.
+        if (folder.scope === "custom" && folder.parent === null && canManage) {
+            const sub = document.createElement("button");
+            sub.type = "button";
+            sub.className = "galtree__sub";
+            sub.title = `Unteralbum in „${folder.name}" anlegen`;
+            sub.setAttribute("aria-label", sub.title);
+            sub.append(icon("#i-folder-plus"));
+            sub.addEventListener("click", () => openForm(wrap, folder.name));
+            wrap.append(sub);
+        }
+        return wrap;
+    }
+    // Je Gruppe: erst die Hauptalben, direkt gefolgt von ihren eigenen
+    // Unteralben - so wie die API sie liefert (Hauptalben und Unteralben
+    // getrennt sortiert), aber im Baum sollen Unteralben unter ihrem Hauptalbum
+    // stehen statt irgendwo in einer zweiten, eigenen Liste.
+    function groupedRows(scope) {
+        const group = folders.filter((folder) => folder.scope === scope);
+        const mains = group.filter((folder) => folder.parent === null);
+        const rows = [];
+        for (const main of mains) {
+            rows.push(row(main));
+            for (const sub of group.filter((folder) => folder.parent === main.name))
+                rows.push(row(sub));
+        }
+        return rows;
+    }
+    function paintTree() {
+        const children = [cap("Dein Server", false), ...groupedRows("custom")];
+        if (canManage) {
+            const add = document.createElement("button");
+            add.type = "button";
+            add.className = "galtree__add";
+            add.append(icon("#i-plus"), document.createTextNode("Neues Album"));
+            add.addEventListener("click", () => openForm(add, null));
+            children.push(add);
+        }
+        children.push(cap("Vorlagen", true), ...groupedRows("default"));
+        treeNav.replaceChildren(...children);
+    }
+    // Inline-Formular fuer ein neues Album bzw. Unteralbum - ersetzt jedes Mal
+    // ein eventuell schon offenes. parent ist entweder ein Nutzername (kommt
+    // per textContent hinein, nie per innerHTML) oder null fuer ein Hauptalbum.
+    function closeForm() {
+        document.querySelector(".galtree__form")?.remove();
+    }
+    function openForm(after, parent) {
+        closeForm();
+        const box = document.createElement("form");
+        box.className = "galtree__form";
+        const label = document.createElement("label");
+        label.htmlFor = "galNewName";
+        label.textContent = parent ? `Unteralbum in „${parent}"` : "Neues Album";
+        const input = document.createElement("input");
+        input.className = "text";
+        input.id = "galNewName";
+        input.maxLength = 32;
+        input.placeholder = "z. B. sponsoren";
+        const buttons = document.createElement("div");
+        const submit = document.createElement("button");
+        submit.className = "btn btn--primary";
+        submit.type = "submit";
+        submit.textContent = "Anlegen";
+        const cancel = document.createElement("button");
+        cancel.className = "btn btn--quiet";
+        cancel.type = "button";
+        cancel.textContent = "Abbrechen";
+        cancel.addEventListener("click", closeForm);
+        buttons.append(submit, cancel);
+        box.append(label, input, buttons);
+        box.addEventListener("submit", (event) => {
+            event.preventDefault();
+            const wanted = input.value.trim();
+            if (!wanted)
+                return;
+            clickSound("primary");
+            const body = parent ? { category: parent, subcategory: wanted } : { category: wanted };
+            void send("category", body).then((result) => {
+                if (!result)
+                    return;
+                closeForm();
+                toast("info", "Album angelegt", `„${result.subcategory ?? result.category}" steht jetzt bereit.`);
+                // Der Dienst legt unter SanitizeName() an, nicht unter der
+                // Rohtexteingabe - die Route liefert die gespeicherten Namen
+                // zurueck (DashboardApiGalleryEdit.Run), damit hier nichts
+                // geraten werden muss.
+                void load(keyOf({
+                    guildId,
+                    parent: result.subcategory ? result.category : null,
+                    name: result.subcategory ?? result.category,
+                }));
+            });
+        });
+        // In der waagerechten Leiste auf dem Handy haette das Formular keinen
+        // Platz - dort steht es unter der Leiste statt mitten in der Zeile.
+        if (matchMedia("(max-width: 860px)").matches)
+            treeNav.after(box);
+        else
+            after.after(box);
+        input.focus();
+    }
+    /* ------------------------------------------------------------
+       Kopf und Sperren
+       ------------------------------------------------------------ */
+    let deleteArmed = false;
+    let deleteTimer = null;
+    function armDelete(question) {
+        deleteArmed = true;
+        delCatButton.classList.add("is-sure");
+        delCatLabel.textContent = question;
+        deleteTimer = window.setTimeout(resetDeleteConfirm, 4000);
+    }
+    // Nach jedem Albumwechsel und jedem Neuladen auf denselben Stand - sonst
+    // bliebe eine scharfgestellte Frage ueber den Wechsel hinweg stehen und der
+    // naechste Klick loeschte das falsche Album.
     function resetDeleteConfirm() {
+        if (!deleteArmed)
+            return;
         deleteArmed = false;
         if (deleteTimer !== null) {
             window.clearTimeout(deleteTimer);
             deleteTimer = null;
         }
-        delCatButton.replaceChildren(icon("#i-x"), document.createTextNode("Album löschen"));
+        delCatButton.classList.remove("is-sure");
+        delCatLabel.textContent = "Album löschen";
     }
-    // Nach jedem Albumwechsel (Auswahl oder Neuladen) auf denselben Stand:
-    // Sperren, die Loesch-Frage und das Raster.
-    function refresh() {
+    function paintPane() {
         resetDeleteConfirm();
-        updateLocks();
+        if (!current) {
+            crumb.replaceChildren();
+            title.replaceChildren();
+            meta.textContent = "";
+            galActions.hidden = true;
+            urlForm.hidden = true;
+            urlToggleButton.setAttribute("aria-expanded", "false");
+            galReadonly.hidden = true;
+            grid.replaceChildren();
+            empty.hidden = true;
+            return;
+        }
+        const own = current.scope === "custom";
+        const writable = isWritable();
+        const target = targetOf(current);
+        crumb.replaceChildren(own ? "Dein Server" : "Vorlagen");
+        if (target.subcategory) {
+            const sep = document.createElement("i");
+            sep.textContent = "/";
+            crumb.append(sep, target.category);
+        }
+        title.replaceChildren(current.name);
+        if (!writable) {
+            const pill = document.createElement("span");
+            pill.className = "pill";
+            pill.append(icon("#i-lock"), "Schreibgeschützt");
+            title.append(pill);
+        }
+        const n = current.images;
+        meta.textContent = own
+            ? `${n} ${n === 1 ? "Bild" : "Bilder"} · neue Bilder werden auf 1920 px verkleinert`
+            : `${n} ${n === 1 ? "Bild" : "Bilder"} · Vorlagen des Bots`;
+        galActions.hidden = !writable;
+        urlForm.hidden = true;
+        urlToggleButton.setAttribute("aria-expanded", "false");
+        galReadonly.hidden = writable;
         paintGrid();
     }
-    async function load() {
-        try {
-            const response = await fetch(`${BASE}/api/guild/${encodeURIComponent(guildId)}/gallery`, {
-                headers: { Accept: "application/json" },
-            });
-            if (!response.ok) {
-                warn("Die Galerie lässt sich gerade nicht laden.");
-                return;
-            }
-            const data = (await response.json());
-            folders = data.categories;
-            images = data.images;
-            warn(null);
-            paintPicker();
-            paintParent();
-            refresh();
-        }
-        catch {
-            warn("Der Bot antwortet gerade nicht.");
-        }
-    }
-    // Eigener Rueckgabetyp statt "(ok) => ok && load()" direkt in then(): der
-    // Ausdruck waere "false | Promise<void>", und das laesst then() nicht
-    // durch. Verhalten unveraendert - laedt nur bei Erfolg neu.
-    function reloadIfOk(ok) {
-        if (ok)
-            void load();
-    }
-    function paintPicker() {
-        const chosen = picker.value;
-        picker.replaceChildren(...folders.map((folder) => {
-            const option = document.createElement("option");
-            option.value = keyOf(folder);
-            option.textContent = `${labelOf(folder)} (${folder.images})`;
-            return option;
-        }));
-        // Nach dem Neuladen dasselbe Album wie vorher, sofern es das noch gibt.
-        if (folders.some((folder) => keyOf(folder) === chosen))
-            picker.value = chosen;
-    }
-    // #galParent listet nur eigene Hauptalben: ein Unterordner unter einem
-    // Unterordner kennt der Dienst nicht (DirectoryFor geht nur zwei Ebenen tief).
-    function paintParent() {
-        const chosen = parentPicker.value;
-        const mains = folders.filter((folder) => folder.scope === "custom" && folder.parent === null);
-        const top = document.createElement("option");
-        top.value = "";
-        top.textContent = "Oberste Ebene";
-        parentPicker.replaceChildren(top, ...mains.map((folder) => {
-            const option = document.createElement("option");
-            option.value = folder.name;
-            option.textContent = folder.name;
-            return option;
-        }));
-        // Dieselbe Auswahl wie vorher, sofern das Hauptalbum noch existiert.
-        if (mains.some((folder) => folder.name === chosen))
-            parentPicker.value = chosen;
-    }
-    function paintGrid() {
-        const here = current();
-        const shown = here
-            ? images.filter((image) => image.category === here.category && image.subcategory === here.subcategory)
-            : [];
-        grid.replaceChildren(...shown.map((image) => tile(image, Boolean(here?.own) && canManage)));
-        empty.hidden = shown.length > 0;
-    }
-    // Verschieben sitzt als Auswahl in der Kachel-Leiste: erste Option
-    // "Verschieben nach…" (leer, gewaehlt), danach jedes eigene Album ausser
-    // dem gerade gezeigten.
-    function moveSelect(image) {
-        const select = document.createElement("select");
-        select.className = "galtile__move";
-        select.setAttribute("aria-label", "Bild verschieben nach");
-        const blank = document.createElement("option");
-        blank.value = "";
-        blank.textContent = "Verschieben nach…";
-        blank.selected = true;
-        const targets = folders.filter((folder) => folder.scope === "custom" && keyOf(folder) !== picker.value);
-        select.replaceChildren(blank, ...targets.map((folder) => {
-            const option = document.createElement("option");
-            option.value = keyOf(folder);
-            option.textContent = `${labelOf(folder)} (${folder.images})`;
-            return option;
-        }));
-        select.addEventListener("change", () => {
-            const target = folders.find((folder) => keyOf(folder) === select.value);
-            if (!target)
-                return;
-            clickSound("primary");
-            void send("image/move", {
-                image: image.id,
-                category: target.parent ?? target.name,
-                subcategory: target.parent ? target.name : null,
-            }).then(reloadIfOk);
-        });
-        return select;
-    }
-    function tile(image, editable) {
+    /* ------------------------------------------------------------
+       Raster
+       ------------------------------------------------------------ */
+    function tile(image, own, writable) {
         const box = document.createElement("figure");
         box.className = "galtile";
+        const imgWrap = document.createElement("div");
+        imgWrap.className = "galtile__img";
         const picture = document.createElement("img");
-        picture.src = image.url;
-        picture.alt = image.file;
         picture.loading = "lazy";
-        box.append(picture);
-        if (!editable)
+        picture.alt = stem(image.file);
+        picture.src = image.url;
+        imgWrap.append(picture);
+        const figcap = document.createElement("figcaption");
+        figcap.className = "galtile__cap";
+        const name = document.createElement("b");
+        name.textContent = stem(image.file);
+        const kind = document.createElement("span");
+        kind.textContent = kindOf(image.file, own);
+        figcap.append(name, kind);
+        box.append(imgWrap, figcap);
+        if (!writable)
             return box;
         const bar = document.createElement("div");
-        bar.className = "galtile__bar";
-        bar.append(moveSelect(image));
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.title = "Bild löschen";
-        remove.append(icon("#i-x"));
-        // Ein geloeschtes Bild ist weg - das darf keine Fingerbewegung sein.
-        // Zwei Klicks statt einer Systembox: der erste fragt, der zweite loescht.
+        bar.className = "galtile__actions";
+        const move = document.createElement("button");
+        move.type = "button";
+        move.className = "galtile__act";
+        move.title = "Verschieben";
+        move.setAttribute("aria-label", `${stem(image.file)} verschieben`);
+        move.append(icon("#i-move"));
+        move.addEventListener("click", () => openMove(image));
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "galtile__act is-danger";
+        del.title = "Löschen";
+        del.setAttribute("aria-label", `${stem(image.file)} löschen`);
+        del.append(icon("#i-trash"));
+        // Zwei Klicks fuer Unumkehrbares: der erste fragt, der zweite loescht.
+        // Ein eigener Zustand je Kachel reicht - die Kachel wird bei jedem
+        // Neuzeichnen ohnehin frisch gebaut.
         let sure = false;
-        remove.addEventListener("click", () => {
+        del.addEventListener("click", () => {
             clickSound("primary");
             if (!sure) {
                 sure = true;
-                remove.classList.add("is-sure");
-                remove.replaceChildren(document.createTextNode("Wirklich?"));
+                del.classList.add("is-sure");
+                del.replaceChildren(icon("#i-trash"), document.createTextNode("Löschen?"));
                 window.setTimeout(() => {
                     sure = false;
-                    remove.classList.remove("is-sure");
-                    remove.replaceChildren(icon("#i-x"));
+                    del.classList.remove("is-sure");
+                    del.replaceChildren(icon("#i-trash"));
                 }, 4000);
                 return;
             }
-            void send("image/delete", { image: image.id }).then(reloadIfOk);
+            const label = stem(image.file);
+            void send("image/delete", { image: image.id }).then((result) => {
+                if (!result)
+                    return;
+                toast("info", "Bild gelöscht", `„${label}" ist weg.`);
+                void load();
+            });
         });
-        bar.append(remove);
+        bar.append(move, del);
         box.append(bar);
         return box;
     }
-    picker.addEventListener("change", refresh);
-    function create() {
-        const wanted = name.value.trim();
-        if (!wanted)
-            return;
-        const mainAlbum = parentPicker.value || null;
-        const body = mainAlbum ? { category: mainAlbum, subcategory: wanted } : { category: wanted };
-        clickSound("primary");
-        void send("category", body).then((ok) => {
-            if (!ok)
-                return;
-            name.value = "";
-            // Sonst sieht der Nutzer nach dem Klick nur eine Zahl in der Liste
-            // wachsen, statt sein neues Album vor sich zu haben.
-            const key = keyOf({ guildId, name: sanitized(wanted), parent: mainAlbum, scope: "custom", images: 0 });
-            void load().then(() => {
-                picker.value = key;
-                refresh();
-            });
-        });
+    function busyTile(name) {
+        const box = document.createElement("figure");
+        box.className = "galtile is-busy";
+        const imgWrap = document.createElement("div");
+        imgWrap.className = "galtile__img";
+        imgWrap.append(icon("#i-upload"));
+        const figcap = document.createElement("figcaption");
+        figcap.className = "galtile__cap";
+        const b = document.createElement("b");
+        b.textContent = stem(name);
+        const span = document.createElement("span");
+        span.textContent = "Wird verkleinert …";
+        figcap.append(b, span);
+        box.append(imgWrap, figcap);
+        return box;
     }
-    newButton.addEventListener("click", create);
-    name.addEventListener("keydown", (event) => {
-        if (event.key === "Enter")
-            create();
-    });
-    // Album loeschen: zwei Klicks wie beim Bild. Ein Hauptalbum loescht der
-    // Dienst rekursiv samt Unteralben (DeleteCategory -> rm(..., {recursive:
-    // true})) - das muss die Frage schon sagen, nicht erst die Loeschung.
-    delCatButton.addEventListener("click", () => {
-        const here = current();
+    function dropButton() {
+        const el = document.createElement("button");
+        el.type = "button";
+        el.className = "galdrop";
+        el.append(icon("#i-upload"));
+        const strong = document.createElement("b");
+        strong.textContent = "Bilder hierher ziehen";
+        el.append(strong, document.createTextNode("oder klicken zum Auswählen"));
+        el.addEventListener("click", () => file.click());
+        return el;
+    }
+    function paintGrid() {
+        if (!current)
+            return;
+        const own = current.scope === "custom";
+        const writable = isWritable();
+        const target = targetOf(current);
+        const shown = images.filter((image) => image.category === target.category && image.subcategory === target.subcategory);
+        const busyHere = busy.filter((entry) => entry.category === target.category && entry.subcategory === target.subcategory);
+        const tiles = shown.map((image) => tile(image, own, writable));
+        for (const entry of busyHere)
+            tiles.push(busyTile(entry.name));
+        if (writable)
+            tiles.push(dropButton());
+        grid.replaceChildren(...tiles);
+        const isEmpty = writable && shown.length === 0 && busyHere.length === 0;
+        empty.hidden = !isEmpty;
+        grid.hidden = isEmpty;
+    }
+    function select(folder) {
+        current = folder;
+        paintTree();
+        paintPane();
+    }
+    /* ------------------------------------------------------------
+       Verschieben
+       ------------------------------------------------------------ */
+    let moveImage = null;
+    let moveTarget = null;
+    function moveRow(folder) {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.setAttribute("role", "radio");
+        item.setAttribute("aria-checked", "false");
+        // Ohne is-sub: im Dialog fehlt die Baumlinie, "hauptalbum / unteralbum"
+        // sagt die Zugehoerigkeit stattdessen im Text.
+        item.className = "galtree__item";
+        const label = document.createElement("span");
+        label.className = "galtree__name";
+        label.textContent = folder.parent ? `${folder.parent} / ${folder.name}` : folder.name;
+        item.append(icon("#i-folder"), label);
+        item.addEventListener("click", () => {
+            for (const other of moveList.children)
+                other.setAttribute("aria-checked", "false");
+            item.setAttribute("aria-checked", "true");
+            moveTarget = folder;
+            moveGoButton.disabled = false;
+        });
+        return item;
+    }
+    function openMove(image) {
+        const here = current;
         if (!here)
             return;
-        clickSound("primary");
-        if (!deleteArmed) {
-            deleteArmed = true;
-            delCatButton.replaceChildren(document.createTextNode(here.subcategory ? "Wirklich? Löscht alle Bilder darin" : "Wirklich? Löscht auch alle Unteralben"));
-            deleteTimer = window.setTimeout(resetDeleteConfirm, 4000);
+        moveImage = image;
+        moveTarget = null;
+        moveGoButton.disabled = true;
+        moveFileText.textContent = `„${stem(image.file)}" in ein anderes eigenes Album legen.`;
+        const candidates = folders.filter((folder) => folder.scope === "custom" && keyOf(folder) !== keyOf(here));
+        moveList.replaceChildren(...candidates.map((folder) => moveRow(folder)));
+        moveDialog.showModal();
+    }
+    /* ------------------------------------------------------------
+       Hochladen
+       ------------------------------------------------------------ */
+    async function uploadFiles(fileList) {
+        if (!isWritable() || !current)
             return;
+        const target = targetOf(current);
+        const albumLabel = current.name;
+        const files = [];
+        for (const entry of fileList) {
+            if (entry.type.startsWith("image/"))
+                files.push(entry);
+            else
+                warn(`„${entry.name}" ist kein Bild und wurde übersprungen.`);
         }
-        resetDeleteConfirm();
-        void send("category/delete", { category: here.category, subcategory: here.subcategory }).then(reloadIfOk);
-    });
-    uploadButton.addEventListener("click", () => file.click());
-    file.addEventListener("change", () => {
-        const chosen = file.files?.[0];
-        const here = current();
-        file.value = "";
-        if (!chosen)
-            return;
-        if (!here?.own) {
-            warn("Vorlagen lassen sich nicht verändern – lege zuerst ein eigenes Album an.");
-            return;
-        }
-        const query = new URLSearchParams({ category: here.category, name: chosen.name });
-        if (here.subcategory)
-            query.set("subcategory", here.subcategory);
-        void (async () => {
+        let uploaded = 0;
+        // Nacheinander statt parallel: je Datei eine eigene Kachel, die "wird
+        // verkleinert" zeigt, bis genau diese Datei fertig ist.
+        for (const chosen of files) {
+            const id = ++busyId;
+            busy.push({ id, category: target.category, subcategory: target.subcategory, name: chosen.name });
+            paintGrid();
+            const query = new URLSearchParams({ category: target.category, name: chosen.name });
+            if (target.subcategory)
+                query.set("subcategory", target.subcategory);
+            let ok = false;
             try {
                 const response = await fetch(`${BASE}/api/guild/${encodeURIComponent(guildId)}/gallery/image?${query}`, { method: "POST", headers: { "Content-Type": chosen.type }, body: chosen });
-                if (!response.ok) {
-                    const data = (await response.json().catch(() => ({})));
-                    warn(data.error ?? `Der Bot hat abgelehnt (${response.status}).`);
-                    return;
-                }
-                warn(null);
-                await load();
+                const failure = await failureText(response);
+                if (failure !== null)
+                    warn(failure);
+                else
+                    ok = true;
             }
             catch {
                 warn("Der Bot antwortet gerade nicht.");
             }
-        })();
+            busy = busy.filter((entry) => entry.id !== id);
+            // Neu laden loescht auch eine Fehlermeldung wieder (siehe load()) -
+            // das darf nur nach einem Erfolg passieren, sonst verschwindet die
+            // Meldung zu dieser Datei, bevor jemand sie liest.
+            if (ok) {
+                uploaded++;
+                await load();
+            }
+            else {
+                paintGrid();
+            }
+        }
+        if (uploaded > 0) {
+            toast("info", uploaded === 1 ? "Bild hochgeladen" : "Bilder hochgeladen", uploaded === 1 ? `Liegt jetzt in „${albumLabel}".` : `${uploaded} Bilder liegen jetzt in „${albumLabel}".`);
+        }
+    }
+    /* ------------------------------------------------------------
+       Laden
+       ------------------------------------------------------------ */
+    // Steigt bei jedem load()-Aufruf; eine Antwort zaehlt nur, wenn sie noch zur
+    // zuletzt gestarteten load() gehoert. Ohne das entscheidet die Netzlaufzeit
+    // statt der Reihenfolge der Aufrufe, welcher Stand am Ende angezeigt wird.
+    let loadGeneration = 0;
+    // prefer waehlt das Album direkt beim Neuladen aus (fuer den Fall, dass die
+    // vorherige Auswahl nach dem Neuladen nicht mehr die richtige ist - siehe
+    // openForm() oben und delCatButton weiter unten); ohne prefer bleibt die
+    // bisherige Auswahl, sofern es sie noch gibt, sonst greift defaultPick().
+    async function load(prefer) {
+        const generation = ++loadGeneration;
+        try {
+            const response = await fetch(`${BASE}/api/guild/${encodeURIComponent(guildId)}/gallery`, {
+                headers: { Accept: "application/json" },
+            });
+            const failure = await failureText(response);
+            if (generation !== loadGeneration)
+                return;
+            if (failure !== null) {
+                warn(failure);
+                return;
+            }
+            const data = (await response.json());
+            if (generation !== loadGeneration)
+                return;
+            folders = data.categories;
+            images = data.images;
+            warn(null);
+            const wanted = prefer ?? (current ? keyOf(current) : null);
+            current = (wanted !== null ? folders.find((folder) => keyOf(folder) === wanted) : undefined) ?? defaultPick(folders);
+            paintTree();
+            paintPane();
+        }
+        catch {
+            if (generation === loadGeneration)
+                warn("Der Bot antwortet gerade nicht.");
+        }
+    }
+    /* ------------------------------------------------------------
+       Dauerhafte Listener - einmal angebunden, nicht bei jedem Neuzeichnen.
+       ------------------------------------------------------------ */
+    backdropButton.addEventListener("click", () => {
+        const on = !pane.classList.contains("is-light");
+        pane.classList.toggle("is-light", on);
+        backdropButton.setAttribute("aria-pressed", String(on));
     });
-    fetchButton.addEventListener("click", () => {
+    urlToggleButton.addEventListener("click", () => {
+        const open = urlForm.hidden;
+        urlForm.hidden = !open;
+        urlToggleButton.setAttribute("aria-expanded", String(open));
+        if (open)
+            urlInput.focus();
+    });
+    function closeUrlForm() {
+        urlForm.hidden = true;
+        urlToggleButton.setAttribute("aria-expanded", "false");
+    }
+    urlCloseButton.addEventListener("click", closeUrlForm);
+    urlForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (!current)
+            return;
         const wanted = urlInput.value.trim();
         if (!wanted)
             return;
-        const here = current();
+        const target = targetOf(current);
+        const albumLabel = current.name;
         clickSound("primary");
-        void send("image/url", { url: wanted, category: here?.category, subcategory: here?.subcategory }).then((ok) => {
-            if (!ok)
+        void send("image/url", { url: wanted, category: target.category, subcategory: target.subcategory }).then((result) => {
+            if (!result)
                 return;
             urlInput.value = "";
+            closeUrlForm();
+            toast("info", "Bild geholt", `Liegt jetzt in „${albumLabel}".`);
             void load();
         });
     });
-    updateLocks();
+    // Album loeschen: zwei Klicks wie beim Bild. Ein Hauptalbum loescht der
+    // Dienst rekursiv samt Unteralben - das muss die Frage schon sagen, nicht
+    // erst die Loeschung.
+    delCatButton.addEventListener("click", () => {
+        if (!current)
+            return;
+        clickSound("primary");
+        const target = targetOf(current);
+        if (!deleteArmed) {
+            armDelete(target.subcategory ? "Wirklich? Löscht alle Bilder darin" : "Wirklich? Auch alle Unteralben");
+            return;
+        }
+        resetDeleteConfirm();
+        const label = current.name;
+        // Nach dem Loeschen eines Unteralbums ist sein Hauptalbum gewaehlt; nach
+        // dem Loeschen eines Hauptalbums greift defaultPick() in load() von
+        // selbst, weil dessen eigener Schluessel dann nicht mehr existiert.
+        const parentKey = target.subcategory ? keyOf({ guildId, parent: null, name: target.category }) : undefined;
+        void send("category/delete", { category: target.category, subcategory: target.subcategory }).then((result) => {
+            if (!result)
+                return;
+            toast("info", "Album gelöscht", `„${label}" ist weg.`);
+            void load(parentKey);
+        });
+    });
+    uploadButton.addEventListener("click", () => file.click());
+    emptyUploadButton.addEventListener("click", () => file.click());
+    file.addEventListener("change", () => {
+        const chosen = file.files;
+        file.value = "";
+        if (chosen && chosen.length > 0)
+            void uploadFiles(chosen);
+    });
+    pane.addEventListener("dragover", (event) => {
+        if (!isWritable())
+            return;
+        event.preventDefault();
+        pane.classList.add("is-drag");
+    });
+    pane.addEventListener("dragleave", (event) => {
+        if (!pane.contains(event.relatedTarget))
+            pane.classList.remove("is-drag");
+    });
+    pane.addEventListener("drop", (event) => {
+        if (!isWritable())
+            return;
+        event.preventDefault();
+        pane.classList.remove("is-drag");
+        const dropped = event.dataTransfer?.files;
+        if (dropped && dropped.length > 0)
+            void uploadFiles(dropped);
+    });
+    moveDialog.addEventListener("click", (event) => {
+        const target = event.target;
+        if (target.closest("[data-close]") || target === moveDialog)
+            moveDialog.close();
+    });
+    moveGoButton.addEventListener("click", () => {
+        if (!moveTarget || !moveImage)
+            return;
+        const targetFolder = moveTarget;
+        const image = moveImage;
+        const label = stem(image.file);
+        const targetLabel = targetFolder.name;
+        moveDialog.close();
+        clickSound("primary");
+        void send("image/move", {
+            image: image.id,
+            category: targetFolder.parent ?? targetFolder.name,
+            subcategory: targetFolder.parent ? targetFolder.name : null,
+        }).then((result) => {
+            if (!result)
+                return;
+            toast("info", "Bild verschoben", `„${label}" liegt jetzt in „${targetLabel}".`);
+            void load();
+        });
+    });
     void load();
 }

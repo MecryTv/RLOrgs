@@ -69,6 +69,14 @@
   <symbol id="i-puzzle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5a2 2 0 0 1 4 0V5h3.5a1 1 0 0 1 1 1v3.5H20a2 2 0 0 1 0 4h-1.5V18a1 1 0 0 1-1 1H14v1.5a2 2 0 0 1-4 0V19H6.5a1 1 0 0 1-1-1v-4H4a2 2 0 0 1 0-4h1.5V6a1 1 0 0 1 1-1H10z"/></symbol>
   <symbol id="i-layout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5h7v7h-7zM13.5 3.5h7v4.5h-7zM13.5 11h7v9.5h-7zM3.5 13h7v7.5h-7z"/></symbol>
   <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="2"/><circle cx="9" cy="9.5" r="1.6"/><path d="m4 16.5 4.5-4.2 3.5 3.2 3-2.8 5 4.3"/></symbol>
+  <!-- Symbole der Galerie (GuildGallery.ts). -->
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-folder-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-contrast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 21a9 9 0 0 0 0-18z" fill="currentColor"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></symbol>
 </svg>
 
 <header class="topbar" id="topbar">
@@ -229,25 +237,72 @@
           <h2 class="modhead"><svg><use href="#i-image"/></svg>Gallery System</h2>
           <p class="modlead">Logos, Grafiken und Vorlagen in Alben sortieren. Was hier liegt, steht in Discord unter <code>/gallery</code> und später im Nachrichten-Editor zur Auswahl.</p>
 
+          <input id="galFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+
           <div class="notice galnote" id="galNote" hidden>
             <svg><use href="#i-warn"/></svg>
             <span></span>
           </div>
 
-          <div class="galbar">
-            <select id="galFolder" aria-label="Album"></select>
-            <select id="galParent" aria-label="Neues Album anlegen unter"></select>
-            <input id="galName" type="text" maxlength="32" placeholder="Neues Album…" aria-label="Name des neuen Albums">
-            <button class="btn" id="galNew" type="button"><svg><use href="#i-plus"/></svg>Anlegen</button>
-            <button class="btn btn--ghost" id="galDelCat" type="button"><svg><use href="#i-x"/></svg>Album löschen</button>
-            <button class="btn" id="galUpload" type="button"><svg><use href="#i-image"/></svg>Bild hochladen</button>
-            <input id="galFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
-            <input id="galUrl" type="url" placeholder="https://…" aria-label="Bild-Adresse">
-            <button class="btn" id="galFetch" type="button"><svg><use href="#i-link"/></svg>Von URL holen</button>
+          <div class="gal">
+            <nav class="galtree" id="galTree" aria-label="Alben"></nav>
+
+            <div class="galpane" id="galPane">
+              <header class="galhead">
+                <div class="galhead__text">
+                  <div class="galhead__crumb" id="galCrumb"></div>
+                  <h3 class="galhead__title" id="galTitle"></h3>
+                  <p class="galhead__meta" id="galMeta"></p>
+                </div>
+                <div class="galhead__tools">
+                <button class="iconbtn" id="galBackdrop" type="button" aria-pressed="false" title="Heller Hintergrund" aria-label="Heller Hintergrund für dunkle Bilder"><svg><use href="#i-contrast"/></svg></button>
+                <div class="galhead__actions" id="galActions">
+                  <button class="btn btn--primary" id="galUpload" type="button"><svg><use href="#i-upload"/></svg>Bild hochladen</button>
+                  <button class="btn btn--quiet" id="galUrlToggle" type="button" aria-expanded="false" aria-controls="galUrl"><svg><use href="#i-link"/></svg>Von URL</button>
+                  <button class="btn btn--quiet is-danger" id="galDelCat" type="button"><svg><use href="#i-trash"/></svg><span>Album löschen</span></button>
+                </div>
+                </div>
+              </header>
+
+              <form class="galurl" id="galUrl" hidden>
+                <input class="text" id="galUrlInput" type="url" required placeholder="https://… Adresse eines Bildes" aria-label="Bild-Adresse">
+                <button class="btn btn--primary" type="submit">Holen</button>
+                <button class="btn btn--ghost" id="galUrlClose" type="button" aria-label="Schließen"><svg><use href="#i-x"/></svg></button>
+              </form>
+
+              <div class="notice notice--info galreadonly" id="galReadonly" hidden>
+                <svg><use href="#i-lock"/></svg>
+                <span>Vorlagen gehören zum Bot und lassen sich nicht ändern. Lege ein eigenes Album an, um Bilder hochzuladen.</span>
+              </div>
+
+              <div class="galgrid" id="galGrid"></div>
+
+              <div class="galempty" id="galEmpty" hidden>
+                <span class="galempty__mark"><svg><use href="#i-image"/></svg></span>
+                <h4>Noch keine Bilder in diesem Album</h4>
+                <p>Lade ein Bild hoch oder zieh Dateien hierher. Bilder werden auf höchstens 1920 px verkleinert und als WebP gespeichert, GIFs bleiben animiert.</p>
+                <button class="btn btn--primary" type="button"><svg><use href="#i-upload"/></svg>Bild hochladen</button>
+              </div>
+            </div>
           </div>
 
-          <div class="galgrid" id="galGrid"></div>
-          <p class="galempty" id="galEmpty" hidden>In diesem Album liegt noch kein Bild.</p>
+          <!-- Verschieben: dasselbe Dialog-Muster wie die Benachrichtigungen. -->
+          <dialog class="modal galmove" id="galMove" aria-labelledby="galMoveTitle">
+            <div class="modal__head">
+              <div>
+                <h2 id="galMoveTitle">Bild verschieben</h2>
+                <p id="galMoveFile"></p>
+              </div>
+              <button class="iconbtn modal__x" type="button" data-close aria-label="Schließen"><svg><use href="#i-x"/></svg></button>
+            </div>
+            <div class="modal__body">
+              <div class="galmove__list" id="galMoveList" role="radiogroup" aria-label="Zielalbum"></div>
+              <div class="galmove__foot">
+                <button class="btn btn--quiet" type="button" data-close>Abbrechen</button>
+                <button class="btn btn--primary" type="button" id="galMoveGo" disabled><svg><use href="#i-move"/></svg>Hierhin verschieben</button>
+              </div>
+            </div>
+          </dialog>
         </section>
       </div>
     </div>

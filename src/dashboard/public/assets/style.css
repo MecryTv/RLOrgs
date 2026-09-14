@@ -706,12 +706,18 @@ body:has(.controls.is-stuck) .topbar{box-shadow:none}
 }
 .btn svg{width:16px;height:16px}
 .btn:active{transform:scale(.97)}
+/* Wie .switch:disabled - gesperrt sieht auch gesperrt aus, statt sich nur am
+   Cursor zu verraten. Die :hover-Regeln unten schliessen :disabled deshalb
+   ausdruecklich aus, sonst wuerde ein gesperrter Knopf beim Ueberfahren trotzdem
+   aufleuchten (gleiche Spezifitaet wie .btn:disabled, es gewaenne sonst die
+   Regel, die im Stylesheet weiter unten steht). */
+.btn:disabled{opacity:.4;cursor:not-allowed}
 /* Die beiden Knoepfe der Webseite. Rot gefuellt ist der eine Weg, den eine
    Karte vorschlaegt, umrandet die gleichwertige zweite Moeglichkeit. */
 .btn--primary{
   color:#fff;background:linear-gradient(135deg,var(--brand-bright),var(--brand) 55%,var(--brand-deep));
 }
-.btn--primary:hover{background:linear-gradient(135deg,#ff5060,var(--brand-bright) 60%,var(--brand))}
+.btn--primary:hover:not(:disabled){background:linear-gradient(135deg,#ff5060,var(--brand-bright) 60%,var(--brand))}
 /* Umrandet. Der Rand ist der Hintergrund, die Fuellung liegt auf ::before, denn
    ein border wuerde an den Schraegen abgeschnitten. Beim Ueberfahren wird er blau. */
 .btn--quiet,.btn--warm{color:var(--text);background:var(--line-strong)}
@@ -724,8 +730,8 @@ body:has(.controls.is-stuck) .topbar{box-shadow:none}
     0 100%,0 calc(var(--bevel) - 1px)
   );
 }
-.btn--quiet:hover,.btn--warm:hover{background:var(--blue);color:var(--blue)}
-.btn--quiet:hover::before,.btn--warm:hover::before{background:#071119}
+.btn--quiet:hover:not(:disabled),.btn--warm:hover:not(:disabled){background:var(--blue);color:var(--blue)}
+.btn--quiet:hover:not(:disabled)::before,.btn--warm:hover:not(:disabled)::before{background:#071119}
 /* Einladen traegt das Blau schon im Ruhezustand. Auffallen soll es, ohne mit
    dem roten Knopf auf der Karte daneben zu konkurrieren. */
 .btn--warm{background:color-mix(in srgb,var(--blue) 60%,transparent);color:var(--blue-soft)}
@@ -733,7 +739,7 @@ body:has(.controls.is-stuck) .topbar{box-shadow:none}
   flex:none;width:42px;padding:0;--bevel:9px;color:var(--text-2);
   border:1px solid var(--line-strong);background:var(--glass);
 }
-.btn--ghost:hover{color:var(--blue);border-color:var(--blue);background:color-mix(in srgb,var(--blue) 8%,transparent)}
+.btn--ghost:hover:not(:disabled){color:var(--blue);border-color:var(--blue);background:color-mix(in srgb,var(--blue) 8%,transparent)}
 .ripple{
   position:absolute;border-radius:50%;transform:translate(-50%,-50%) scale(0);
   background:rgba(255,255,255,.42);pointer-events:none;
@@ -2037,40 +2043,229 @@ body.no-motion .hero__field .run{display:none}
 /* ----------------------------------------------------------
    Galerie
 
-   Ein Raster aus Kacheln, darueber die Auswahl des Albums. Die Kacheln sind
-   quadratisch, damit unterschiedliche Seitenverhaeltnisse die Zeilen nicht
-   zerreissen; das Bild selbst bleibt vollstaendig sichtbar.
+   Ein Dateimanager in zwei Spalten: links die Alben als Baum wie die
+   Seitenleiste, rechts das gewaehlte Album mit Kopf, Aktionen und Raster.
+   Alles aus den Bausteinen des Dashboards - .btn, .text, .pill, .notice,
+   .modal -, neu sind nur Baum, Kacheln und Ablagefeld.
    ---------------------------------------------------------- */
-.galbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 16px}
-.galbar select,.galbar input[type="text"],.galbar input[type="url"]{
-  min-width:180px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm);
-  background:var(--glass);color:var(--text);font-size:13px;
+.gal{
+  display:grid;gap:18px;align-items:start;margin-top:18px;
+  grid-template-columns:236px minmax(0,1fr);
 }
-/* Loeschen in zwei Schritten: der erste Klick fragt, der zweite loescht. Ein
-   window.confirm waere die einzige Systembox in einer sonst eigenen Oberflaeche. */
-.galtile__bar button.is-sure{background:var(--brand);padding:4px 8px;font-size:11px}
-.galgrid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(132px,1fr))}
+
+/* ---------- Baum ---------- */
+.galtree{
+  display:grid;gap:2px;padding:8px;
+  border:1px solid var(--line);background:rgba(255,255,255,.015);
+}
+.galtree__cap{
+  display:flex;align-items:center;gap:7px;margin:12px 0 4px;padding:0 10px;
+  font-family:var(--f-label);font-size:11.5px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--text-3);
+}
+.galtree__cap:first-child{margin-top:4px}
+.galtree__cap svg{width:12px;height:12px}
+
+.galtree__row{position:relative;display:flex;align-items:center}
+.galtree__item,.galtree__add{
+  display:flex;align-items:center;gap:10px;width:100%;min-height:38px;padding:0 10px;
+  font:inherit;font-size:13.5px;text-align:left;color:var(--text-2);
+  border:0;background:none;cursor:pointer;
+  clip-path:polygon(var(--cut-sm) 0,100% 0,100% calc(100% - var(--cut-sm)),calc(100% - var(--cut-sm)) 100%,0 100%,0 var(--cut-sm));
+  transition:color var(--t-fast) var(--ease),background var(--t-fast) var(--ease);
+}
+.galtree__item svg,.galtree__add svg{width:15px;height:15px;flex:none;color:var(--text-3);transition:color var(--t-fast) var(--ease)}
+.galtree__item:hover{color:var(--text);background:var(--glass)}
+.galtree__item:focus-visible,.galtree__add:focus-visible,.galtree__sub:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--blue)}
+/* Die Auswahl sieht aus wie der aktive Eintrag der Seitenleiste. */
+.galtree__item[aria-current="true"]{
+  color:var(--brand);background:color-mix(in srgb,var(--brand) 9%,transparent);
+  box-shadow:inset 2px 0 0 var(--brand);
+}
+.galtree__item[aria-current="true"] svg{color:var(--brand)}
+.galtree__item.is-sub{padding-left:32px;font-size:13px}
+/* Die Linie zeigt, wohin ein Unteralbum gehoert, ohne Pfeile und Aufklapper. */
+.galtree__item.is-sub::before{
+  content:"";position:absolute;left:17px;top:0;bottom:50%;width:9px;
+  border-left:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);
+}
+.galtree__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.galtree__count{flex:none;font-family:var(--f-accent);font-size:10.5px;letter-spacing:.04em;color:var(--text-3)}
+.galtree__item[aria-current="true"] .galtree__count{color:color-mix(in srgb,var(--brand) 70%,#fff)}
+
+/* Ein Unteralbum anlegen, direkt am Hauptalbum statt ueber ein zweites Dropdown. */
+.galtree__sub{
+  position:absolute;right:4px;top:50%;translate:0 -50%;
+  width:30px;height:30px;display:grid;place-items:center;
+  color:var(--text-3);border:1px solid transparent;background:none;cursor:pointer;
+  opacity:0;transition:opacity var(--t-fast) var(--ease),color var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease);
+}
+.galtree__sub svg{width:15px;height:15px}
+.galtree__row:hover .galtree__sub,.galtree__row:focus-within .galtree__sub{opacity:1}
+.galtree__row:hover .galtree__count,.galtree__row:focus-within .galtree__count{opacity:0}
+.galtree__sub:hover{color:var(--blue);border-color:var(--blue)}
+
+.galtree__add{margin-top:4px;color:var(--text-3);outline:1px dashed var(--line-strong);outline-offset:-1px;clip-path:none}
+.galtree__add:hover{color:var(--blue-soft);outline-color:var(--blue);background:color-mix(in srgb,var(--blue) 6%,transparent)}
+.galtree__add:hover svg{color:var(--blue)}
+
+.galtree__form{display:grid;gap:6px;margin-top:4px;padding:8px;border:1px solid var(--line-strong);background:#0b1016}
+.galtree__form label{font-family:var(--f-label);font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
+.galtree__form .text{width:100%}
+.galtree__form div{display:flex;gap:6px}
+.galtree__form .btn{height:36px;padding:0 12px;font-size:12px}
+
+/* ---------- Kopf des Albums ---------- */
+.galpane{min-width:0}
+.galhead{
+  display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px 18px;
+  padding-bottom:16px;border-bottom:1px solid var(--line);
+}
+/* Der Text darf schrumpfen und umbrechen, damit Titel und Knoepfe auf breiten
+   Bildschirmen in einer Zeile bleiben; erst wenn es eng wird, rutschen die
+   Knoepfe darunter. */
+.galhead__text{flex:1 1 220px;min-width:0}
+.galhead__crumb{
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--f-label);font-size:12px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--text-3);
+}
+.galhead__crumb i{font-style:normal;color:var(--line-strong)}
+.galhead__title{
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:4px;
+  font-family:var(--f-display);font-size:22px;font-weight:700;overflow-wrap:anywhere;
+}
+.galhead__meta{margin-top:4px;font-size:12.5px;color:var(--text-3)}
+.galhead__tools{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.galhead__actions{display:flex;flex-wrap:wrap;gap:8px}
+/* .btn waechst sonst mit flex:1 und schneidet in einer vollen Reihe seinen Text ab. */
+.galhead__actions .btn,.galurl .btn,.galempty .btn,.galmove__foot .btn{flex:none}
+
+/* Loeschen ist rot statt blau, und der zweite Klick fragt nach. */
+.btn--quiet.is-danger:hover:not(:disabled){background:var(--loss);color:color-mix(in srgb,var(--loss) 55%,#fff)}
+.btn--quiet.is-danger:hover:not(:disabled)::before{background:#170a0d}
+.btn--quiet.is-danger.is-sure{background:var(--loss);color:#fff}
+.btn--quiet.is-danger.is-sure::before{background:color-mix(in srgb,var(--loss) 26%,#0b1016)}
+
+.galurl{display:flex;gap:8px;margin-top:14px}
+.galurl .text{flex:1;width:auto;min-width:0;height:44px}
+.galreadonly{margin-top:14px}
+
+/* ---------- Raster ---------- */
+.galgrid{
+  display:grid;gap:12px;margin-top:16px;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+}
+.galpane.is-drag .galgrid{outline:2px dashed var(--blue);outline-offset:8px}
+
 .galtile{
-  position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:var(--r-sm);
-  background:var(--glass);overflow:hidden;
+  position:relative;margin:0;display:flex;flex-direction:column;
+  border:1px solid var(--line);background:#0b1016;
+  transition:border-color var(--t-fast) var(--ease);
 }
-.galtile img{width:100%;height:100%;object-fit:contain}
-.galtile__bar{
-  position:absolute;inset:auto 0 0 0;display:flex;gap:4px;justify-content:flex-end;
-  padding:6px;background:linear-gradient(transparent,rgba(0,0,0,.72));
-  opacity:0;transition:opacity var(--t-fast) var(--ease);
+.galtile:hover,.galtile:focus-within{border-color:var(--line-strong)}
+/* Das Schachbrett zeigt, wo ein Logo durchsichtig ist. Das Seitenverhaeltnis
+   steht fest, damit nachladende Bilder das Raster nicht verschieben. */
+.galtile__img{
+  aspect-ratio:1;display:grid;place-items:center;padding:16px;overflow:hidden;
+  background:conic-gradient(rgba(255,255,255,.028) 25%,transparent 0 50%,rgba(255,255,255,.028) 0 75%,transparent 0) 0 0/18px 18px;
 }
-.galtile:hover .galtile__bar,.galtile:focus-within .galtile__bar{opacity:1}
-.galtile__bar button{
-  display:flex;align-items:center;padding:4px;border-radius:var(--r-sm);
-  background:rgba(0,0,0,.5);color:var(--text);
+.galtile__img img{max-width:100%;max-height:100%;object-fit:contain}
+/* Heller Hintergrund fuer dunkle Logos: ein schwarzes Wappen auf dunklem
+   Schachbrett waere sonst kaum zu sehen. */
+.galpane.is-light .galtile__img{
+  background:#e9ecf1 conic-gradient(#d3d8df 25%,transparent 0 50%,#d3d8df 0 75%,transparent 0) 0 0/18px 18px;
 }
-.galtile__bar button:hover{background:var(--brand)}
-.galtile__bar svg{width:14px;height:14px}
-.galempty{margin:24px 0;color:var(--text-3);font-size:13px;text-align:center}
-/* Verschieben sitzt als Auswahl in der Leiste einer Kachel. Schmal, weil
-   dort auch der Loeschknopf steht. */
-.galtile__move{
-  flex:1;min-width:0;padding:3px 4px;border:1px solid var(--line);border-radius:var(--r-sm);
-  background:rgba(0,0,0,.6);color:var(--text);font-size:11px;
+.galtile__cap{display:grid;gap:2px;padding:9px 11px 10px;border-top:1px solid var(--line)}
+.galtile__cap b{font-size:12.5px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.galtile__cap span{font-family:var(--f-label);font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
+
+.galtile__actions{
+  position:absolute;top:8px;right:8px;display:flex;gap:6px;
+  opacity:0;translate:0 -4px;transition:opacity var(--t-fast) var(--ease),translate var(--t-fast) var(--ease);
+}
+.galtile:hover .galtile__actions,.galtile:focus-within .galtile__actions{opacity:1;translate:0 0}
+.galtile__act{
+  height:34px;min-width:34px;padding:0;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  color:var(--text-2);border:1px solid var(--line-strong);background:rgba(5,6,8,.86);cursor:pointer;
+  font-family:var(--f-label);font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  transition:color var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease),background var(--t-fast) var(--ease);
+}
+.galtile__act svg{width:15px;height:15px}
+.galtile__act:hover{color:var(--blue);border-color:var(--blue)}
+.galtile__act:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--blue)}
+.galtile__act.is-danger:hover{color:var(--loss);border-color:var(--loss)}
+.galtile__act.is-sure{padding:0 10px;color:#fff;border-color:var(--loss);background:var(--loss)}
+
+/* Beim Hochladen: die Kachel steht schon da und atmet, bis das Bild kommt. */
+.galtile.is-busy .galtile__img{animation:galbusy 1.4s var(--ease) infinite}
+.galtile.is-busy .galtile__img svg{width:26px;height:26px;color:var(--text-3)}
+@keyframes galbusy{50%{background-color:rgba(255,255,255,.045)}}
+
+/* Ablagefeld am Ende des Rasters: dieselbe Hoehe wie eine Kachel. */
+.galdrop{
+  display:grid;place-content:center;justify-items:center;gap:8px;min-height:150px;padding:14px;
+  font:inherit;font-size:12.5px;line-height:1.45;text-align:center;color:var(--text-3);
+  border:1px dashed var(--line-strong);background:none;cursor:pointer;
+  transition:color var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease),background var(--t-fast) var(--ease);
+}
+.galdrop svg{width:22px;height:22px}
+.galdrop b{font-weight:600;color:var(--text-2)}
+.galdrop:hover,.galpane.is-drag .galdrop{color:var(--blue-soft);border-color:var(--blue);background:color-mix(in srgb,var(--blue) 6%,transparent)}
+.galdrop:hover b,.galpane.is-drag .galdrop b{color:var(--text)}
+.galdrop:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--blue)}
+
+/* ---------- Leer ---------- */
+.galempty{
+  display:grid;justify-items:center;gap:10px;margin-top:16px;padding:44px 20px;
+  text-align:center;border:1px dashed var(--line-strong);
+}
+.galempty__mark{width:48px;height:48px;display:grid;place-items:center;color:var(--text-3);border:1px solid var(--line-strong);background:var(--glass)}
+.galempty__mark svg{width:22px;height:22px}
+.galempty h4{margin-top:4px;font-family:var(--f-display);font-size:16px;font-weight:600}
+.galempty p{max-width:46ch;font-size:13px;line-height:1.55;color:var(--text-3)}
+.galempty .btn{margin-top:6px}
+
+/* ---------- Verschieben ---------- */
+.galmove{width:min(460px,calc(100vw - 32px))}
+.galmove__list{display:grid;gap:2px}
+.galmove__list .galtree__item[aria-checked="true"]{
+  color:var(--blue-soft);background:color-mix(in srgb,var(--blue) 9%,transparent);box-shadow:inset 2px 0 0 var(--blue);
+}
+.galmove__list .galtree__item[aria-checked="true"] svg{color:var(--blue)}
+.galmove__foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+
+/* Beruehrung kennt kein Ueberfahren: Aktionen stehen dort immer da, und
+   gross genug fuer einen Finger. */
+@media (hover:none){
+  .galtile__actions{opacity:1;translate:0 0}
+  /* Nur einblenden - die Verschiebung zentriert den Knopf und bleibt. */
+  .galtree__sub{opacity:1}
+  .galtile__act{height:44px;min-width:44px}
+  .galtree__row .galtree__count{opacity:0}
+  .galtree__item,.galtree__add{min-height:44px}
+}
+
+/* Wie die Seitenleiste bei derselben Breite: aus dem Baum wird eine Leiste,
+   die waagerecht scrollt. Sonst stuende auf dem Handy erst die ganze
+   Albenliste, bevor das erste Bild kommt. */
+@media (max-width:860px){
+  .gal{grid-template-columns:1fr}
+  .galtree{
+    grid-auto-flow:column;grid-auto-columns:max-content;align-items:center;
+    gap:6px;padding:6px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;
+  }
+  .galtree__cap,.galtree__cap:first-child{margin:0 2px 0 8px}
+  .galtree__row .galtree__count{opacity:1}
+  .galtree__item.is-sub{padding-left:10px}
+  .galtree__item.is-sub::before{display:none}
+  .galtree__sub{position:static;translate:none;opacity:1}
+  .galtree__add{margin-top:0;padding-right:14px}
+  .galtree__form{margin-top:10px}
+  /* Zwei Spalten statt einer: auf dem Handy fuellte sonst ein Logo den Bildschirm. */
+  .galgrid{grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .galtile.is-busy .galtile__img{animation:none}
 }

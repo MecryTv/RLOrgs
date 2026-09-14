@@ -5,7 +5,7 @@ import Route from "../structures/Route";
 import { SessionExpired } from "../services/DashboardService";
 import { ClearCookie, DASHBOARD_PATH, SESSION_COOKIE } from "../constants/Dashboard";
 import { SNOWFLAKE } from "../constants/Discord";
-import { MAX_IMAGE_BYTES, UPLOAD_TYPES } from "../constants/Gallery";
+import { MAX_IMAGE_BYTES, SanitizeName, UPLOAD_TYPES } from "../constants/Gallery";
 import { WantsJSON } from "../utils/admin";
 import { SessionOf } from "../utils/dashboard";
 import logger from "../utils/logger";
@@ -133,7 +133,29 @@ export default class DashboardApiGalleryEdit extends Route {
         if (action === "category") {
             if (!category) return null;
 
-            return { created: await gallery.CreateCategory({ guildId, category, subcategory }) };
+            const created = await gallery.CreateCategory({ guildId, category, subcategory });
+
+            // false hat zwei Ursachen, die CreateCategory selbst nicht mehr
+            // auseinanderhaelt: der Name existiert schon, oder - nur bei einem
+            // Unteralbum moeglich - das Hauptalbum ist weg. Zwei Texte, nach
+            // subcategory unterschieden, statt einer, der die Haelfte der Faelle
+            // falsch beschriebe.
+            if (!created) {
+                throw new Error(
+                    subcategory
+                        ? "Das Hauptalbum gibt es nicht, oder es gibt darin schon ein Unteralbum mit diesem Namen."
+                        : "Ein Album mit diesem Namen gibt es schon."
+                );
+            }
+
+            // Der Dienst legt unter SanitizeName() an, nicht unter der
+            // Rohtexteingabe - wer das neue Album auswaehlen will (das Dashboard),
+            // braucht den gespeicherten Namen, nicht den getippten.
+            return {
+                created,
+                category: SanitizeName(category),
+                subcategory: subcategory ? SanitizeName(subcategory) : null,
+            };
         }
 
         if (action === "category/delete") {
@@ -179,7 +201,13 @@ export default class DashboardApiGalleryEdit extends Route {
             // ein Griff in dessen Verzeichnis.
             if (!image || !category || !image.startsWith(`${guildId}/`)) return null;
 
-            return { moved: await gallery.MoveImage(image, { category, subcategory }) };
+            const moved = await gallery.MoveImage(image, { category, subcategory });
+
+            // false heisst: das Bild lag schon nicht mehr da, wo die ID hinzeigt -
+            // zum Beispiel ein zweiter Klick, waehrend der erste noch unterwegs war.
+            if (!moved) throw new Error("Dieses Bild gibt es nicht mehr.");
+
+            return { moved };
         }
 
         if (action === "image/delete") {
@@ -187,7 +215,11 @@ export default class DashboardApiGalleryEdit extends Route {
 
             if (!image || !image.startsWith(`${guildId}/`)) return null;
 
-            return { removed: await gallery.DeleteImage(image) };
+            const removed = await gallery.DeleteImage(image);
+
+            if (!removed) throw new Error("Dieses Bild gibt es nicht mehr.");
+
+            return { removed };
         }
 
         return null;
