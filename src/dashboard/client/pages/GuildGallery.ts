@@ -22,14 +22,28 @@ interface IImage {
     file: string;
 }
 
-// Ein Bild, das gerade hochgeladen wird - so lange nur eine lokale Notiz, kein
+// MAX_IMAGE_BYTES aus src/constants/Gallery.ts (8 MiB). Der Client kann von dort
+// nicht importieren; check:dashboard vergleicht beide Zahlen.
+const MAX_UPLOAD_BYTES = 8388608;
+
+// Ein Bild auf dem Weg in die Galerie - so lange nur eine lokale Notiz, kein
 // Eintrag aus der API. Ueber category/subcategory findet paintGrid() heraus,
 // ob die Kachel zum gerade gezeigten Album gehoert.
 interface IBusyUpload {
     id: number;
     category: string;
     subcategory: string | null;
-    name: string;
+    file: File;
+    // Das Bild aus dem Browser: die Kachel zeigt es, bevor der Bot es hat.
+    preview: string;
+    phase: "queued" | "upload" | "shrink" | "failed";
+    // Anteil der schon gesendeten Bytes, 0 bis 1.
+    progress: number;
+    error: string | null;
+}
+
+function megabytes(bytes: number): string {
+    return `${(bytes / 1048576).toLocaleString("de-DE", { maximumFractionDigits: 1 })} MB`;
 }
 
 // Warum eine Antwort dieser Seite abgelehnt wurde. Vorbild: FAILED in Guild.ts -
@@ -40,22 +54,25 @@ interface IBusyUpload {
 const FAILED: Record<number, string> = {
     401: "Deine Sitzung ist abgelaufen, lade die Seite neu.",
     403: "Diesen Server darfst du nicht verwalten.",
+    // Fastify antwortet englisch ("Payload Too Large"), bevor die Route laeuft.
+    413: `Zu groß – höchstens ${megabytes(MAX_UPLOAD_BYTES)}.`,
     429: "Zu viele Anfragen auf einmal, warte einen Moment.",
     503: "Der Bot erreicht gerade seine Datenbank nicht.",
 };
 
-// Einzige Stelle, die eine Antwort dieser Seite liest - send(), load() und der
-// Upload lesen sie alle, statt je ihren eigenen Fehler zu uebersetzen. null
-// heisst Erfolg; der Rumpf ist dann noch ungelesen, der Aufrufer liest ihn
-// selbst (ein Response-Rumpf laesst sich nur einmal lesen). 400/415 zeigen die
-// Meldung der Route selbst (data.error), ein unbekannter Code einen festen
-// Rueckfalltext.
+// 400/415 zeigen die Meldung der Route selbst (data.error), ein unbekannter
+// Code einen festen Rueckfalltext.
+function reasonOf(status: number, data: { error?: string }): string {
+    return FAILED[status] ?? data.error ?? `Der Bot hat abgelehnt (${status}).`;
+}
+
+// Liest eine abgelehnte Antwort fuer send() und load(). null heisst Erfolg; der
+// Rumpf ist dann noch ungelesen, der Aufrufer liest ihn selbst (ein
+// Response-Rumpf laesst sich nur einmal lesen).
 async function failureText(response: Response): Promise<string | null> {
     if (response.ok) return null;
 
-    const data = (await response.json().catch(() => ({}))) as { error?: string };
-
-    return FAILED[response.status] ?? data.error ?? `Der Bot hat abgelehnt (${response.status}).`;
+    return reasonOf(response.status, (await response.json().catch(() => ({}))) as { error?: string });
 }
 
 // Identitaet eines Albums fuer die Auswahl - guildId traegt den Scope schon
@@ -136,6 +153,12 @@ export function renderGallery(guildId: string, canManage: boolean): void {
     let images: IImage[] = [];
     let busy: IBusyUpload[] = [];
     let busyId = 0;
+    // Je Upload seine Kachel. Sie entsteht einmal und wird danach nur
+    // nachgezogen - neu gebaut spraenge der Balken bei jedem Fortschritt zurueck.
+    const busyTiles = new Map<number, HTMLElement>();
+    // Das gerade fertig gewordene Bild: paintGrid() hebt seine Kachel einmal
+    // hervor, damit das Auge es an seinem sortierten Platz findet.
+    let fresh: string | null = null;
     let current: IFolder | null = null;
 
     function warn(text: string | null): void {
@@ -222,7 +245,7 @@ export function renderGallery(guildId: string, canManage: boolean): void {
 
             sub.type = "button";
             sub.className = "galtree__sub";
-            sub.title = `Unteralbum in „${folder.name}" anlegen`;
+            sub.title = `Unteralbum in „${folder.name}“ anlegen`;
             sub.setAttribute("aria-label", sub.title);
             sub.append(icon("#i-folder-plus"));
             sub.addEventListener("click", () => openForm(wrap, folder.name));
@@ -285,7 +308,7 @@ export function renderGallery(guildId: string, canManage: boolean): void {
         const label = document.createElement("label");
 
         label.htmlFor = "galNewName";
-        label.textContent = parent ? `Unteralbum in „${parent}"` : "Neues Album";
+        label.textContent = parent ? `Unteralbum in „${parent}“` : "Neues Album";
 
         const input = document.createElement("input");
 
@@ -326,7 +349,7 @@ export function renderGallery(guildId: string, canManage: boolean): void {
                 if (!result) return;
 
                 closeForm();
-                toast("info", "Album angelegt", `„${result.subcategory ?? result.category}" steht jetzt bereit.`);
+                toast("info", "Album angelegt", `„${result.subcategory ?? result.category}“ steht jetzt bereit.`);
 
                 // Der Dienst legt unter SanitizeName() an, nicht unter der
                 // Rohtexteingabe - die Route liefert die gespeicherten Namen
@@ -428,7 +451,8 @@ export function renderGallery(guildId: string, canManage: boolean): void {
         galActions.hidden = !writable;
         urlForm.hidden = true;
         urlToggleButton.setAttribute("aria-expanded", "false");
-        galReadonly.hidden = writable;
+        // Nur für Vorlagen sichtbar - nicht für eigene Alben ohne Verwaltungsrecht.
+        galReadonly.hidden = own;
 
         paintGrid();
     }
@@ -439,7 +463,7 @@ export function renderGallery(guildId: string, canManage: boolean): void {
     function tile(image: IImage, own: boolean, writable: boolean): HTMLElement {
         const box = document.createElement("figure");
 
-        box.className = "galtile";
+        box.className = image.id === fresh ? "galtile is-new" : "galtile";
 
         const imgWrap = document.createElement("div");
 
@@ -515,7 +539,7 @@ export function renderGallery(guildId: string, canManage: boolean): void {
             void send("image/delete", { image: image.id }).then((result) => {
                 if (!result) return;
 
-                toast("info", "Bild gelöscht", `„${label}" ist weg.`);
+                toast("info", "Bild gelöscht", `„${label}“ ist weg.`);
                 void load();
             });
         });
@@ -526,7 +550,14 @@ export function renderGallery(guildId: string, canManage: boolean): void {
         return box;
     }
 
-    function busyTile(name: string): HTMLElement {
+    // Die Kachel eines Uploads: das Bild aus dem Browser unter einem Schleier,
+    // der mit den gesendeten Bytes nach oben weicht, darunter ein Balken. Was
+    // die Phase zeigt, regelt style.css ueber data-phase.
+    function busyTile(entry: IBusyUpload): HTMLElement {
+        const known = busyTiles.get(entry.id);
+
+        if (known) return known;
+
         const box = document.createElement("figure");
 
         box.className = "galtile is-busy";
@@ -534,23 +565,113 @@ export function renderGallery(guildId: string, canManage: boolean): void {
         const imgWrap = document.createElement("div");
 
         imgWrap.className = "galtile__img";
-        imgWrap.append(icon("#i-upload"));
+
+        const picture = document.createElement("img");
+
+        picture.alt = "";
+        // Ein Format, das der Browser nicht zeichnen kann, laesst nur die
+        // Vorschau weg - der Upload selbst laeuft trotzdem.
+        picture.addEventListener("error", () => picture.remove());
+        picture.src = entry.preview;
+
+        const veil = document.createElement("span");
+
+        veil.className = "galtile__veil";
+
+        const chip = document.createElement("span");
+
+        chip.className = "galtile__pct";
+
+        const bar = document.createElement("span");
+
+        bar.className = "galtile__bar";
+        bar.setAttribute("role", "progressbar");
+        bar.setAttribute("aria-label", `${entry.file.name} hochladen`);
+        bar.setAttribute("aria-valuemin", "0");
+        bar.setAttribute("aria-valuemax", "100");
+
+        imgWrap.append(picture, veil, chip, bar);
 
         const figcap = document.createElement("figcaption");
 
         figcap.className = "galtile__cap";
 
-        const b = document.createElement("b");
+        const name = document.createElement("b");
 
-        b.textContent = stem(name);
-
-        const span = document.createElement("span");
-
-        span.textContent = "Wird verkleinert …";
-        figcap.append(b, span);
+        name.textContent = stem(entry.file.name);
+        figcap.append(name, document.createElement("span"));
         box.append(imgWrap, figcap);
+        busyTiles.set(entry.id, box);
+        paintBusy(entry);
 
         return box;
+    }
+
+    // Zieht die Kachel auf den Stand des Uploads nach, ohne sie neu zu bauen.
+    function paintBusy(entry: IBusyUpload): void {
+        const box = busyTiles.get(entry.id);
+
+        // Ein Fehler steht einmal da und aendert sich nicht mehr.
+        if (!box || box.dataset.phase === "failed") return;
+
+        const chip = box.querySelector<HTMLElement>(".galtile__pct")!;
+        const bar = box.querySelector<HTMLElement>(".galtile__bar")!;
+        const text = box.querySelector<HTMLElement>(".galtile__cap span")!;
+        const percent = Math.round(entry.progress * 100);
+
+        box.dataset.phase = entry.phase;
+        box.style.setProperty("--p", String(entry.progress));
+
+        if (entry.phase === "upload") {
+            chip.textContent = `${percent} %`;
+            bar.setAttribute("aria-valuenow", String(percent));
+            text.textContent = `${megabytes(entry.file.size * entry.progress)} von ${megabytes(entry.file.size)}`;
+            return;
+        }
+
+        // Ohne Wert gilt der Balken als unbestimmt - so lange weiss niemand,
+        // wie lange Warten oder Verkleinern dauern.
+        bar.removeAttribute("aria-valuenow");
+        chip.replaceChildren();
+
+        if (entry.phase === "queued") {
+            text.textContent = "Wartet …";
+            return;
+        }
+
+        if (entry.phase === "shrink") {
+            text.textContent = "Wird verkleinert …";
+            return;
+        }
+
+        chip.append(icon("#i-warn"));
+        text.textContent = entry.error;
+        // Wird eingefuegt statt geaendert, damit ein Screenreader es vorliest.
+        text.setAttribute("role", "alert");
+
+        // Einmal zucken, nicht bei jedem Neuzeichnen: paintGrid() haengt die
+        // Kachel immer wieder neu ein, und damit liefe die Animation erneut.
+        box.classList.add("is-nudge");
+        box.addEventListener("animationend", () => box.classList.remove("is-nudge"), { once: true });
+
+        const dismiss = document.createElement("button");
+
+        dismiss.type = "button";
+        dismiss.className = "galtile__act galtile__dismiss";
+        dismiss.title = "Entfernen";
+        dismiss.setAttribute("aria-label", `Hinweis zu ${entry.file.name} entfernen`);
+        dismiss.append(icon("#i-x"));
+        dismiss.addEventListener("click", () => {
+            forget(entry);
+            paintGrid();
+        });
+        box.append(dismiss);
+    }
+
+    function forget(entry: IBusyUpload): void {
+        busy = busy.filter((other) => other !== entry);
+        busyTiles.delete(entry.id);
+        URL.revokeObjectURL(entry.preview);
     }
 
     function dropButton(): HTMLElement {
@@ -585,10 +706,12 @@ export function renderGallery(guildId: string, canManage: boolean): void {
 
         const tiles = shown.map((image) => tile(image, own, writable));
 
-        for (const entry of busyHere) tiles.push(busyTile(entry.name));
+        for (const entry of busyHere) tiles.push(busyTile(entry));
         if (writable) tiles.push(dropButton());
 
         grid.replaceChildren(...tiles);
+        // Hervorgehoben wird nur beim ersten Zeichnen danach, nicht bei jedem.
+        fresh = null;
 
         const isEmpty = writable && shown.length === 0 && busyHere.length === 0;
 
@@ -643,7 +766,7 @@ export function renderGallery(guildId: string, canManage: boolean): void {
         moveImage = image;
         moveTarget = null;
         moveGoButton.disabled = true;
-        moveFileText.textContent = `„${stem(image.file)}" in ein anderes eigenes Album legen.`;
+        moveFileText.textContent = `„${stem(image.file)}“ in ein anderes eigenes Album legen.`;
 
         const candidates = folders.filter((folder) => folder.scope === "custom" && keyOf(folder) !== keyOf(here));
 
@@ -654,66 +777,121 @@ export function renderGallery(guildId: string, canManage: boolean): void {
     /* ------------------------------------------------------------
        Hochladen
        ------------------------------------------------------------ */
-    async function uploadFiles(fileList: FileList): Promise<void> {
+    // XMLHttpRequest statt fetch: nur er meldet, wie weit der Upload ist. Kommt
+    // zurueck mit dem Grund einer Ablehnung, oder mit der ID des neuen Bildes.
+    function sendFile(entry: IBusyUpload): Promise<{ error: string | null; id?: string }> {
+        const query = new URLSearchParams({ category: entry.category, name: entry.file.name });
+
+        if (entry.subcategory) query.set("subcategory", entry.subcategory);
+
+        return new Promise((resolve) => {
+            const request = new XMLHttpRequest();
+
+            request.open("POST", `${BASE}/api/guild/${encodeURIComponent(guildId)}/gallery/image?${query}`);
+            request.setRequestHeader("Content-Type", entry.file.type);
+            request.setRequestHeader("Accept", "application/json");
+            request.responseType = "json";
+
+            request.upload.addEventListener("progress", (event) => {
+                if (!event.lengthComputable) return;
+
+                entry.progress = event.loaded / event.total;
+                paintBusy(entry);
+            });
+
+            // Alle Bytes sind beim Bot - ab jetzt verkleinert er.
+            request.upload.addEventListener("load", () => {
+                entry.progress = 1;
+                entry.phase = "shrink";
+                paintBusy(entry);
+            });
+
+            request.addEventListener("load", () => {
+                const data = (request.response ?? {}) as { error?: string; image?: { id?: string } };
+                const ok = request.status >= 200 && request.status < 300;
+
+                resolve(ok ? { error: null, id: data.image?.id } : { error: reasonOf(request.status, data) });
+            });
+
+            request.addEventListener("error", () => resolve({ error: "Der Bot antwortet gerade nicht." }));
+            request.send(entry.file);
+        });
+    }
+
+    async function uploadFiles(chosen: File[]): Promise<void> {
         if (!isWritable() || !current) return;
 
         const target = targetOf(current);
         const albumLabel = current.name;
-        const files: File[] = [];
+        // Dieselbe Liste wie im accept des Datei-Felds - beim Ziehen gilt die
+        // sonst nicht.
+        const accepted = file.accept.split(",");
+        const queue: IBusyUpload[] = [];
 
-        for (const entry of fileList) {
-            if (entry.type.startsWith("image/")) files.push(entry);
-            else warn(`„${entry.name}" ist kein Bild und wurde übersprungen.`);
+        for (const picked of chosen) {
+            if (!picked.type.startsWith("image/")) {
+                warn(`„${picked.name}“ ist kein Bild und wurde übersprungen.`);
+                continue;
+            }
+
+            const entry: IBusyUpload = {
+                id: ++busyId,
+                ...target,
+                file: picked,
+                preview: URL.createObjectURL(picked),
+                phase: "queued",
+                progress: 0,
+                error: null,
+            };
+
+            // Was die Route ohnehin ablehnt, scheitert sofort auf der Kachel,
+            // statt erst Megabytes durchs Netz zu schicken.
+            if (picked.size > MAX_UPLOAD_BYTES) {
+                entry.phase = "failed";
+                entry.error = `Zu groß – ${megabytes(picked.size)}, höchstens ${megabytes(MAX_UPLOAD_BYTES)}.`;
+            } else if (!accepted.includes(picked.type)) {
+                entry.phase = "failed";
+                entry.error = "Nur PNG, JPG, GIF oder WebP.";
+            } else {
+                queue.push(entry);
+            }
+
+            busy.push(entry);
         }
+
+        paintGrid();
 
         let uploaded = 0;
 
-        // Nacheinander statt parallel: je Datei eine eigene Kachel, die "wird
-        // verkleinert" zeigt, bis genau diese Datei fertig ist.
-        for (const chosen of files) {
-            const id = ++busyId;
+        // Nacheinander statt parallel: ein grosses Bild bekommt die ganze
+        // Leitung, die Kacheln dahinter zeigen "Wartet", bis sie dran sind.
+        for (const entry of queue) {
+            entry.phase = "upload";
+            paintBusy(entry);
 
-            busy.push({ id, category: target.category, subcategory: target.subcategory, name: chosen.name });
-            paintGrid();
+            const result = await sendFile(entry);
 
-            const query = new URLSearchParams({ category: target.category, name: chosen.name });
-
-            if (target.subcategory) query.set("subcategory", target.subcategory);
-
-            let ok = false;
-
-            try {
-                const response = await fetch(
-                    `${BASE}/api/guild/${encodeURIComponent(guildId)}/gallery/image?${query}`,
-                    { method: "POST", headers: { "Content-Type": chosen.type }, body: chosen }
-                );
-
-                const failure = await failureText(response);
-
-                if (failure !== null) warn(failure);
-                else ok = true;
-            } catch {
-                warn("Der Bot antwortet gerade nicht.");
+            if (result.error !== null) {
+                entry.phase = "failed";
+                entry.error = result.error;
+                paintBusy(entry);
+                continue;
             }
 
-            busy = busy.filter((entry) => entry.id !== id);
+            uploaded++;
+            // Erst aus der Liste, dann neu laden: bis die Antwort da ist, bleibt
+            // die Kachel stehen, danach steht das echte Bild im Raster.
+            forget(entry);
+            fresh = result.id ?? null;
 
-            // Neu laden loescht auch eine Fehlermeldung wieder (siehe load()) -
-            // das darf nur nach einem Erfolg passieren, sonst verschwindet die
-            // Meldung zu dieser Datei, bevor jemand sie liest.
-            if (ok) {
-                uploaded++;
-                await load();
-            } else {
-                paintGrid();
-            }
+            if (!(await load())) paintGrid();
         }
 
         if (uploaded > 0) {
             toast(
                 "info",
                 uploaded === 1 ? "Bild hochgeladen" : "Bilder hochgeladen",
-                uploaded === 1 ? `Liegt jetzt in „${albumLabel}".` : `${uploaded} Bilder liegen jetzt in „${albumLabel}".`
+                uploaded === 1 ? `Liegt jetzt in „${albumLabel}“.` : `${uploaded} Bilder liegen jetzt in „${albumLabel}“.`
             );
         }
     }
@@ -730,7 +908,8 @@ export function renderGallery(guildId: string, canManage: boolean): void {
     // vorherige Auswahl nach dem Neuladen nicht mehr die richtige ist - siehe
     // openForm() oben und delCatButton weiter unten); ohne prefer bleibt die
     // bisherige Auswahl, sofern es sie noch gibt, sonst greift defaultPick().
-    async function load(prefer?: string): Promise<void> {
+    // false heisst: nichts neu gezeichnet (Fehler oder ueberholt).
+    async function load(prefer?: string): Promise<boolean> {
         const generation = ++loadGeneration;
 
         try {
@@ -740,16 +919,16 @@ export function renderGallery(guildId: string, canManage: boolean): void {
 
             const failure = await failureText(response);
 
-            if (generation !== loadGeneration) return;
+            if (generation !== loadGeneration) return false;
 
             if (failure !== null) {
                 warn(failure);
-                return;
+                return false;
             }
 
             const data = (await response.json()) as { categories: IFolder[]; images: IImage[] };
 
-            if (generation !== loadGeneration) return;
+            if (generation !== loadGeneration) return false;
 
             folders = data.categories;
             images = data.images;
@@ -761,9 +940,13 @@ export function renderGallery(guildId: string, canManage: boolean): void {
 
             paintTree();
             paintPane();
+
+            return true;
         } catch {
             if (generation === loadGeneration) warn("Der Bot antwortet gerade nicht.");
         }
+
+        return false;
     }
 
     /* ------------------------------------------------------------
@@ -811,7 +994,7 @@ export function renderGallery(guildId: string, canManage: boolean): void {
 
                 urlInput.value = "";
                 closeUrlForm();
-                toast("info", "Bild geholt", `Liegt jetzt in „${albumLabel}".`);
+                toast("info", "Bild geholt", `Liegt jetzt in „${albumLabel}“.`);
                 void load();
             }
         );
@@ -844,7 +1027,7 @@ export function renderGallery(guildId: string, canManage: boolean): void {
             (result) => {
                 if (!result) return;
 
-                toast("info", "Album gelöscht", `„${label}" ist weg.`);
+                toast("info", "Album gelöscht", `„${label}“ ist weg.`);
                 void load(parentKey);
             }
         );
@@ -854,10 +1037,12 @@ export function renderGallery(guildId: string, canManage: boolean): void {
     emptyUploadButton.addEventListener("click", () => file.click());
 
     file.addEventListener("change", () => {
-        const chosen = file.files;
+        // Erst kopieren, dann leeren: file.files ist eine lebende Liste, die das
+        // Zuruecksetzen des Werts mit leert - vorher kam so nie ein Upload an.
+        const chosen = [...(file.files ?? [])];
 
         file.value = "";
-        if (chosen && chosen.length > 0) void uploadFiles(chosen);
+        if (chosen.length > 0) void uploadFiles(chosen);
     });
 
     pane.addEventListener("dragover", (event) => {
@@ -877,7 +1062,7 @@ export function renderGallery(guildId: string, canManage: boolean): void {
 
         const dropped = event.dataTransfer?.files;
 
-        if (dropped && dropped.length > 0) void uploadFiles(dropped);
+        if (dropped && dropped.length > 0) void uploadFiles([...dropped]);
     });
 
     moveDialog.addEventListener("click", (event) => {
@@ -904,7 +1089,7 @@ export function renderGallery(guildId: string, canManage: boolean): void {
         }).then((result) => {
             if (!result) return;
 
-            toast("info", "Bild verschoben", `„${label}" liegt jetzt in „${targetLabel}".`);
+            toast("info", "Bild verschoben", `„${label}“ liegt jetzt in „${targetLabel}“.`);
             void load();
         });
     });

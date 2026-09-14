@@ -15,6 +15,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import BotClient from "../client/BotClient";
 import { SNOWFLAKE } from "../constants/Discord";
+import { MAX_IMAGE_BYTES } from "../constants/Gallery";
 import { MODULE_IDS } from "../constants/Modules";
 import { DASHBOARD_HOME, DASHBOARD_PATH, DISCORD_EPOCH, OAUTH_SCOPES, SESSION_COOKIE } from "../constants/Dashboard";
 import IDashboardSession from "../interfaces/services/dashboard/IDashboardSession";
@@ -575,6 +576,18 @@ async function main(): Promise<void> {
     check(
         "Galerie ist als festes Modul markiert",
         modules.find((entry) => entry.id === "gallery")?.always === true
+    );
+
+    // Die Galerie-Seite weist zu grosse Bilder ab, bevor sie durchs Netz gehen.
+    // Sie kann MAX_IMAGE_BYTES nicht importieren und traegt die Zahl selbst -
+    // laufen beide auseinander, nennt die Kachel eine falsche Grenze.
+    const galleryPage = await readFile(path.join(ASSETS, "pages", "GuildGallery.js"), "utf8");
+    const clientLimit = Number(/MAX_UPLOAD_BYTES = (\d+)/.exec(galleryPage)?.[1]);
+
+    check(
+        "Upload-Grenze im Dashboard und im Bot stimmen ueberein",
+        clientLimit === MAX_IMAGE_BYTES,
+        `Dashboard: ${clientLimit} | Bot: ${MAX_IMAGE_BYTES}`
     );
 
     const up = await fetch(`${BASE}${P}/assets/..%2Findex.html`);

@@ -15,7 +15,10 @@ Zugriff überall über den Client: `this.client.galleryService` (in Commands und
 | `src/Server.ts` + `src/routes/Images.ts` | Liefert `src/images` unter `/images/*` aus |
 | `src/builder/GalleryPanel.ts` | Zeichnet das `/gallery`-Panel, hält dessen Zustand |
 | `src/events/gallery/GalleryHandler.ts` | Bedient das Panel (Buttons, Selects, Modal) |
-| `src/constants/Gallery.ts` | Pfad-Auflösung, Sanitizing, Host-Filter — ohne Abhängigkeiten |
+| `src/constants/Gallery.ts` | Pfad-Auflösung, Sanitizing, Host-Filter, `MAX_IMAGE_BYTES` — ohne Abhängigkeiten |
+| `src/utils/image.ts` | `Shrink()` — verkleinert jedes neue Bild, bevor es auf die Platte kommt |
+| `src/routes/DashboardApiGallery.ts` + `DashboardApiGalleryEdit.ts` | Lesen und Schreiben fürs Dashboard |
+| `src/dashboard/client/pages/GuildGallery.ts` | Die Galerie-Seite im Dashboard |
 
 ---
 
@@ -165,10 +168,22 @@ Der `GalleryHandler` reagiert **nur** auf dieses Präfix. Eigene Buttons brauche
 | `CreateCategory(target)` | `boolean` — `false`, wenn es sie schon gibt |
 | `DeleteCategory(target)` | Anzahl gelöschter Bilder |
 | `AddImage(target, url, fileName?)` | Den fertigen `IGalleryEntry`, **wirft** bei Problemen |
+| `AddUpload(target, buffer, mime, fileName)` | Dasselbe für rohe Bytes aus dem Dashboard |
+| `Overview(guildId)` | `{ categories, images }` — alles auf einmal, auch leere Alben |
 | `MoveImage(id, folder)` | `boolean` |
 | `DeleteImage(id)` | `boolean` |
 
 `requireImages` ist standardmäßig `true` und blendet leere Ordner aus. Für Upload- und Verwaltungs-UIs auf `false` setzen, sonst siehst du den Ordner nicht, den du gerade angelegt hast.
+
+### Verkleinern
+
+`AddImage` und `AddUpload` laufen beide durch ein privates `Store()`, und das ruft `Shrink()` — jedes neue Bild wird verkleinert, egal ob es aus Discord oder dem Dashboard kommt:
+
+- längste Kante höchstens **1920 px**, gespeichert als **WebP** (Qualität 80)
+- ein echtes **GIF** (Bytes beginnen mit `GIF8`) bleibt unverändert, damit die Animation erhalten bleibt
+- Obergrenze **8 MB** (`MAX_IMAGE_BYTES`) vor dem Verkleinern
+
+Ein zweites Bild mit demselben Namen überschreibt nichts: `Store()` schreibt mit `flag: "wx"` und hängt bei einem vergebenen Namen `-2`, `-3` … an.
 
 ### Ein Bild
 
@@ -250,6 +265,25 @@ await interaction.update({ ...view, flags: MessageFlags.IsComponentsV2, attachme
 
 ---
 
+## Das Dashboard
+
+Die Sektion `#gallery` auf der Serverseite (`/guild/<id>/gallery`) kann dasselbe wie das Panel: Alben und Unteralben anlegen und löschen, Bilder hochladen, von einer URL holen, verschieben und löschen. Das Modul ist fest (`PERMANENT_MODULES`) und steht deshalb immer in der Leiste.
+
+| Methode | Pfad unter `/api/guild/:id/gallery` | Body |
+|---|---|---|
+| GET | — | — liefert `Overview()` |
+| POST | `/category` · `/category/delete` | `{ category, subcategory? }` |
+| POST | `/image` | rohe Bytes, `Content-Type: image/*`, Ziel und Name in der Query |
+| POST | `/image/url` | `{ url, category, subcategory? }` |
+| POST | `/image/move` | `{ image, category, subcategory? }` |
+| POST | `/image/delete` | `{ image }` |
+
+Beide Routen prüfen Sitzung und „Server verwalten". Schreibende Anfragen nehmen nur `application/json` bzw. `image/*` an (CSRF), und nur `/image` darf 8 MB Body tragen — der Bild-Parser in `Server.ts` hat absichtlich kein eigenes Limit.
+
+**Hochladen im Browser:** Knopf, leeres Album oder Ziehen auf das Raster. Die Seite schickt jede Datei einzeln per `XMLHttpRequest` (nur der meldet Upload-Fortschritt) und zeigt je Datei eine Kachel mit dem Bild aus dem Browser: *Wartet* → Prozent und Balken beim Senden → *Wird verkleinert* → das fertige Bild, kurz hervorgehoben. Zu große Dateien und fremde Formate scheitern sofort auf ihrer Kachel, ohne Netz. Die Grenze trägt der Client als `MAX_UPLOAD_BYTES` selbst; `check:dashboard` vergleicht sie mit `MAX_IMAGE_BYTES`.
+
+---
+
 ## Der Server
 
 | Route | Antwort |
@@ -292,7 +326,7 @@ Beim Download zusätzlich:
 - **Dateityp aus dem `Content-Type` der Antwort**, nicht aus der URL — eine URL auf `.png` sagt nichts darüber, was ankommt
 - Bei einem Abbruch wird die halbe Datei wieder gelöscht
 
-Kein Schutz gegen DNS-Rebinding — reicht, solange nur Administratoren Uploads auslösen.
+Gegen DNS-Rebinding prüft `LookupPublic` die Adresse erst im Moment des Verbindens, für die erste Anfrage wie für jede Weiterleitung; `CheckRedirect` lässt nur `https`-Sprünge zu. Details stehen als Kommentar in `src/constants/Gallery.ts`.
 
 ---
 
@@ -301,7 +335,7 @@ Kein Schutz gegen DNS-Rebinding — reicht, solange nur Administratoren Uploads 
 - **`Attach()` nicht vergessen.** `image.url` direkt in `.gallery()` funktioniert im Dev-Modus nicht.
 - **Beim `editReply` kein `ephemeral` mitschicken.** Nach einem `deferReply` steht das Flag fest, Discord lehnt Änderungen ab. `toMessage()` ohne Argument nehmen.
 - **`attachments: []` beim Bearbeiten**, sonst wachsen die Anhänge mit jeder Seite.
-- **Gleicher Dateiname überschreibt.** Ein Upload mit bereits vergebenem Namen ersetzt die Datei.
+- **Die Endung ändert sich.** Aus `logo.png` wird beim Speichern `logo.webp` — wer eine ID vorher zusammenbaut, trifft daneben. Die zurückgegebene `IGalleryEntry` benutzen.
 - **Der Default-Scope ist schreibgeschützt.** `CreateCategory`, `AddImage`, `MoveImage` und `DeleteImage` lehnen `guildId: "default"` ab.
 - **Select-Menüs fassen 25 Optionen.** Kategorien, Unterordner und Bildlisten werden abgeschnitten, das Panel weist darauf hin.
 - **Jeder Lesezugriff geht auf die Platte.** Für ein Panel mit ein paar Ordnern ist das kein Thema; wer die Galerie auf Tausende Bilder aufbohrt, braucht davor einen Cache.

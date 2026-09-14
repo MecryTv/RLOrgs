@@ -2197,10 +2197,65 @@ body.no-motion .hero__field .run{display:none}
 .galtile__act.is-danger:hover{color:var(--loss);border-color:var(--loss)}
 .galtile__act.is-sure{padding:0 10px;color:#fff;border-color:var(--loss);background:var(--loss)}
 
-/* Beim Hochladen: die Kachel steht schon da und atmet, bis das Bild kommt. */
-.galtile.is-busy .galtile__img{animation:galbusy 1.4s var(--ease) infinite}
-.galtile.is-busy .galtile__img svg{width:26px;height:26px;color:var(--text-3)}
-@keyframes galbusy{50%{background-color:rgba(255,255,255,.045)}}
+/* ---------- Hochladen ----------
+   Die Kachel zeigt das Bild aus dem Browser sofort. Ein Schleier weicht nach
+   oben, waehrend die Bytes zum Bot laufen, unten zaehlt der Balken mit. Danach
+   streicht ein blauer Streifen darueber, solange der Bot verkleinert. Die Phase
+   setzt GuildGallery.ts als data-phase; bewegt werden nur transform und opacity. */
+.galtile.is-busy .galtile__img{position:relative}
+.galtile.is-busy .galtile__img img{opacity:.6;filter:saturate(.35);transition:opacity var(--t-mid) var(--ease),filter var(--t-mid) var(--ease)}
+.galtile__veil{
+  position:absolute;inset:0;background:rgba(5,6,8,.74);
+  transform-origin:top;transform:scaleY(calc(1 - var(--p,0)));
+  transition:transform var(--t-mid) var(--ease);
+}
+.galtile__pct{
+  position:absolute;left:50%;top:50%;translate:-50% -50%;
+  display:inline-flex;align-items:center;padding:5px 11px;white-space:nowrap;
+  font-family:var(--f-accent);font-size:15px;font-weight:700;letter-spacing:.04em;color:#fff;
+  background:rgba(5,6,8,.88);
+  clip-path:polygon(var(--cut-sm) 0,100% 0,100% calc(100% - var(--cut-sm)),calc(100% - var(--cut-sm)) 100%,0 100%,0 var(--cut-sm));
+}
+.galtile__pct:empty{display:none}
+.galtile__pct svg{width:20px;height:20px}
+.galtile.is-busy .galtile__cap span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.galtile__bar{position:absolute;left:0;right:0;bottom:0;height:3px;overflow:hidden;background:rgba(255,255,255,.08)}
+.galtile__bar::before{
+  content:"";position:absolute;inset:0;background:var(--brand);
+  transform-origin:left;transform:scaleX(var(--p,0));transition:transform var(--t-mid) var(--ease);
+}
+
+/* Wartet auf seinen Platz in der Schlange. */
+.galtile[data-phase="queued"] .galtile__img img{opacity:.35}
+.galtile[data-phase="queued"] .galtile__veil{animation:galwait 1.6s ease-in-out infinite}
+@keyframes galwait{50%{opacity:.6}}
+
+/* Der Bot verkleinert: wie lange, weiss niemand - also kein Prozent, nur Bewegung. */
+.galtile[data-phase="shrink"] .galtile__img img{opacity:.9;filter:none}
+.galtile[data-phase="shrink"] .galtile__bar::before{background:var(--blue)}
+.galtile[data-phase="shrink"] .galtile__img::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(105deg,transparent 30%,color-mix(in srgb,var(--blue) 24%,transparent) 50%,transparent 70%);
+  transform:translateX(-100%);animation:galscan 1.3s cubic-bezier(.65,0,.35,1) infinite;
+}
+@keyframes galscan{to{transform:translateX(100%)}}
+
+/* Abgelehnt: bleibt stehen, bis jemand den Hinweis wegklickt. */
+.galtile[data-phase="failed"]{border-color:color-mix(in srgb,var(--loss) 55%,transparent)}
+.galtile[data-phase="failed"] .galtile__veil{transform:none;background:color-mix(in srgb,var(--loss) 14%,rgba(5,6,8,.82))}
+.galtile[data-phase="failed"] .galtile__pct{color:var(--loss)}
+.galtile[data-phase="failed"] .galtile__bar{display:none}
+.galtile[data-phase="failed"] .galtile__cap span{white-space:normal;font-family:var(--f-display);font-size:12px;font-weight:500;line-height:1.4;letter-spacing:0;text-transform:none;color:var(--loss)}
+.galtile__dismiss{position:absolute;top:8px;right:8px}
+.galtile.is-nudge{animation:galnudge .36s var(--ease)}
+@keyframes galnudge{20%,60%{transform:translateX(-4px)}40%,80%{transform:translateX(4px)}}
+
+/* Fertig: das neue Bild taucht an seinem sortierten Platz auf, ein Rahmen
+   in der Hausfarbe zeigt kurz, wo. */
+.galtile.is-new{animation:galnew var(--t-slow) var(--ease)}
+.galtile.is-new::after{content:"";position:absolute;inset:-1px;border:1px solid var(--brand);pointer-events:none;animation:galfade 1.6s var(--ease) forwards}
+@keyframes galnew{from{opacity:0;transform:scale(.94)}}
+@keyframes galfade{to{opacity:0}}
 
 /* Ablagefeld am Ende des Rasters: dieselbe Hoehe wie eine Kachel. */
 .galdrop{
@@ -2264,8 +2319,4 @@ body.no-motion .hero__field .run{display:none}
   .galtree__form{margin-top:10px}
   /* Zwei Spalten statt einer: auf dem Handy fuellte sonst ein Logo den Bildschirm. */
   .galgrid{grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px}
-}
-
-@media (prefers-reduced-motion:reduce){
-  .galtile.is-busy .galtile__img{animation:none}
 }
