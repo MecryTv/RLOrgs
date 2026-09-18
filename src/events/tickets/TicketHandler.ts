@@ -21,6 +21,7 @@ import {
     InfoView,
     ITicketView,
     MessageView,
+    OptionPickerView,
     PanelView,
     SummaryView,
     TicketValues,
@@ -92,6 +93,7 @@ export default class TicketHandler extends Event {
        ---------------------------------------------------------- */
     private async Component(interaction: MessageComponentInteraction, action: string, argument: string): Promise<void> {
         if (action === "open") return this.Open(interaction, argument);
+        if (action === "dm" && interaction.isButton()) return this.StartDirect(interaction);
         if (action === "act" && interaction.isStringSelectMenu()) return this.Action(interaction, Number(argument));
         if (action === "dmclose" && interaction.isButton()) return this.CloseFromDirect(interaction, Number(argument));
         if (action === "dmguild" && interaction.isStringSelectMenu()) return this.DirectGuild(interaction);
@@ -158,20 +160,50 @@ export default class TicketHandler extends Event {
                 )
             );
         } catch (error) {
-            if (!(error instanceof TicketError)) throw error;
-
-            // Für Gesperrte zeigt der Server seine eigene Absage statt eines Fehlers.
-            if (error.doc) {
-                const config = await this.client.ticketSettings.Of(guild.id);
-                const values = TicketValues(guild, config, { user: interaction.user });
-
-                await interaction.editReply(Edit(await MessageView(this.client, guild, config, error.doc, values)));
-
-                return;
-            }
-
-            await interaction.editReply(Edit(ErrorView(error.message)));
+            await this.Refuse(interaction, error);
         }
+    }
+
+    /** "Ticket per DM starten" im ModMail-Panel: Themenwahl per DM, bei einer Option gleich das Ticket. */
+    private async StartDirect(interaction: ButtonInteraction): Promise<void> {
+        const guild = interaction.guild;
+
+        if (!guild) return;
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
+            const { ticket, channelId } = await this.client.ticketService.OfferDirect(guild, interaction.user);
+            const builder = new ComponentV2Builder({ accentColor: "#35e07f" })
+                .text(
+                    ticket
+                        ? `📬 Dein Ticket ${TicketNumber(ticket.number)} ist offen – schreib mir einfach per DM.`
+                        : "📬 Schau in deine DMs – dort wählst du dein Thema."
+                )
+                .buttons({ url: `https://discord.com/channels/@me/${channelId}`, label: "Zur DM", emoji: "📬" });
+
+            await interaction.editReply(Edit({ components: [builder.build()], files: [] }));
+        } catch (error) {
+            await this.Refuse(interaction, error);
+        }
+    }
+
+    /** Warum ein Ticket nicht aufgeht - Gesperrte sehen die Absage des Servers statt eines Fehlers. */
+    private async Refuse(interaction: MessageComponentInteraction, error: unknown): Promise<void> {
+        const guild = interaction.guild;
+
+        if (!(error instanceof TicketError) || !guild) throw error;
+
+        if (error.doc) {
+            const config = await this.client.ticketSettings.Of(guild.id);
+            const values = TicketValues(guild, config, { user: interaction.user });
+
+            await interaction.editReply(Edit(await MessageView(this.client, guild, config, error.doc, values)));
+
+            return;
+        }
+
+        await interaction.editReply(Edit(ErrorView(error.message)));
     }
 
     private async ResetPanel(interaction: StringSelectMenuInteraction): Promise<void> {
@@ -554,26 +586,7 @@ export default class TicketHandler extends Event {
             return this.OpenFromDirect(interaction, guild.id, config.options[0]?.id ?? "");
         }
 
-        await interaction.update(
-            Edit({
-                components: [
-                    new ComponentV2Builder({ accentColor: "#ff1e2d" })
-                        .title(`🎫 | ${guild.name}`, "Worum geht es?")
-                        .select({
-                            customId: `${TICKET_PREFIX}:dmopt:${guild.id}`,
-                            placeholder: "Thema wählen …",
-                            options: config.options.slice(0, 25).map((option) => ({
-                                label: option.name,
-                                value: option.id,
-                                description: option.description || undefined,
-                                emoji: option.emoji ?? undefined,
-                            })),
-                        })
-                        .build(),
-                ],
-                files: [],
-            })
-        );
+        await interaction.update(Edit(OptionPickerView(guild, config)));
     }
 
     private async OpenFromDirect(interaction: StringSelectMenuInteraction, guildId: string, optionId: string): Promise<void> {

@@ -120,6 +120,8 @@ export default class DashboardApiTickets extends Route {
 
         return {
             config,
+            // Wo das Panel wirklich steht - null, wenn die Nachricht weg ist.
+            panel: await this.client.ticketService.PanelStatus(guild, config),
             guild: Resources(guild),
             actions: ActionEntries(this.client).map((entry) => ({
                 value: entry.value,
@@ -152,11 +154,19 @@ export default class DashboardApiTickets extends Route {
                 throw new TicketError("Wähle zuerst einen Kanal für das Panel.");
             }
 
-            const url = await this.client.ticketService.SendPanel(guild, body.channelId);
+            const { url, state } = await this.client.ticketService.SendPanel(guild, body.channelId);
 
-            logger.user(`🎫 Ticket-Panel auf ${guild.id} gesendet (von ${userId})`);
+            logger.user(`🎫 Ticket-Panel auf ${guild.id}: ${state} (von ${userId})`);
 
-            return { ok: true, url, config: await this.client.ticketSettings.Of(guild.id) };
+            return { ok: true, url, state };
+        }
+
+        if (body.action === "unpanel") {
+            const removed = await this.client.ticketService.RemovePanel(guild);
+
+            logger.user(`🎫 Ticket-Panel auf ${guild.id} entfernt (von ${userId})`);
+
+            return { ok: true, removed };
         }
 
         if (body.action === "unblock") {

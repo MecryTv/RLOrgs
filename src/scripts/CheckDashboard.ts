@@ -731,6 +731,29 @@ async function main(): Promise<void> {
     });
     check("Tickets-Schreiben nimmt nur JSON (CSRF)", ticketsAlsText.status === 415, `${ticketsAlsText.status}`);
 
+    // Transcripts: die Seite schickt ohne Sitzung zum Login und wieder zurück,
+    // ihre Anhänge und die Liste sagen 401 - nichts davon ist öffentlich.
+    const transcriptPage = await fetch(`${BASE}${P}/transcript/1`, MANUAL);
+    const transcriptBack = transcriptPage.headers.get("location") ?? "";
+    check("Transcript ohne Sitzung leitet zum Login", transcriptPage.status === 302, `${transcriptPage.status}`);
+    check("  und kommt danach zum Transcript zurück", transcriptBack.includes(encodeURIComponent(`${P}/transcript/1`)), transcriptBack);
+
+    const transcriptFile = await fetch(`${BASE}${P}/transcript/1/0.png`, MANUAL);
+    check("Transcript-Anhang ohne Sitzung ist 401", transcriptFile.status === 401, `${transcriptFile.status}`);
+
+    const transcriptOdd = await fetch(`${BASE}${P}/transcript/1/geheim.env`, MANUAL);
+    check("Nur Anhang-Namen, die der Bot vergibt", transcriptOdd.status === 404, `${transcriptOdd.status}`);
+
+    const transcriptsApi = await fetch(`${BASE}${P}/api/guild/${id}/transcripts`, MANUAL);
+    check("Transcript-Liste ohne Sitzung ist 401", transcriptsApi.status === 401, `${transcriptsApi.status}`);
+
+    const transcriptsAlsText = await fetch(`${BASE}${P}/api/guild/${id}/transcripts`, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "text/plain" },
+        body: JSON.stringify({ action: "delete", id: 1 }),
+    });
+    check("Transcript-Löschen nimmt nur JSON (CSRF)", transcriptsAlsText.status === 415, `${transcriptsAlsText.status}`);
+
     const activityApi = await fetch(`${BASE}${P}/api/guild/${id}/activity`, MANUAL);
     check("Aktivität ohne Sitzung ist 401", activityApi.status === 401, `${activityApi.status}`);
 

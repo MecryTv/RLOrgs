@@ -17,7 +17,7 @@ import {
 } from "../constants/Tickets";
 import { ITicketConfig } from "../interfaces/services/tickets/ITicket";
 
-export const SETUP_PAGES = ["start", "options", "actions", "messages", "panel"] as const;
+export const SETUP_PAGES = ["start", "options", "actions", "messages", "transcripts", "panel"] as const;
 export type SetupPage = (typeof SETUP_PAGES)[number];
 
 const PAGE_LABELS: Record<SetupPage, { name: string; description: string; emoji: string }> = {
@@ -25,6 +25,7 @@ const PAGE_LABELS: Record<SetupPage, { name: string; description: string; emoji:
     options: { name: "Öffnungs-Optionen", description: "Wofür Tickets aufgemacht werden", emoji: "🗂️" },
     actions: { name: "Aktionen", description: "Was im Ticket zur Auswahl steht", emoji: "🧰" },
     messages: { name: "Nachrichten", description: "Panel, Eröffnung, Abschluss und mehr", emoji: "✉️" },
+    transcripts: { name: "Transcripts", description: "Verlauf speichern, Log-Kanal, Kopie per DM", emoji: "📄" },
     panel: { name: "Panel senden", description: "Wo das Ticket-Panel steht", emoji: "📮" },
 };
 
@@ -218,16 +219,52 @@ function Messages(builder: ComponentV2Builder, config: ITicketConfig): void {
         });
 }
 
-function Panel(builder: ComponentV2Builder, config: ITicketConfig, state: ISetupState): void {
-    const target = state.panelChannelId ?? config.panel.channelId;
+function Transcripts(builder: ComponentV2Builder, config: ITicketConfig): void {
+    const { enabled, channelId, dm } = config.transcripts;
+    const modmail = config.contact === "modmail";
 
     builder
         .text(
             [
-                config.panel.channelId
-                    ? `Das Panel steht in <#${config.panel.channelId}>.`
-                    : "Das Panel wurde noch nirgends gesendet.",
-                target ? `Senden nach: <#${target}>` : "Wähle unten einen Kanal.",
+                `**Transcripts:** ${enabled ? "an – jedes geschlossene Ticket steht im Dashboard unter Transcriptions" : "aus"}`,
+                `**Log-Kanal:** ${channelId ? `<#${channelId}>` : "_keiner_"}`,
+                `**Kopie per DM an den Ersteller:** ${dm ? "an" : "aus"}${modmail ? " _(bei ModMail entfällt sie – das Gespräch steht schon in seinen DMs)_" : ""}`,
+            ].join("\n")
+        )
+        .subtext("Ein Transcript zeigt den ganzen Verlauf im Discord-Look – auch Components V2, Bilder und Anhänge.")
+        .buttons(
+            { customId: `${SETUP_PREFIX}:trsave`, label: `Transcripts: ${enabled ? "an" : "aus"}`, emoji: "🔁" },
+            { customId: `${SETUP_PREFIX}:trdm`, label: `DM an Ersteller: ${dm ? "an" : "aus"}`, emoji: "🔁", disabled: !enabled },
+            { customId: `${SETUP_PREFIX}:trnone`, label: "Kein Log-Kanal", emoji: "🚫", disabled: !channelId }
+        )
+        .channelSelect({
+            customId: `${SETUP_PREFIX}:trchan`,
+            channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+            placeholder: "Log-Kanal für Transcripts wählen …",
+            disabled: !enabled,
+        });
+}
+
+async function Panel(
+    builder: ComponentV2Builder,
+    client: BotClient,
+    guild: Guild,
+    config: ITicketConfig,
+    state: ISetupState
+): Promise<void> {
+    const placed = await client.ticketService.PanelStatus(guild, config);
+    const target = state.panelChannelId ?? placed?.channelId ?? null;
+    const here = placed !== null && target === placed.channelId;
+
+    builder
+        .text(
+            [
+                placed ? `Das Panel steht in <#${placed.channelId}>. [Zur Nachricht](${placed.url})` : "Gerade steht nirgends ein Panel.",
+                !target
+                    ? "Wähle unten einen Kanal."
+                    : here
+                      ? "Ein Klick bringt es auf den neuen Stand – ein zweites Panel gibt es nicht."
+                      : `Ziel: <#${target}>${placed ? " – das alte Panel verschwindet dann." : ""}`,
                 config.options.length === 0 ? "\n⚠️ Ohne Öffnungs-Option kann das Panel nicht gesendet werden." : "",
             ]
                 .filter(Boolean)
@@ -238,13 +275,16 @@ function Panel(builder: ComponentV2Builder, config: ITicketConfig, state: ISetup
             channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
             placeholder: "Kanal für das Panel wählen …",
         })
-        .buttons({
-            customId: `${SETUP_PREFIX}:send`,
-            label: config.panel.messageId ? "Panel neu senden" : "Panel senden",
-            emoji: "📮",
-            tone: "primary",
-            disabled: !target || config.options.length === 0,
-        });
+        .buttons(
+            {
+                customId: `${SETUP_PREFIX}:send`,
+                label: !placed ? "Panel senden" : here ? "Panel aktualisieren" : "Panel hierher umziehen",
+                emoji: "📮",
+                tone: "primary",
+                disabled: !target || config.options.length === 0,
+            },
+            { customId: `${SETUP_PREFIX}:unpanel`, label: "Panel entfernen", emoji: "🗑️", tone: "danger", disabled: !placed }
+        );
 }
 
 /** Der Assistent von /ticket setup - eine Seite nach der anderen. */
@@ -273,7 +313,8 @@ export async function SetupView(client: BotClient, guild: Guild, state: ISetupSt
     else if (state.page === "options") Options(builder, config, state);
     else if (state.page === "actions") Actions(builder, client, config);
     else if (state.page === "messages") Messages(builder, config);
-    else Panel(builder, config, state);
+    else if (state.page === "transcripts") Transcripts(builder, config);
+    else await Panel(builder, client, guild, config, state);
 
     return { components: [builder.build()], files: [] };
 }

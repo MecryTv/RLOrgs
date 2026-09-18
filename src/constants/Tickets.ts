@@ -32,7 +32,6 @@ export const CONTACT_LABELS: Record<TicketContact, string> = { direct: "Klassisc
 export const SURFACE_LABELS: Record<TicketSurface, string> = { channel: "Kanal", forum: "Forum-Post" };
 export const STYLE_LABELS: Record<PanelStyle, string> = { buttons: "Buttons", select: "Auswahlmenü" };
 
-/** Die sechs Nachrichten, die sich bearbeiten lassen. */
 /**
  * Die Nachrichten, die sich bearbeiten lassen. Das Panel gibt es zweimal: bei
  * ModMail erklärt es, dass man dem Bot schreibt - umgestellt wird so nie der
@@ -119,7 +118,7 @@ export const DEFAULT_MESSAGES: Record<TicketMessageKey, IMessageDoc> = {
     ),
     modmailPanel: Text(
         "#ff1e2d",
-        "# 📬 Support per DM\nSchreib {bot} einfach eine Direktnachricht – dein Anliegen landet direkt beim Team von **{guild}**, und die Antwort kommt ebenfalls per DM.\nOder wähle unten dein Thema, dann melde ich mich bei dir.\n-# Damit das klappt, müssen Direktnachrichten von Servermitgliedern erlaubt sein."
+        "# 📬 Support per DM\nKlick unten auf **Ticket per DM starten** – ich schreibe dir, und du wählst dein Thema direkt in der DM. Du kannst {bot} auch einfach selbst anschreiben.\nDein Anliegen landet beim Team von **{guild}**, die Antwort kommt ebenfalls per DM.\n-# Damit das klappt, müssen Direktnachrichten von Servermitgliedern erlaubt sein."
     ),
     opened: Text(
         "#00afff",
@@ -135,6 +134,27 @@ export const DEFAULT_MESSAGES: Record<TicketMessageKey, IMessageDoc> = {
         "## ❄️ Ticket eingefroren\nDas Team hat das Ticket kurz angehalten. Du kannst gerade nicht schreiben – wir melden uns."
     ),
     blacklisted: Text("#ff4d5e", "## 🚫 Gesperrt\nDu kannst auf **{guild}** keine Tickets mehr öffnen."),
+};
+
+/**
+ * Der erste Standardtext des ModMail-Panels - er versprach Themen unter dem
+ * Text, die dort nicht mehr stehen. Wer ihn nie angefasst hat, bekommt beim
+ * Lesen den neuen (TicketSettings.Of); ein eigener Text bleibt, wie er ist.
+ */
+export const LEGACY_MODMAIL_PANEL =
+    "# 📬 Support per DM\nSchreib {bot} einfach eine Direktnachricht – dein Anliegen landet direkt beim Team von **{guild}**, und die Antwort kommt ebenfalls per DM.\nOder wähle unten dein Thema, dann melde ich mich bei dir.\n-# Damit das klappt, müssen Direktnachrichten von Servermitgliedern erlaubt sein.";
+
+/** Was SendPanel getan hat: neu geschickt, an Ort und Stelle bearbeitet oder umgezogen. */
+export type PanelState = "sent" | "updated" | "moved";
+
+/** Die Rückmeldung dazu - {channel} wird der Kanal. */
+export const PANEL_STATES: Record<PanelState, { title: string; text: string }> = {
+    sent: { title: "Panel gesendet", text: "Das Ticket-Panel steht jetzt in {channel}." },
+    updated: {
+        title: "Panel aktualisiert",
+        text: "In {channel} stand schon ein Panel – es ist jetzt auf dem neuen Stand. Ein zweites schicke ich nicht.",
+    },
+    moved: { title: "Panel umgezogen", text: "Das Panel steht jetzt in {channel}, das alte habe ich entfernt." },
 };
 
 export function DefaultConfig(): ITicketConfig {
@@ -162,6 +182,7 @@ export function DefaultConfig(): ITicketConfig {
         messages: structuredClone(DEFAULT_MESSAGES),
         tags: { low: null, normal: null, high: null, claimed: null, closed: null },
         panel: { channelId: null, messageId: null },
+        transcripts: { enabled: true, channelId: null, dm: false },
     };
 }
 

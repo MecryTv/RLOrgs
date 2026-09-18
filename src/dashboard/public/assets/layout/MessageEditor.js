@@ -8,6 +8,7 @@
  */
 import { icon } from "../core/Dom.js";
 import { fill, PLACEHOLDERS } from "../constants/Placeholders.js";
+import { emojiNode } from "./EmojiPicker.js";
 import { galleryUrl, pickImage } from "./ImagePicker.js";
 /** Dieselben Kosten wie im Bot (src/builder/MessageDoc.ts). */
 const COST = { text: 1, image: 1, separator: 1, section: 3 };
@@ -257,7 +258,7 @@ export function renderEditor(host, doc, context) {
 /* ----------------------------------------------------------
    Vorschau
    ---------------------------------------------------------- */
-const INLINE = /(\*\*.+?\*\*|__.+?__|\*.+?\*|~~.+?~~|`[^`]+`|\[[^\]]+\]\([^)\s]+\)|<@&?\d+>|<#\d+>|<t:\d+(?::[tTdDfFR])?>)/g;
+const INLINE = /(\*\*.+?\*\*|__.+?__|\*.+?\*|~~.+?~~|`[^`]+`|\[[^\]]+\]\([^)\s]+\)|<a?:\w{2,32}:\d{17,20}>|<@&?\d+>|<#\d+>|<t:\d+(?::[tTdDfFR])?>)/g;
 function mention(token, context) {
     const pill = document.createElement("span");
     pill.className = "tkmention";
@@ -279,6 +280,10 @@ function inline(text, host, context) {
     for (const part of text.split(INLINE)) {
         if (!part)
             continue;
+        if (/^<a?:\w{2,32}:\d{17,20}>$/.test(part)) {
+            host.append(emojiNode(part, context.emojis ?? [], "tkemoji"));
+            continue;
+        }
         if (part.startsWith("<@") || part.startsWith("<#")) {
             host.append(mention(part, context));
             continue;

@@ -9,7 +9,6 @@ import {
     ModalSubmitInteraction,
     PermissionFlagsBits,
     RoleSelectMenuInteraction,
-    StringSelectMenuInteraction,
     TextInputBuilder,
     TextInputStyle,
 } from "discord.js";
@@ -18,7 +17,14 @@ import Event from "../../structures/Event";
 import ComponentV2Builder from "../../builder/ComponentV2Builder";
 import { ISetupState, SetupPage, SetupStates, SetupView } from "../../builder/TicketSetupPanel";
 import { TicketError } from "../../services/TicketService";
-import { MESSAGE_KEYS, MESSAGE_LABELS, SETUP_PREFIX, TicketAction, TicketMessageKey } from "../../constants/Tickets";
+import {
+    MESSAGE_KEYS,
+    MESSAGE_LABELS,
+    PANEL_STATES,
+    SETUP_PREFIX,
+    TicketAction,
+    TicketMessageKey,
+} from "../../constants/Tickets";
 import { IMessageBlock, IMessageDoc } from "../../interfaces/builder/IMessageDoc";
 import { ITicketConfig, ITicketOption } from "../../interfaces/services/tickets/ITicket";
 
@@ -166,6 +172,30 @@ export default class TicketSetupHandler extends Event {
             return this.Show(interaction, state);
         }
 
+        if (action === "trsave") {
+            await this.Patch(guild.id, { transcripts: { ...config.transcripts, enabled: !config.transcripts.enabled } }, state);
+
+            return this.Show(interaction, state);
+        }
+
+        if (action === "trdm") {
+            await this.Patch(guild.id, { transcripts: { ...config.transcripts, dm: !config.transcripts.dm } }, state);
+
+            return this.Show(interaction, state);
+        }
+
+        if (action === "trchan" && interaction.isChannelSelectMenu()) {
+            await this.Patch(guild.id, { transcripts: { ...config.transcripts, channelId: this.Channel(interaction) } }, state);
+
+            return this.Show(interaction, state);
+        }
+
+        if (action === "trnone") {
+            await this.Patch(guild.id, { transcripts: { ...config.transcripts, channelId: null } }, state, "Kein Log-Kanal mehr.");
+
+            return this.Show(interaction, state);
+        }
+
         if (action === "pick" && interaction.isStringSelectMenu()) {
             state.optionId = interaction.values[0];
 
@@ -217,9 +247,17 @@ export default class TicketSetupHandler extends Event {
 
             if (!channelId) throw new TicketError("Wähle zuerst einen Kanal.");
 
-            const url = await this.client.ticketService.SendPanel(guild, channelId);
+            const { url, state: placed } = await this.client.ticketService.SendPanel(guild, channelId);
 
-            state.notice = `📮 Panel steht in <#${channelId}>. [Ansehen](${url})`;
+            state.notice = `📮 ${PANEL_STATES[placed].text.replace("{channel}", `<#${channelId}>`)} [Ansehen](${url})`;
+
+            return this.Show(interaction, state);
+        }
+
+        if (action === "unpanel") {
+            const removed = await this.client.ticketService.RemovePanel(guild);
+
+            state.notice = removed ? "🗑️ Panel entfernt." : "Es stand kein Panel mehr da – jetzt ist es auch vergessen.";
 
             return this.Show(interaction, state);
         }

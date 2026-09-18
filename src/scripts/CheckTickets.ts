@@ -14,10 +14,11 @@
 process.env.CLIENT_SECRET ||= "check-secret";
 process.env.DEV_CLIENT_SECRET ||= "check-secret";
 
-import { ChannelType, Guild } from "discord.js";
+import { ChannelType, Guild, Message } from "discord.js";
 import BotClient from "../client/BotClient";
 import { CleanDoc, IsImageSource } from "../builder/MessageDoc";
-import { MenuOptions, PanelView } from "../builder/TicketPanel";
+import { IsPanelMessage, MenuOptions, PanelView } from "../builder/TicketPanel";
+import { Duration, RenderTranscript } from "../builder/TranscriptHtml";
 import { Fill, PLACEHOLDER_KEYS } from "../constants/Placeholders";
 import {
     ACTIONS,
@@ -26,10 +27,13 @@ import {
     DefaultConfig,
     DELETE_NOW,
     DeleteLabel,
+    LEGACY_MODMAIL_PANEL,
     MESSAGE_KEYS,
     TicketNumber,
 } from "../constants/Tickets";
+import { AttachmentKey } from "../constants/Transcripts";
 import { ITicket, ITicketConfig } from "../interfaces/services/tickets/ITicket";
+import { ITranscript, ITranscriptMessage, ITranscriptUser } from "../interfaces/services/tickets/ITranscript";
 import { SlowmodeLabel } from "../services/TicketService";
 
 // Erfundene Snowflakes - 17-stellig wie echte, aber es gibt sie bei Discord nicht.
@@ -40,6 +44,7 @@ const ROLE = "90071992547409994";
 const CATEGORY = "90071992547409995";
 const FORUM = "90071992547409996";
 const BOT = "90071992547409997";
+const TEXT = "90071992547409998";
 
 let failures = 0;
 
@@ -58,6 +63,7 @@ function FakeGuild(): Guild {
             cache: new Map([
                 [CATEGORY, { id: CATEGORY, type: ChannelType.GuildCategory }],
                 [FORUM, { id: FORUM, type: ChannelType.GuildForum }],
+                [TEXT, { id: TEXT, type: ChannelType.GuildText }],
             ]),
         },
     } as unknown as Guild;
@@ -85,6 +91,8 @@ function FakeTicket(patch: Partial<ITicket> = {}): ITicket {
         deleteAt: null,
         createdAt: new Date(),
         closedAt: null,
+        closedBy: null,
+        closeReason: null,
         ...patch,
     };
 }
@@ -228,6 +236,15 @@ function checkClean(client: BotClient): void {
 
     check("Eine Option ohne Namen wird abgelehnt", thrown instanceof Error, String(thrown));
     check("Emoji-Prüfung: Unicode ja, Buchstaben nein", client.ticketService.CleanEmoji("✅") === "✅" && client.ticketService.CleanEmoji("abc") === null);
+
+    const archived = client.ticketService.Clean(guild, { transcripts: { enabled: false, channelId: TEXT, dm: true } }, config);
+    const partial = client.ticketService.Clean(guild, { transcripts: { dm: false } }, archived);
+    const invented = client.ticketService.Clean(guild, { transcripts: { channelId: FORUM } }, archived);
+
+    check("Transcripts: Schalter und Log-Kanal werden übernommen", !archived.transcripts.enabled && archived.transcripts.channelId === TEXT && archived.transcripts.dm);
+    check("Transcripts: was fehlt, bleibt stehen", !partial.transcripts.enabled && partial.transcripts.channelId === TEXT && !partial.transcripts.dm);
+    check("Transcripts: der Log-Kanal muss ein Textkanal sein", invented.transcripts.channelId === null, String(invented.transcripts.channelId));
+    check("Transcripts: ohne Angabe bleibt alles, wie es war", client.ticketService.Clean(guild, {}, archived).transcripts.channelId === TEXT);
 }
 
 function checkMenu(client: BotClient): void {
@@ -252,8 +269,9 @@ function checkMenu(client: BotClient): void {
 }
 
 /**
- * Das Panel: Klassisch zeigt den normalen Text, ModMail den DM-Hinweis mit einem
- * Knopf zum Bot - die Themen bleiben in beiden Fällen stehen.
+ * Das Panel: Klassisch zeigt Text und Themen, ModMail nur den DM-Hinweis mit
+ * einem Knopf - die Themen kommen dort erst per DM. Dazu die Erkennung, die
+ * ein zweites Panel im selben Kanal verhindert.
  */
 async function checkPanel(client: BotClient): Promise<void> {
     console.log("\n  — Panel —");
@@ -274,17 +292,213 @@ async function checkPanel(client: BotClient): Promise<void> {
         JSON.stringify(view.components.map((component) => component.toJSON()));
 
     const config = DefaultConfig();
-    const direct = text(await PanelView(client, guild, config));
+    const directView = await PanelView(client, guild, config);
+    const direct = text(directView);
 
     config.contact = "modmail";
 
-    const modmail = text(await PanelView(client, guild, config));
+    const modmailView = await PanelView(client, guild, config);
+    const modmail = text(modmailView);
 
-    check("Klassisch: das normale Panel ohne Link zum Bot", direct.includes("Support") && !direct.includes("discord.com/users/"));
+    check("Klassisch: Text und Themen", direct.includes("Support") && direct.includes("ticket:open:support"));
     check("ModMail: der DM-Hinweis steht im Panel", modmail.includes("Support per DM"), modmail.slice(0, 160));
     check("ModMail: {bot} wird zur Erwähnung des Bots", modmail.includes(`<@${BOT}>`));
-    check("ModMail: ein Knopf führt zum Bot", modmail.includes(`https://discord.com/users/${BOT}`));
-    check("ModMail: die Themen bleiben stehen", modmail.includes("ticket:open:support"));
+    check("ModMail: ein Knopf startet das Ticket per DM", modmail.includes('"custom_id":"ticket:dm"'));
+    check("ModMail: keine Themen im Kanal", !modmail.includes("ticket:open"), modmail.slice(0, 200));
+    check("ModMail: kein Link aufs Profil mehr", !modmail.includes("discord.com/users/"));
+
+    const message = (author: string, components: unknown[]) => ({ author: { id: author }, components }) as unknown as Message;
+
+    check("Ein Panel des Bots wird erkannt (Klassisch)", IsPanelMessage(message(BOT, directView.components), BOT));
+    check("Ein Panel des Bots wird erkannt (ModMail)", IsPanelMessage(message(BOT, modmailView.components), BOT));
+    check("Fremde Nachrichten sind kein Panel", !IsPanelMessage(message(USER, directView.components), BOT));
+    check("Eine Bot-Nachricht ohne Panel-Knöpfe ist keins", !IsPanelMessage(message(BOT, []), BOT));
+}
+
+/* ----------------------------------------------------------
+   Transcripts
+   ---------------------------------------------------------- */
+const CDN = "https://cdn.discordapp.com/attachments/1/2";
+
+function Person(id: string, name: string, bot = false): ITranscriptUser {
+    return { id, name, avatar: `https://cdn.discordapp.com/avatars/${id}/abc.webp`, bot, color: bot ? null : "#35e07f" };
+}
+
+function Line(id: string, author: ITranscriptUser, at: number, patch: Partial<ITranscriptMessage> = {}): ITranscriptMessage {
+    return { id, type: 0, author, at, edited: null, content: "", reply: null, embeds: [], components: [], files: [], stickers: [], reactions: [], ...patch };
+}
+
+/** Ein Verlauf mit allem, was vorkommt: Markdown, Embeds, Components V2, Anhänge - und Versuche, HTML einzuschleusen. */
+function SampleTranscript(): ITranscript {
+    const opener = Person(USER, "Kunde");
+    const staff = Person(STAFF, "Helfer");
+    const bot = Person(BOT, "RL Nexus", true);
+    const start = Date.UTC(2026, 8, 18, 10, 0);
+
+    return {
+        version: 1,
+        ticketId: 1,
+        number: 42,
+        guild: { id: GUILD, name: "Check-Server", icon: null },
+        channel: { id: "1", name: "support-0042" },
+        meta: {
+            optionId: "support",
+            option: "Support",
+            contact: "direct",
+            opener,
+            claimer: staff,
+            closer: staff,
+            reason: "Erledigt",
+            members: [STAFF],
+            openedAt: start,
+            closedAt: start + 134 * 60_000,
+            messages: 6,
+            files: 3,
+            participants: [opener, staff],
+        },
+        messages: [
+            Line("10", bot, start, {
+                components: [
+                    {
+                        type: 17,
+                        accent_color: 0xff1e2d,
+                        components: [
+                            { type: 10, content: `## Ticket #0042 · Support\nHallo <@${USER}>` },
+                            {
+                                type: 9,
+                                components: [{ type: 10, content: "Abschnitt" }],
+                                accessory: { type: 11, media: { url: "https://example.com/bild.png" } },
+                            },
+                            { type: 12, items: [{ media: { url: "https://example.com/a.png" } }, { media: { url: "https://example.com/b.png" } }] },
+                            { type: 14, divider: true, spacing: 2 },
+                            { type: 13, file: { url: "attachment://regeln.pdf" } },
+                            { type: 1, components: [{ type: 2, style: 1, label: "Claim", custom_id: "x", emoji: { name: "✅" } }] },
+                            {
+                                type: 1,
+                                components: [
+                                    {
+                                        type: 3,
+                                        custom_id: "ticket:act:1",
+                                        placeholder: "⚙️ | Aktion wählen …",
+                                        options: [{ label: "Schließen", value: "close", description: "Ticket schließen" }],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+                files: [
+                    { name: "regeln.pdf", size: 2048, type: "application/pdf", url: `${CDN}/regeln.pdf?ex=1`, width: null, height: null, spoiler: false, description: null },
+                ],
+            }),
+            Line("11", opener, start + 60_000, {
+                content: [
+                    `**fett** *kursiv* __unter__ ~~weg~~ \`code\` ||geheim|| <@&${ROLE}> <#${TEXT}> <:nexus:${BOT}> <t:1789725600:F>`,
+                    "# Titel",
+                    "- Punkt",
+                    "> Zitat",
+                    "[Link](https://example.com/a?b=1&c=2) https://example.org/x.",
+                    "```js",
+                    'const a = "<b>";',
+                    "```",
+                ].join("\n"),
+            }),
+            Line("12", opener, start + 120_000, {
+                content: '<script>alert(1)</script> "><img src=x onerror=alert(1)> [x](javascript:alert(1))',
+                files: [
+                    { name: "screen.png", size: 4096, type: "image/png", url: `${CDN}/screen.png?ex=1`, width: 10, height: 10, spoiler: false, description: null },
+                    { name: "weg.png", size: 4096, type: "image/png", url: `${CDN}/weg.png?ex=1`, width: 10, height: 10, spoiler: false, description: null },
+                ],
+                reactions: [{ emoji: "👍", count: 2 }],
+            }),
+            Line("13", staff, start + 180_000, {
+                content: "Antwort",
+                reply: "12",
+                embeds: [{ title: "Embed", description: "**Beschreibung**", color: 0x00afff, fields: [{ name: "Feld", value: "Wert", inline: true }] }],
+            }),
+            Line("14", { ...staff, id: "5", name: "Check-Server Team", bot: true, color: null }, start + 240_000, { content: "anonym" }),
+            Line("15", staff, start + 300_000, { type: 6 }),
+        ],
+        mentions: { users: { [USER]: "Kunde" }, roles: { [ROLE]: { name: "Support", color: "#ff1e2d" } }, channels: { [TEXT]: "allgemein" } },
+        media: { "/attachments/1/2/screen.png": "0.png", "/attachments/1/2/regeln.pdf": "1.pdf" },
+        truncated: false,
+    };
+}
+
+async function checkTranscripts(client: BotClient): Promise<void> {
+    console.log("\n  — Transcripts —");
+
+    const transcript = SampleTranscript();
+    const html = RenderTranscript(transcript, { file: (stored) => `/files/${stored}`, bar: { back: "/zurueck", download: "/laden" } });
+    const has = (text: string) => html.includes(text);
+
+    check("Ein Skript bleibt Text", !has("<script>alert") && has("&lt;script&gt;alert(1)&lt;/script&gt;"));
+    check("Ein eingeschleustes Bild bleibt Text", !has("<img src=x") && has("&lt;img src=x"));
+    check("javascript:-Links werden keine Links", !has('href="javascript:'));
+    check("Die Seite verbietet Skripte selbst", has("Content-Security-Policy") && has("default-src 'none'"));
+    check(
+        "Markdown: fett, kursiv, unterstrichen, durchgestrichen",
+        has("<strong>fett</strong>") && has("<em>kursiv</em>") && has("<u>unter</u>") && has("<s>weg</s>")
+    );
+    check(
+        "Markdown: Code, Codeblock, Spoiler",
+        has("<code>code</code>") && has("<pre><code>const a = &quot;&lt;b&gt;&quot;;</code></pre>") && has('class="spoiler"')
+    );
+    check("Markdown: Überschrift, Liste, Zitat", has('class="h1">Titel') && has("<ul><li>Punkt</li></ul>") && has("<blockquote>"));
+    check(
+        "Links: & bleibt heil, der Punkt am Ende gehört nicht dazu",
+        has('href="https://example.com/a?b=1&amp;c=2"') && has('href="https://example.org/x"')
+    );
+    check("Erwähnungen tragen Namen", has("@Kunde") && has("@Support") && has("#allgemein") && has("--role:#ff1e2d"));
+    check("Server-Emojis werden Bilder", has(`cdn.discordapp.com/emojis/${BOT}.webp`));
+    check("Zeitstempel werden ein Datum", has('class="stamp"') && has("2026"));
+    check("V2: Container mit Akzentfarbe", has('class="container" style="--c:#ff1e2d"'));
+    check("V2: Abschnitt mit Vorschaubild", has('class="section"') && has('class="thumb"'));
+    check(
+        "V2: Galerie, Trenner, Knopf, Menü",
+        has("gallery gallery--2") && has('class="sep sep--large"') && has("btn btn--1") && has('class="choices"')
+    );
+    check("V2: Datei-Komponente zeigt auf die gesicherte Kopie", has('href="/files/1.pdf"'));
+    check("V2: die Datei steht nicht noch einmal darunter", html.split("regeln.pdf").length - 1 === 1, String(html.split("regeln.pdf").length - 1));
+    check("Gesicherte Bilder kommen von der eigenen Adresse", has('src="/files/0.png"'));
+    check(
+        "Nicht gesicherte Anhänge sind als solche markiert",
+        has("nicht gesichert") && !has('src="https://cdn.discordapp.com/attachments/1/2/weg.png')
+    );
+    check("Embeds: Titel, Farbe, Felder", has('class="embed" style="--c:#00afff"') && has("embed__field is-inline"));
+    check("Antworten verweisen auf die Originalnachricht", has('class="reply" href="#m-12"'));
+    check("Reaktionen mit Zahl", has('class="reaction"') && has("<b>2</b>"));
+    check("Bots und Webhooks tragen das BOT-Schild", html.split('class="tag"').length - 1 === 2, String(html.split('class="tag"').length - 1));
+    check("Anpinnen erscheint als Systemzeile", has("hat eine Nachricht angepinnt"));
+    check(
+        "Dieselbe Person kurz nacheinander ohne neuen Kopf",
+        !has('class="msg msg--head" id="m-12"') && has('class="msg msg--head" id="m-11"')
+    );
+    check("Kopf: Dauer und Grund", has("2 Std. 14 Min.") && has("Erledigt") && Duration(26 * 60 * 60_000) === "1 Tag 2 Std.");
+    check(
+        "Online gibt es den Weg zurück, als Datei nicht",
+        has('href="/zurueck"') && !RenderTranscript(transcript, { file: () => null }).includes('class="bar"')
+    );
+
+    check(
+        "Anhang-Schlüssel: CDN und Media-Proxy sind derselbe",
+        AttachmentKey(`${CDN}/a.png?ex=1`) === AttachmentKey("https://media.discordapp.net/attachments/1/2/a.png?x=2")
+    );
+    check(
+        "Anhang-Schlüssel: fremde Hosts und http gibt es nicht",
+        AttachmentKey("https://example.com/attachments/1/2/a.png") === null && AttachmentKey("http://cdn.discordapp.com/attachments/1/2/a.png") === null
+    );
+
+    const entry = { ticketId: 1, guildId: GUILD, number: 42, meta: transcript.meta };
+    const modmail = { ...entry, meta: { ...transcript.meta, contact: "modmail" as const } };
+
+    check("Klassisch: der Ersteller darf sein Transcript öffnen", await client.transcriptService.CanRead(USER, entry));
+    check("Klassisch: hinzugefügte User auch", await client.transcriptService.CanRead(STAFF, entry));
+    check("ModMail: der Ersteller sieht die Team-Seite nicht", !(await client.transcriptService.CanRead(USER, modmail)));
+    check(
+        "Anhänge nur unter Namen, die der Bot vergibt",
+        client.transcriptService.FilePath(entry, "../../.env") === null && client.transcriptService.FilePath(entry, "0.png") !== null
+    );
 }
 
 async function checkDatabase(client: BotClient): Promise<void> {
@@ -345,6 +559,64 @@ async function checkDatabase(client: BotClient): Promise<void> {
 
     check("Eine Kopie verändert den Cache nicht", (await client.ticketSettings.Of(GUILD)).options[0].name === "Support");
 
+    // Der alte Standardtext des ModMail-Panels versprach Themen, die es dort nicht mehr gibt.
+    const legacy = DefaultConfig();
+
+    legacy.messages.modmailPanel = { accent: "#ff1e2d", blocks: [{ type: "text", body: LEGACY_MODMAIL_PANEL }] };
+    await client.ticketSettings.Save(GUILD, legacy);
+
+    const migrated = (await client.ticketSettings.Of(GUILD)).messages.modmailPanel.blocks[0];
+
+    check(
+        "Der alte ModMail-Standardtext wird durch den neuen ersetzt",
+        migrated?.type === "text" && migrated.body !== LEGACY_MODMAIL_PANEL && migrated.body.includes("Ticket per DM starten")
+    );
+
+    legacy.messages.modmailPanel = { blocks: [{ type: "text", body: "Eigener Text" }] };
+    await client.ticketSettings.Save(GUILD, legacy);
+
+    const own = (await client.ticketSettings.Of(GUILD)).messages.modmailPanel.blocks[0];
+
+    check("Ein eigener Text bleibt, wie er ist", own?.type === "text" && own.body === "Eigener Text");
+
+    const older = DefaultConfig() as Partial<ITicketConfig>;
+
+    delete older.transcripts;
+    await client.ticketSettings.Save(GUILD, older as ITicketConfig);
+
+    check("Ältere Einstellungen bekommen die Transcript-Standards", (await client.ticketSettings.Of(GUILD)).transcripts.enabled === true);
+
+    // Transcripts
+    const transcript = SampleTranscript();
+
+    transcript.ticketId = first.id;
+    transcript.number = first.number;
+    await client.ticketTranscripts.Save(transcript);
+
+    const entry = await client.ticketTranscripts.Entry(first.id);
+    const read = await client.ticketTranscripts.Read(first.id);
+
+    check("Ein Transcript wird gespeichert", await client.ticketTranscripts.Has(first.id));
+    check(
+        "Kopf und Zahlen kommen ohne den Verlauf zurück",
+        entry?.meta.opener.id === USER && entry?.meta.messages === transcript.meta.messages
+    );
+    check(
+        "Der gepackte Verlauf kommt vollständig zurück",
+        read?.messages.length === transcript.messages.length && read?.messages[1].content === transcript.messages[1].content
+    );
+    check("Die Liste findet es", (await client.ticketTranscripts.List(GUILD, "", null, 10)).some((row) => row.ticketId === first.id));
+    check("Suche nach Nummer", (await client.ticketTranscripts.List(GUILD, `#${first.number}`, null, 10)).length === 1);
+    check("Suche nach Name", (await client.ticketTranscripts.List(GUILD, "kund", null, 10)).length === 1);
+    check("Suche ohne Treffer, auch mit % und _", (await client.ticketTranscripts.List(GUILD, "niemand_%", null, 10)).length === 0);
+    check("Seitenweise über before", (await client.ticketTranscripts.List(GUILD, "", first.id, 10)).length === 0);
+
+    await tickets.Patch(first.id, { closedBy: STAFF, closeReason: "Erledigt" });
+
+    const closed = await tickets.Get(first.id);
+
+    check("Wer geschlossen hat und warum, steht am Ticket", closed?.closedBy === STAFF && closed?.closeReason === "Erledigt");
+
     // Sperrliste
     await client.ticketBlacklist.Add(GUILD, USER, "Spam", STAFF);
 
@@ -360,8 +632,10 @@ async function cleanup(client: BotClient): Promise<void> {
     await service.Write("DELETE FROM tickets WHERE guild_id = ?", [GUILD]);
     await service.Write("DELETE FROM ticket_settings WHERE guild_id = ?", [GUILD]);
     await service.Write("DELETE FROM ticket_blacklist WHERE guild_id = ?", [GUILD]);
+    await service.Write("DELETE FROM ticket_transcripts WHERE guild_id = ?", [GUILD]);
 
     client.tickets.Forget();
+    client.ticketTranscripts.Forget();
     client.ticketSettings.Forget();
     client.ticketBlacklist.Forget();
 
@@ -381,6 +655,7 @@ async function main(): Promise<void> {
     checkClean(client);
     checkMenu(client);
     await checkPanel(client);
+    await checkTranscripts(client);
 
     if (await client.databaseService.Connect()) {
         try {

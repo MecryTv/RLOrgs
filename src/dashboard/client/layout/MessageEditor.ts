@@ -9,6 +9,7 @@
 
 import { icon } from "../core/Dom.js";
 import { fill, PLACEHOLDERS } from "../constants/Placeholders.js";
+import { emojiNode, IServerEmoji } from "./EmojiPicker.js";
 import { galleryUrl, pickImage } from "./ImagePicker.js";
 
 export type IMessageBlock =
@@ -41,6 +42,8 @@ export interface IEditorContext {
     /** Namen für Erwähnungen in der Vorschau. */
     roles?: Map<string, string>;
     channels?: Map<string, string>;
+    /** Server-Emojis - damit <:name:id> in der Vorschau als Bild erscheint. */
+    emojis?: IServerEmoji[];
     /** structural: der Editor wird neu gezeichnet (Baustein dazu, weg, verschoben). */
     onChange: (structural?: boolean) => void;
 }
@@ -371,7 +374,7 @@ export function renderEditor(host: HTMLElement, doc: IMessageDoc, context: IEdit
 /* ----------------------------------------------------------
    Vorschau
    ---------------------------------------------------------- */
-const INLINE = /(\*\*.+?\*\*|__.+?__|\*.+?\*|~~.+?~~|`[^`]+`|\[[^\]]+\]\([^)\s]+\)|<@&?\d+>|<#\d+>|<t:\d+(?::[tTdDfFR])?>)/g;
+const INLINE = /(\*\*.+?\*\*|__.+?__|\*.+?\*|~~.+?~~|`[^`]+`|\[[^\]]+\]\([^)\s]+\)|<a?:\w{2,32}:\d{17,20}>|<@&?\d+>|<#\d+>|<t:\d+(?::[tTdDfFR])?>)/g;
 
 function mention(token: string, context: IEditorContext): HTMLElement {
     const pill = document.createElement("span");
@@ -398,6 +401,11 @@ function mention(token: string, context: IEditorContext): HTMLElement {
 function inline(text: string, host: HTMLElement, context: IEditorContext): void {
     for (const part of text.split(INLINE)) {
         if (!part) continue;
+
+        if (/^<a?:\w{2,32}:\d{17,20}>$/.test(part)) {
+            host.append(emojiNode(part, context.emojis ?? [], "tkemoji"));
+            continue;
+        }
 
         if (part.startsWith("<@") || part.startsWith("<#")) {
             host.append(mention(part, context));

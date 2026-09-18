@@ -5,6 +5,7 @@ import Category from "../../enums/Category";
 import ComponentV2Builder from "../../builder/ComponentV2Builder";
 import { NewSetupState, SetupStates, SetupView } from "../../builder/TicketSetupPanel";
 import { TicketError } from "../../services/TicketService";
+import { PANEL_STATES } from "../../constants/Tickets";
 
 /**
  * Das Ticket-System ohne Dashboard einrichten: Assistent, Panel senden und eine
@@ -97,13 +98,14 @@ export default class Ticket extends Command {
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        const url = await this.client.ticketService.SendPanel(interaction.guild!, channel.id);
+        const { url, state } = await this.client.ticketService.SendPanel(interaction.guild!, channel.id);
+        const told = PANEL_STATES[state];
 
         await interaction.editReply({
             ...new ComponentV2Builder({ accentColor: "#35e07f" })
-                .title("📮 | Panel gesendet")
+                .title(`📮 | ${told.title}`)
                 .separator()
-                .text(`Das Ticket-Panel steht jetzt in <#${channel.id}>.\n[Zur Nachricht](${url})`)
+                .text(`${told.text.replace("{channel}", `<#${channel.id}>`)}\n[Zur Nachricht](${url})`)
                 .toMessage(),
             flags: MessageFlags.IsComponentsV2,
         });

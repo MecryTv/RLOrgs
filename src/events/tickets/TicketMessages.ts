@@ -3,6 +3,7 @@ import { LRUCache } from "lru-cache";
 import BotClient from "../../client/BotClient";
 import Event from "../../structures/Event";
 import ComponentV2Builder from "../../builder/ComponentV2Builder";
+import { OptionPickerView } from "../../builder/TicketPanel";
 import { TicketError } from "../../services/TicketService";
 import { TICKET_PREFIX } from "../../constants/Tickets";
 
@@ -81,24 +82,7 @@ export default class TicketMessages extends Event {
             }
 
             await message
-                .reply({
-                    components: [
-                        new ComponentV2Builder({ accentColor: "#ff1e2d" })
-                            .title(`🎫 | ${guilds[0].name}`, "Worum geht es?")
-                            .select({
-                                customId: `${TICKET_PREFIX}:dmopt:${guilds[0].id}`,
-                                placeholder: "Thema wählen …",
-                                options: config.options.slice(0, 25).map((option) => ({
-                                    label: option.name,
-                                    value: option.id,
-                                    description: option.description || undefined,
-                                    emoji: option.emoji ?? undefined,
-                                })),
-                            })
-                            .build(),
-                    ],
-                    flags: MessageFlags.IsComponentsV2,
-                })
+                .reply({ ...OptionPickerView(guilds[0], config), flags: MessageFlags.IsComponentsV2 })
                 .catch(() => undefined);
 
             return;

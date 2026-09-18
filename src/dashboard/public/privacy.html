@@ -128,6 +128,27 @@
     einzige dieser drei Tabellen, in der deine Discord-ID steht.
   </p>
 
+  <h3>Tickets</h3>
+  <p>
+    Nutzt ein Server das Ticket-System, speichert RL Nexus, was ein Ticket ausmacht. Schaltet der Server
+    Transcripts ein, gehört dazu beim Schließen auch der <b>ganze Verlauf</b>: Nachrichten, Anhänge und die
+    Namen der Beteiligten. Anhänge legt der Bot als Kopie ab, weil Discord seine Links nach etwa einem Tag
+    ungültig macht.
+  </p>
+  <table class="doc__table">
+    <thead><tr><th>Tabelle</th><th>Inhalt</th><th>Dauer</th></tr></thead>
+    <tbody>
+      <tr><td><code>tickets</code></td><td>Nummer, Thema, Ersteller, Bearbeiter, Status, Priorität, Team-Notizen, wer geschlossen hat und warum</td><td>ohne feste Frist</td></tr>
+      <tr><td><code>ticket_blacklist</code></td><td>Für Tickets gesperrte User mit Grund und wer gesperrt hat</td><td>bis das Team die Sperre aufhebt</td></tr>
+      <tr><td><code>ticket_transcripts</code></td><td>Der Verlauf geschlossener Tickets, gepackt; dazu Kopien der Anhänge auf dem Server des Betreibers</td><td>bis das Team das Transcript löscht</td></tr>
+    </tbody>
+  </table>
+  <p class="hintline">
+    Ein Transcript sehen nur das Team des Servers (Support-Rolle oder „Server verwalten“) und – bei
+    Tickets im Server – der Ersteller und hinzugefügte User, jeweils nach der Anmeldung. Löschen kann es
+    das Team im Dashboard unter Transcriptions; wer das möchte, wendet sich an das Team des Servers.
+  </p>
+
   <h2>Cookies</h2>
   <p>
     RL Nexus setzt <b>ausschließlich technisch notwendige Cookies</b>. Kein Tracking, keine Werbung, keine

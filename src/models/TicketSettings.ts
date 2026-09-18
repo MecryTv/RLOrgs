@@ -1,6 +1,6 @@
 import Model from "../structures/Model";
 import { TABLES, TableName, Unpack } from "../constants/Database";
-import { DefaultConfig } from "../constants/Tickets";
+import { DefaultConfig, LEGACY_MODMAIL_PANEL } from "../constants/Tickets";
 import { ITicketConfig } from "../interfaces/services/tickets/ITicket";
 
 export interface ITicketSettingsRow {
@@ -27,13 +27,21 @@ export default class TicketSettings extends Model<ITicketSettingsRow> {
         const row = await this.Find(guildId);
         const stored = structuredClone(Unpack<Partial<ITicketConfig>>(row?.config, {}));
         const base = DefaultConfig();
+        const messages = { ...base.messages, ...stored.messages };
+        const [first] = messages.modmailPanel.blocks;
+
+        // Der alte Standardtext versprach Themen unter dem Panel - siehe LEGACY_MODMAIL_PANEL.
+        if (messages.modmailPanel.blocks.length === 1 && first.type === "text" && first.body === LEGACY_MODMAIL_PANEL) {
+            messages.modmailPanel = base.messages.modmailPanel;
+        }
 
         return {
             ...base,
             ...stored,
-            messages: { ...base.messages, ...stored.messages },
+            messages,
             tags: { ...base.tags, ...stored.tags },
             panel: { ...base.panel, ...stored.panel },
+            transcripts: { ...base.transcripts, ...stored.transcripts },
         };
     }
 

@@ -16,6 +16,7 @@ import DatabaseService from "../services/DatabaseService";
 import PrimeService from "../services/PrimeService";
 import ActivityService from "../services/ActivityService";
 import TicketService from "../services/TicketService";
+import TranscriptService from "../services/TranscriptService";
 import GuildSettings from "../models/GuildSettings";
 import DashboardGroups from "../models/DashboardGroups";
 import Notifications from "../models/Notifications";
@@ -28,6 +29,7 @@ import Activity from "../models/Activity";
 import TicketSettings from "../models/TicketSettings";
 import Tickets from "../models/Tickets";
 import TicketBlacklist from "../models/TicketBlacklist";
+import TicketTranscripts from "../models/TicketTranscripts";
 
 export default class BotClient extends Client implements IBotClient {
 
@@ -47,6 +49,7 @@ export default class BotClient extends Client implements IBotClient {
     primeService: PrimeService;
     activityService: ActivityService;
     ticketService: TicketService;
+    transcriptService: TranscriptService;
 
     // Ein Model je Tabelle. Sie hängen am Client, damit Befehle, Events und
     // Routen dieselbe Instanz benutzen - und damit denselben Cache.
@@ -62,6 +65,7 @@ export default class BotClient extends Client implements IBotClient {
     ticketSettings: TicketSettings;
     tickets: Tickets;
     ticketBlacklist: TicketBlacklist;
+    ticketTranscripts: TicketTranscripts;
 
     constructor() {
         // Vor super(): die Intents hängen an der Konfiguration, und this gibt es
@@ -105,6 +109,7 @@ export default class BotClient extends Client implements IBotClient {
         this.primeService = new PrimeService(this);
         this.activityService = new ActivityService(this);
         this.ticketService = new TicketService(this);
+        this.transcriptService = new TranscriptService(this);
 
         this.groups = new DashboardGroups(this);
         this.notifications = new Notifications(this);
@@ -118,6 +123,7 @@ export default class BotClient extends Client implements IBotClient {
         this.ticketSettings = new TicketSettings(this);
         this.tickets = new Tickets(this);
         this.ticketBlacklist = new TicketBlacklist(this);
+        this.ticketTranscripts = new TicketTranscripts(this);
     }
 
     Init(): void {

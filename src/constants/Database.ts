@@ -24,6 +24,7 @@ export const TABLES = {
     ticketSettings: "ticket_settings",
     tickets: "tickets",
     ticketBlacklist: "ticket_blacklist",
+    ticketTranscripts: "ticket_transcripts",
 } as const;
 
 export type TableName = (typeof TABLES)[keyof typeof TABLES];

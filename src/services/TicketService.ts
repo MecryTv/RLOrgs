@@ -24,11 +24,13 @@ import { CleanDoc } from "../builder/MessageDoc";
 import {
     DirectView,
     InfoView,
+    IsPanelMessage,
     ITicketView,
     IVaultItem,
     MessageView,
     OpenedView,
     OptionOf,
+    OptionPickerView,
     PanelView,
     SupportRoleOf,
     TicketValues,
@@ -46,6 +48,7 @@ import {
     MAX_OPTIONS,
     MESSAGE_KEYS,
     PANEL_STYLES,
+    PanelState,
     PRIORITIES,
     PRIORITY_LABELS,
     SLOWMODE_STEPS,
@@ -89,6 +92,9 @@ const MEMBER_ALLOW: PermissionsString[] = ["ViewChannel", "SendMessages", "ReadM
 const BOT_ALLOW: PermissionsString[] = [...MEMBER_ALLOW, "ManageChannels", "ManageMessages", "ManageWebhooks"];
 
 const WEBHOOK_NAME = "RL Nexus Tickets";
+const NO_DATABASE = "Der Bot erreicht gerade seine Datenbank nicht.";
+const NO_DM =
+    "Ich kann dir keine DM schicken. Erlaube in den Datenschutz-Einstellungen des Servers Direktnachrichten und versuch es nochmal.";
 // Was ein Bot ohne Boost hochladen darf. Größere Anhänge gehen als Link weiter.
 const MAX_RELAY_FILE = 10 * 1024 * 1024;
 const MAX_NOTES = 50;
@@ -154,6 +160,9 @@ export default class TicketService {
 
     // Wer gerade ein Ticket öffnet - ein Doppelklick legt kein zweites an.
     private opening = new Set<string>();
+
+    // Server, deren Panel gerade rausgeht - zwei Klicks, ein Panel.
+    private sending = new Set<string>();
 
     private lastRelay = new LRUCache<number, number>({ max: 1000, ttl: HOUR_MS });
     private hooks = new LRUCache<string, Webhook>({ max: 200, ttl: HOUR_MS });
@@ -302,6 +311,19 @@ export default class TicketService {
         const limit = Number(input.limit);
         const deleteAfter = Number(input.deleteAfter);
 
+        const textChannel = (value: unknown): string | null => {
+            const type = typeof value === "string" ? guild.channels.cache.get(value)?.type : undefined;
+
+            return type === ChannelType.GuildText || type === ChannelType.GuildAnnouncement ? (value as string) : null;
+        };
+
+        const wanted = IsRecord(input.transcripts) ? input.transcripts : {};
+        const transcripts = {
+            enabled: typeof wanted.enabled === "boolean" ? wanted.enabled : previous.transcripts.enabled,
+            channelId: wanted.channelId === undefined ? previous.transcripts.channelId : textChannel(wanted.channelId),
+            dm: typeof wanted.dm === "boolean" ? wanted.dm : previous.transcripts.dm,
+        };
+
         return {
             contact: pick(input.contact, CONTACTS, previous.contact),
             surface: pick(input.surface, SURFACES, previous.surface),
@@ -315,6 +337,7 @@ export default class TicketService {
             messages,
             tags: previous.tags,
             panel: previous.panel,
+            transcripts,
         };
     }
 
@@ -437,8 +460,25 @@ export default class TicketService {
         config.tags.closed = idOf("Geschlossen");
     }
 
-    /** Schickt das Panel - oder zieht es nach, wenn es in diesem Kanal schon steht. */
-    async SendPanel(guild: Guild, channelId: string): Promise<string> {
+    /**
+     * Stellt das Panel in einen Kanal - aber nie ein zweites daneben. Steht dort
+     * schon eins, auch ein vergessenes unter den letzten 50 Nachrichten, wird es
+     * bearbeitet und jedes weitere gelöscht. Stand das Panel in einem anderen
+     * Kanal, zieht es um: das alte verschwindet dort.
+     */
+    async SendPanel(guild: Guild, channelId: string): Promise<{ url: string; state: PanelState }> {
+        if (this.sending.has(guild.id)) throw new TicketError("Das Panel wird gerade schon gesendet.");
+
+        this.sending.add(guild.id);
+
+        try {
+            return await this.PlacePanel(guild, channelId);
+        } finally {
+            this.sending.delete(guild.id);
+        }
+    }
+
+    private async PlacePanel(guild: Guild, channelId: string): Promise<{ url: string; state: PanelState }> {
         const config = await this.client.ticketSettings.Of(guild.id);
 
         if (config.options.length === 0) throw new TicketError("Lege zuerst mindestens eine Öffnungs-Option an.");
@@ -449,27 +489,88 @@ export default class TicketService {
             throw new TicketError("Das Panel braucht einen Textkanal.");
         }
 
-        const view = await PanelView(this.client, guild, config);
-        const payload = { ...view, flags: MessageFlags.IsComponentsV2 as const, allowedMentions: { parse: [] } };
+        const botId = this.client.user!.id;
+        const recent = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+        const found = recent ? [...recent.values()].filter((entry) => IsPanelMessage(entry, botId)) : [];
+        const tracked = config.panel.channelId === channelId ? config.panel.messageId : null;
 
-        let message: Message | null = null;
+        // Das gemerkte Panel kann älter sein als die letzten 50 Nachrichten.
+        if (tracked && !found.some((entry) => entry.id === tracked)) {
+            const known = await channel.messages.fetch(tracked).catch(() => null);
 
-        if (config.panel.channelId === channelId && config.panel.messageId) {
-            const old = await channel.messages.fetch(config.panel.messageId).catch(() => null);
-
-            if (old) message = await old.edit({ ...view, attachments: [], allowedMentions: { parse: [] } }).catch(() => null);
+            if (known) found.push(known);
         }
 
-        message ??= await channel.send(payload).catch((error) => {
-            throw this.Explain(error);
-        });
+        const view = await PanelView(this.client, guild, config);
+        const target = found.find((entry) => entry.id === tracked) ?? found[0] ?? null;
+
+        let message: Message | null = target
+            ? await target.edit({ ...view, attachments: [], allowedMentions: { parse: [] } }).catch(() => null)
+            : null;
+
+        message ??= await channel
+            .send({ ...view, flags: MessageFlags.IsComponentsV2 as const, allowedMentions: { parse: [] } })
+            .catch((error) => {
+                throw this.Explain(error);
+            });
+
+        // Alles andere, was hier nach Panel aussieht, ist ein Duplikat.
+        for (const extra of found) {
+            if (extra.id !== message.id) await extra.delete().catch(() => undefined);
+        }
+
+        const { channelId: before, messageId: old } = config.panel;
+        const moved = before !== null && before !== channelId && old !== null;
+
+        if (moved) {
+            const previous = guild.channels.cache.get(before);
+
+            if (previous?.isTextBased()) await previous.messages.delete(old).catch(() => undefined);
+        }
 
         config.panel = { channelId, messageId: message.id };
         await this.client.ticketSettings.Save(guild.id, config);
 
-        logger.user(`🎫 Ticket-Panel auf ${guild.id} in ${channelId} gesendet`);
+        const state: PanelState = moved ? "moved" : message.id === target?.id ? "updated" : "sent";
 
-        return message.url;
+        logger.user(`🎫 Ticket-Panel auf ${guild.id} in ${channelId}: ${state}`);
+
+        return { url: message.url, state };
+    }
+
+    /** Nimmt das Panel aus dem Kanal. false: es stand keins mehr da. */
+    async RemovePanel(guild: Guild): Promise<boolean> {
+        const config = await this.client.ticketSettings.Of(guild.id);
+        const { channelId, messageId } = config.panel;
+
+        if (!channelId || !messageId) return false;
+
+        const channel = guild.channels.cache.get(channelId);
+        const removed = channel?.isTextBased()
+            ? await channel.messages
+                  .delete(messageId)
+                  .then(() => true)
+                  .catch(() => false)
+            : false;
+
+        config.panel = { channelId: null, messageId: null };
+        await this.client.ticketSettings.Save(guild.id, config);
+
+        logger.user(`🎫 Ticket-Panel auf ${guild.id} entfernt`);
+
+        return removed;
+    }
+
+    /** Wo das Panel steht - null, wenn die Nachricht nicht mehr da ist (etwa von Hand gelöscht). */
+    async PanelStatus(guild: Guild, config: ITicketConfig): Promise<{ channelId: string; url: string } | null> {
+        const { channelId, messageId } = config.panel;
+
+        if (!channelId || !messageId) return null;
+
+        const channel = guild.channels.cache.get(channelId);
+        const message = channel?.isTextBased() ? await channel.messages.fetch(messageId).catch(() => null) : null;
+
+        return message ? { channelId, url: message.url } : null;
     }
 
     /* ----------------------------------------------------------
@@ -489,24 +590,52 @@ export default class TicketService {
         }
     }
 
-    private async Create(guild: Guild, user: User, optionId: string): Promise<ITicket> {
-        if (!this.client.databaseService.Ready) throw new TicketError("Der Bot erreicht gerade seine Datenbank nicht.");
+    /**
+     * Klick auf "Ticket per DM starten" im ModMail-Panel. Mit nur einer Option
+     * öffnet der Bot das Ticket gleich; sonst schickt er die Themenwahl per DM.
+     * Zurück kommt die DM, damit die Antwort im Server dorthin verlinken kann.
+     */
+    async OfferDirect(guild: Guild, user: User): Promise<{ ticket: ITicket | null; channelId: string }> {
+        if (!this.client.databaseService.Ready) throw new TicketError(NO_DATABASE);
 
+        const config = await this.client.ticketSettings.Of(guild.id);
+
+        if (config.contact !== "modmail") throw new TicketError("Dieses Panel ist veraltet – Tickets laufen hier nicht mehr per DM.");
+        if (config.options.length === 0) throw new TicketError("Hier ist noch kein Thema eingerichtet.");
+
+        if (config.options.length === 1) {
+            const ticket = await this.Open(guild, user, config.options[0].id);
+
+            return { ticket, channelId: (await user.createDM()).id };
+        }
+
+        await this.Gate(guild, user, config, null);
+
+        const channel = await user.createDM().catch(() => null);
+        const sent = channel
+            ? await channel.send({ ...OptionPickerView(guild, config), flags: MessageFlags.IsComponentsV2 }).catch(() => null)
+            : null;
+
+        if (!channel || !sent) throw new TicketError(NO_DM);
+
+        return { ticket: null, channelId: channel.id };
+    }
+
+    /**
+     * Was vor jedem Ticket gilt - bei ModMail schon vor der Themenwahl per DM.
+     * Mit Option prüft es auch, ob dazu schon ein Ticket offen ist.
+     */
+    private async Gate(guild: Guild, user: User, config: ITicketConfig, option: ITicketOption | null): Promise<void> {
         if (!(await this.client.settings.Of(guild.id)).modules.includes("tickets")) {
             throw new TicketError("Das Ticket-System ist auf diesem Server ausgeschaltet.");
         }
-
-        const config = await this.client.ticketSettings.Of(guild.id);
-        const option = config.options.find((entry) => entry.id === optionId);
-
-        if (!option) throw new TicketError("Diese Option gibt es nicht mehr – das Panel ist wohl veraltet.");
 
         if (await this.client.ticketBlacklist.Has(guild.id, user.id)) {
             throw new TicketError("Du bist für Tickets auf diesem Server gesperrt.", "blacklisted");
         }
 
         const open = await this.client.tickets.OpenOf(guild.id, user.id);
-        const same = open.find((ticket) => ticket.optionId === option.id);
+        const same = option ? open.find((ticket) => ticket.optionId === option.id) : undefined;
 
         if (same) {
             throw new TicketError(
@@ -529,6 +658,17 @@ export default class TicketService {
                 throw new TicketError(`Du hast schon ein offenes ModMail-Ticket auf **${where}** – schreib dort per DM weiter.`);
             }
         }
+    }
+
+    private async Create(guild: Guild, user: User, optionId: string): Promise<ITicket> {
+        if (!this.client.databaseService.Ready) throw new TicketError(NO_DATABASE);
+
+        const config = await this.client.ticketSettings.Of(guild.id);
+        const option = config.options.find((entry) => entry.id === optionId) ?? null;
+
+        await this.Gate(guild, user, config, option);
+
+        if (!option) throw new TicketError("Diese Option gibt es nicht mehr – das Panel ist wohl veraltet.");
 
         const forum = config.surface === "forum" ? guild.channels.cache.get(config.forumId ?? "") : null;
 
@@ -545,9 +685,7 @@ export default class TicketService {
                 const direct = await DirectView(this.client, guild, config, ticket, user);
 
                 await user.send({ ...direct, flags: MessageFlags.IsComponentsV2 }).catch(() => {
-                    throw new TicketError(
-                        "Ich kann dir keine DM schicken. Erlaube in den Datenschutz-Einstellungen des Servers Direktnachrichten und versuch es nochmal."
-                    );
+                    throw new TicketError(NO_DM);
                 });
 
                 sentDirect = true;
@@ -1050,12 +1188,16 @@ export default class TicketService {
         if (actor.id !== ticket.openerId && !staff) throw new TicketError("Schließen dürfen nur der Ersteller und das Team.");
 
         const now = config.deleteAfter === DELETE_NOW;
+        const why = reason?.trim() || "Kein Grund angegeben";
 
         // Auch "sofort" steht als Zeitpunkt in der Datenbank: stirbt der Bot in
         // den paar Sekunden, räumt der minütliche Lauf den Kanal trotzdem weg.
+        // Wer und warum steht dabei, weil das Transcript es noch braucht.
         await this.Update(context, {
             status: "closed",
             closedAt: new Date(),
+            closedBy: actor.id,
+            closeReason: why.slice(0, 500),
             reminderAt: null,
             deleteAt: now
                 ? Date.now() + DELETE_NOW_DELAY
@@ -1065,7 +1207,6 @@ export default class TicketService {
         });
 
         const opener = await this.client.users.fetch(ticket.openerId).catch(() => null);
-        const why = reason?.trim() || "Kein Grund angegeben";
         const channel = context.channel;
 
         if (channel) {
@@ -1099,6 +1240,12 @@ export default class TicketService {
             await this.SendDirect(opener, await MessageView(this.client, guild, config, "closed", values));
         }
 
+        // Das Transcript braucht einige Sekunden - die Antwort im Menü wartet
+        // nicht darauf. Remove() wartet, bevor es den Kanal löscht.
+        void this.client.transcriptService
+            .Archive(context.ticket)
+            .catch((error) => logger.warn(`📄 Transcript für ${ticket.id} fehlgeschlagen: ${String(error)}`));
+
         if (now) {
             setTimeout(() => {
                 void this.client.tickets
@@ -1111,8 +1258,21 @@ export default class TicketService {
         logger.user(`🔒 Ticket ${TicketNumber(ticket.number)} auf ${guild.id} geschlossen (von ${actor.id})`);
     }
 
-    /** Löscht den Kanal eines geschlossenen Tickets und trägt die Frist aus. */
+    /**
+     * Löscht den Kanal eines geschlossenen Tickets und trägt die Frist aus -
+     * aber erst, wenn das Transcript steht. Klappt das nicht, bleibt der Kanal
+     * noch eine Stunde, und der minütliche Lauf versucht es dann erneut.
+     */
     private async Remove(ticket: ITicket): Promise<void> {
+        try {
+            await this.client.transcriptService.Archive(ticket);
+        } catch (error) {
+            logger.warn(`📄 Transcript für ${ticket.id} fehlgeschlagen, der Kanal bleibt noch: ${String(error)}`);
+            await this.client.tickets.Patch(ticket.id, { deleteAt: Date.now() + HOUR_MS });
+
+            return;
+        }
+
         await this.client.tickets.Patch(ticket.id, { deleteAt: null });
 
         const channel = ticket.channelId ? await this.client.channels.fetch(ticket.channelId).catch(() => null) : null;

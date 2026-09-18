@@ -1,4 +1,4 @@
-import { AttachmentBuilder, ContainerBuilder, Guild, User } from "discord.js";
+import { AttachmentBuilder, ContainerBuilder, escapeMarkdown, Guild, Message, User } from "discord.js";
 import BotClient from "../client/BotClient";
 import ComponentV2Builder from "./ComponentV2Builder";
 import { RenderDoc } from "./MessageDoc";
@@ -128,20 +128,30 @@ function StatusLine(config: ITicketConfig, ticket: ITicket): string {
     return parts.join(" · ");
 }
 
-/** Das Panel im Server-Kanal: Nachricht plus Knöpfe oder Auswahlmenü. */
+/**
+ * Das Panel im Server-Kanal: Nachricht plus Knöpfe oder Auswahlmenü. Bei
+ * ModMail stehen die Themen nicht im Kanal - ein Knopf schickt sie per DM.
+ */
 export async function PanelView(client: BotClient, guild: Guild, config: ITicketConfig): Promise<ITicketView> {
+    if (config.contact === "modmail") {
+        const { builder, files } = await RenderDoc(client, config.messages.modmailPanel, TicketValues(guild, config), {
+            reserve: 2,
+            fallback: "# 📬 Schreib {bot} eine DM",
+        });
+
+        builder.buttons({ customId: `${TICKET_PREFIX}:dm`, label: "Ticket per DM starten", emoji: "📬", tone: "primary" });
+
+        return View(builder, files);
+    }
+
     const options = config.options;
     const rows = Math.ceil(options.length / 5);
-    const modmail = config.contact === "modmail";
-    // Bei ModMail steht unter den Themen noch ein Link zum Bot: eine Reihe, ein Knopf.
-    const reserve = (config.style === "buttons" ? rows + options.length : 2) + (modmail ? 2 : 0);
+    const reserve = config.style === "buttons" ? rows + options.length : 2;
 
-    const { builder, files } = await RenderDoc(
-        client,
-        modmail ? config.messages.modmailPanel : config.messages.panel,
-        TicketValues(guild, config),
-        { reserve, fallback: modmail ? "# 📬 Schreib {bot} eine DM" : "# 🎫 Tickets" }
-    );
+    const { builder, files } = await RenderDoc(client, config.messages.panel, TicketValues(guild, config), {
+        reserve,
+        fallback: "# 🎫 Tickets",
+    });
 
     if (config.style === "select") {
         builder.select({
@@ -167,13 +177,49 @@ export async function PanelView(client: BotClient, guild: Guild, config: ITicket
         }
     }
 
-    // Öffnet das Profil des Bots - von dort ist es ein Klick bis zur DM. Einen
-    // direkten Link in eine DM, die es noch nicht gibt, kennt Discord nicht.
-    if (modmail && client.user) {
-        builder.buttons({ url: `https://discord.com/users/${client.user.id}`, label: "Bot per DM anschreiben", emoji: "📬" });
-    }
-
     return View(builder, files);
+}
+
+/** Die Themenwahl in der DM - nach einem Klick aufs ModMail-Panel oder nach der ersten DM. */
+export function OptionPickerView(guild: Guild, config: ITicketConfig): ITicketView {
+    return View(
+        new ComponentV2Builder({ accentColor: "#ff1e2d" })
+            .title(`🎫 | ${escapeMarkdown(guild.name)}`, "Worum geht es? Danach schreibst du einfach hier weiter.")
+            .select({
+                customId: `${TICKET_PREFIX}:dmopt:${guild.id}`,
+                placeholder: "Thema wählen …",
+                options: config.options.slice(0, 25).map((option) => ({
+                    label: option.name,
+                    value: option.id,
+                    description: option.description || undefined,
+                    emoji: option.emoji ?? undefined,
+                })),
+            })
+    );
+}
+
+/**
+ * Ein Panel dieses Bots: seine Nachricht mit einem Knopf oder Menü zum Öffnen.
+ * Die customIds stecken bei Components V2 tief im Container - daher die Suche
+ * durch das ganze JSON statt nur durch die obersten Reihen.
+ */
+export function IsPanelMessage(message: Message, botId: string): boolean {
+    if (message.author.id !== botId) return false;
+
+    const ids: string[] = [];
+    const walk = (value: unknown): void => {
+        if (Array.isArray(value)) value.forEach(walk);
+        else if (value && typeof value === "object") {
+            for (const [key, inner] of Object.entries(value)) {
+                if (key === "custom_id" && typeof inner === "string") ids.push(inner);
+                else walk(inner);
+            }
+        }
+    };
+
+    walk(message.components.map((component) => component.toJSON()));
+
+    return ids.some((id) => id === `${TICKET_PREFIX}:dm` || id === `${TICKET_PREFIX}:open` || id.startsWith(`${TICKET_PREFIX}:open:`));
 }
 
 /** Eröffnung auf der Team-Seite: Nachricht, Statuszeile, Aktions-Menü. */

@@ -52,6 +52,17 @@ export interface ITicketConfig {
     messages: Record<TicketMessageKey, IMessageDoc>;
     tags: ITicketTags;
     panel: { channelId: string | null; messageId: string | null };
+    transcripts: ITicketTranscriptSettings;
+}
+
+/** Was nach dem Schließen mit dem Verlauf passiert. */
+export interface ITicketTranscriptSettings {
+    /** Aus: kein Transcript, weder im Dashboard noch im Log-Kanal. */
+    enabled: boolean;
+    /** Hierhin schickt der Bot Karte, Link und Datei. null = nirgends. */
+    channelId: string | null;
+    /** Kopie an den Ersteller - nur bei Klassisch, bei ModMail steht alles in seinen DMs. */
+    dm: boolean;
 }
 
 export interface ITicketNote {
@@ -83,4 +94,6 @@ export interface ITicket {
     deleteAt: number | null;
     createdAt: Date;
     closedAt: Date | null;
+    closedBy: string | null;
+    closeReason: string | null;
 }

@@ -2,7 +2,7 @@
 
 Support-Anfragen als eigener Kanal, als Forum-Post oder ganz per DM (ModMail). Eingerichtet wird im Dashboard (`/guild/<id>/tickets`) oder in Discord mit `/ticket setup` — beide schreiben über denselben `TicketService` in dieselbe Zeile.
 
-Transcripts und Live Chat gehören nicht hierher; sie bekommen ein eigenes Spec. Der Plan dahinter steht in `docs/superpowers/specs/2026-09-12-tickets-und-bilder-design.md`.
+Beim Schließen entsteht ein **Transcript** — der ganze Verlauf im Discord-Look, auch mit Components V2 (Abschnitt „Transcripts“ unten). Live Chat gehört nicht hierher, er bekommt ein eigenes Spec. Der Plan dahinter steht in `docs/superpowers/specs/2026-09-12-tickets-und-bilder-design.md`.
 
 ---
 
@@ -30,20 +30,36 @@ Welche Kombination gilt, steht am Ticket selbst (`tickets.contact`): ein Umstell
 | `src/events/tickets/TicketMessages.ts` | DMs an den Bot, Relay, anonymer Modus, Nachrichtenzahl |
 | `src/runnables/TicketReminders.ts` | Minütlich: Termine melden, abgelaufene Kanäle löschen |
 | `src/commands/admin/Module.ts` · `Ticket.ts` | `/module an · aus · liste` und `/ticket setup · panel · entsperren` |
-| `src/routes/DashboardApiTickets.ts` | GET liest alles für die Seite, POST speichert, sendet das Panel, entsperrt |
-| `src/dashboard/client/pages/GuildTickets.ts` | Die Seite im Dashboard |
+| `src/services/TranscriptService.ts` | Transcript beim Schließen: Verlauf lesen, Anhänge sichern, speichern, zustellen; wer es sehen darf |
+| `src/builder/TranscriptHtml.ts` | Ein Transcript als HTML-Seite: Markdown, Embeds, Anhänge, Components V2 |
+| `src/routes/DashboardApiTickets.ts` | GET liest alles für die Seite, POST speichert, sendet oder entfernt das Panel, entsperrt |
+| `src/routes/DashboardTranscript.ts` | `/transcript/<ticket>`: die Seite, `?download=1` die Datei, `/transcript/<ticket>/<anhang>` ein Anhang |
+| `src/routes/DashboardApiTranscripts.ts` | Liste mit Suche für „Transcriptions“, Löschen |
+| `src/dashboard/client/pages/GuildTickets.ts` | Die Seite im Dashboard: Status-Kopf, Tabs, Live-Vorschau |
+| `src/dashboard/client/pages/GuildTranscripts.ts` | Die Seite „Transcriptions“ |
 | `src/dashboard/client/layout/MessageEditor.ts` | Baustein-Editor mit Live-Vorschau |
+| `src/dashboard/client/layout/EmojiPicker.ts` | Emoji-Auswahl: Server-Emojis als Bild, Standard-Emojis, Suche |
 | `src/dashboard/client/layout/ImagePicker.ts` | Bildauswahl: Galerie, Hochladen, Adresse |
 | `src/config/ticketactions.json` | Name, Beschreibung und Emoji der 15 Aktionen |
 | `src/database/migrations/011_tickets.sql` | `ticket_settings`, `tickets`, `ticket_blacklist` |
+| `src/database/migrations/012_ticket_transcripts.sql` | `ticket_transcripts`; an `tickets` wer geschlossen hat und warum |
 
 ---
 
 ## Einrichten
 
-**Dashboard:** Modul „Ticket System“ einschalten, dann unter *Ticket System*: Grundlagen, Öffnungs-Optionen, Aktionen, die Nachrichten, Panel senden, gesperrte User. Gespeichert wird mit der Leiste unten; das Panel geht erst raus, wenn nichts mehr ungespeichert ist.
+**Dashboard:** Modul „Ticket System“ einschalten, dann unter *Ticket System*. Oben vier Kacheln mit dem Stand (Modus, Panel, Themen, Transcripts) — jede springt in ihren Tab. Darunter die Tabs **Einrichtung · Themen · Aktionen · Nachrichten · Panel · Sperrliste**, daneben die **Live-Vorschau** dessen, was man gerade ändert (unter 1180 px darunter). Der Tab steht in der Adresse (`#themen`), Pfeiltasten wechseln ihn. Gespeichert wird mit der Leiste unten; das Panel geht erst raus, wenn nichts mehr ungespeichert ist.
 
-**Ein gesendetes Panel zieht sich selbst nach:** Nach jedem Speichern (Dashboard wie Assistent) bearbeitet der Bot die Panel-Nachricht mit dem neuen Stand. Wer auf ModMail umstellt, hat damit sofort den DM-Hinweis im Kanal. „Panel senden“ braucht es nur für das erste Mal oder einen anderen Kanal.
+**Emojis der Themen** wählt man im Emoji-Picker: die Server-Emojis als Bild (wie in Discord), gängige Standard-Emojis, eine Suche und ein Feld für jedes andere Emoji. Gespeichert wird, was der Bot erwartet: `🎫` oder `<:name:id>`.
+
+**Ein Panel je Server.** „Panel senden“ im Dashboard wie `/ticket panel` legt nie ein zweites daneben:
+
+- Steht es schon im gewählten Kanal, **bearbeitet** der Bot die Nachricht („Panel aktualisieren“).
+- Er sucht dazu auch in den letzten 50 Nachrichten des Kanals nach eigenen Panels, die er vergessen hat, übernimmt das neueste und löscht die übrigen (`IsPanelMessage()`).
+- Ein anderer Kanal heißt **umziehen**: das neue Panel kommt, das alte verschwindet.
+- „Panel entfernen“ (zweimal klicken) löscht es und vergisst es.
+
+**Ein gesendetes Panel zieht sich selbst nach:** Nach jedem Speichern (Dashboard wie Assistent) bearbeitet der Bot die Panel-Nachricht mit dem neuen Stand. Wer auf ModMail umstellt, hat damit sofort den DM-Knopf im Kanal.
 
 **Kanal löschen** nach dem Schließen: nie, sofort (nach 5 Sekunden, damit das Schließen zu Ende läuft) oder nach 1 Stunde bis 7 Tagen. Auch „sofort“ steht als Zeitpunkt in der Datenbank — stirbt der Bot dazwischen, räumt der minütliche Lauf den Kanal weg.
 
@@ -53,8 +69,8 @@ Welche Kombination gilt, steht am Ticket selbst (`tickets.contact`): ein Umstell
 /module an modul:tickets      Modul einschalten (Autocomplete über alle Module)
 /module aus modul:<id>        ausschalten - die Galerie lehnt ab, sie gehört fest dazu
 /module liste                 alle Module mit ihrem Stand
-/ticket setup                 der Assistent: Grundlagen, Optionen, Aktionen, Nachrichten, Panel
-/ticket panel [kanal]         Panel senden oder am selben Ort nachziehen
+/ticket setup                 der Assistent: Grundlagen, Optionen, Aktionen, Nachrichten, Transcripts, Panel
+/ticket panel [kanal]         Panel senden, am selben Ort nachziehen oder umziehen - nie ein zweites
 /ticket entsperren user:<u>   Ticket-Sperre aufheben
 ```
 
@@ -76,6 +92,8 @@ Die Nummer ist fortlaufend je Server (`#0042`); `Tickets.Create()` vergibt sie i
 
 **ModMail per DM:** Schreibt ein User dem Bot ohne offenes Ticket, sucht der Bot die Server mit ModMail, auf denen der User Mitglied ist. Einer mit einer Option → sofort öffnen. Sonst fragt er per Auswahlmenü nach Server und Thema. Die erste DM geht danach ins Ticket, der User muss nichts wiederholen.
 
+**ModMail über das Panel:** Im Kanal stehen bei ModMail keine Themen, nur der Knopf **„Ticket per DM starten“** (`ticket:dm`). Ein Klick prüft wie oben (Modul, Sperre, Grenze, offenes ModMail-Ticket) und schreibt dem User dann per DM — mit nur einem Thema öffnet er das Ticket gleich, sonst kommt die Themenwahl in die DM (`OptionPickerView()`, dieselbe wie nach der ersten DM). Die Antwort im Server verlinkt in die DM. Sind DMs zu, sagt der Bot, wo man sie erlaubt.
+
 ---
 
 ## Die 15 Aktionen
@@ -84,7 +102,7 @@ Alle in **einem** Menü unter der Eröffnung. Fest dabei: `close`, `claim`/`uncl
 
 | Aktion | Kanal | Forum-Post | Bei ModMail zusätzlich |
 |---|---|---|---|
-| `close` | Grund per Modal, Rechte von Ersteller und Mitgliedern weg, `closed-` vor den Namen | Tag *Geschlossen*, gesperrt, archiviert | Abschluss-DM |
+| `close` | Grund per Modal, Rechte von Ersteller und Mitgliedern weg, `closed-` vor den Namen, Transcript | Tag *Geschlossen*, gesperrt, archiviert, Transcript | Abschluss-DM |
 | `claim` / `unclaim` | Bearbeiter in der Statuszeile | dazu Tag *Beansprucht* | — |
 | `add_user` / `remove_user` | Rechte-Overwrite | Thread-Mitglied | wirkt auf die Team-Seite |
 | `transfer` | Kanal in die Kategorie der Ziel-Option, Rolle getauscht | Options-Tag getauscht | — |
@@ -109,7 +127,7 @@ Sieben Stück, jede ein Dokument aus Bausteinen (`src/interfaces/builder/IMessag
 | Schlüssel | Wo sie landet |
 |---|---|
 | `panel` | im Server-Kanal bei Klassisch, mit Buttons oder Auswahlmenü darunter |
-| `modmailPanel` | im Server-Kanal bei ModMail: erklärt, dass man dem Bot per DM schreibt. Darunter die Themen (ein Klick startet das Ticket per DM) und der Link-Knopf „Bot per DM anschreiben“ zum Profil des Bots |
+| `modmailPanel` | im Server-Kanal bei ModMail: erklärt, dass es per DM weitergeht. Darunter nur der Knopf „Ticket per DM starten“ — die Themen fragt der Bot in der DM ab. Der erste Standardtext versprach noch Themen im Panel; wer ihn nie geändert hat, bekommt beim Lesen den neuen (`LEGACY_MODMAIL_PANEL`) |
 | `opened` | Eröffnung im Ticket; jede Option darf eine eigene haben |
 | `dm` | Bestätigung an den User bei ModMail, mit Knopf zum Schließen |
 | `closed` | beim Schließen — mit `{closer}` und `{reason}` |
@@ -135,6 +153,35 @@ Unbekannte bleiben stehen, damit ein Tippfehler auffällt. In DMs stehen Namen s
 
 ---
 
+## Transcripts
+
+Beim Schließen liest der Bot den ganzen Verlauf des Tickets und legt ihn ab — im Dashboard unter **Transcriptions** (Liste mit Suche nach Nummer, Name oder User-ID). Eingestellt wird es unter *Einrichtung › Nach dem Schließen* bzw. im Assistenten auf der Seite *Transcripts*:
+
+| Schalter | Wirkung |
+|---|---|
+| Transcript speichern | Aus: kein Transcript, weder im Dashboard noch im Log-Kanal |
+| Log-Kanal | Karte (Nummer, Ersteller, Bearbeiter, Grund, Dauer, Zahlen) mit Knopf „Online ansehen“ und der HTML-Datei |
+| Kopie an den Ersteller | Dieselbe Karte per DM. **Nur bei Klassisch:** bei ModMail steht das Gespräch schon in seinen DMs, und die Team-Seite mit ihren internen Zeilen gehört nicht zu ihm |
+
+**Was drinsteht:** jede Nachricht mit Autor (Name, Bild, Rollenfarbe), Markdown, Erwähnungen, Server-Emojis, Zeitstempeln, Antworten, Reaktionen, Stickern, Embeds, Anhängen — und **Components V2**: Container mit Akzentfarbe, Text, Abschnitte mit Vorschaubild oder Knopf, Galerien, Trenner, Dateien, Knöpfe und Auswahlmenüs (aufklappbar, damit man sieht, was zur Wahl stand). Oben stehen die Eckdaten des Tickets.
+
+**Selbst gebaut statt `discord-transcript-v2`:** Das Paket lädt die Darstellung beim Öffnen von einem CDN nach, bringt React mit und verlinkt Bilder nur auf Discord. `TranscriptHtml.ts` rendert alles selbst, ohne Skript und ohne fremde Schrift; die Seite trägt eine Content-Security-Policy, jeder Text läuft durch `Escape()`, Links nur mit http(s).
+
+**Gespeichert** wird der Verlauf als zlib-gepacktes JSON in `ticket_transcripts.data`; gerendert wird erst beim Ansehen — alte Transcripts zeigen so jede spätere Verbesserung. **Anhänge** kopiert der Bot nach `transcripts/<server>/<ticket>/` (nicht im Repo): Discord-Links auf Anhänge laufen nach etwa einem Tag ab. Heruntergeladen wird nur von Discords CDN, ohne Umleitungen.
+
+| Grenze | Wert |
+|---|---|
+| Nachrichten je Transcript | 5000 (die neuesten; darüber steht ein Hinweis) |
+| ein gesicherter Anhang | 25 MB — größere bleiben ein Link, der abläuft, und sind als „nicht gesichert“ markiert |
+| alle Anhänge eines Tickets | 100 MB |
+| Bilder in der HTML-Datei | 6 MB eingebettet, der Rest zeigt auf die Online-Ansicht; über 10 MB gibt es nur den Link |
+
+**Ansehen** unter `/transcript/<ticket>` — nur angemeldet (Discord-Login des Dashboards, also mit Zwei-Faktor). Öffnen dürfen: „Server verwalten“, die Support-Rolle des Tickets und bei Klassisch der Ersteller und hinzugefügte User. Wer es nicht darf, sieht dieselbe Seite wie bei einer Nummer, die es nicht gibt. `?download=1` liefert die Datei mit eingebetteten Bildern. **Löschen** geht in der Liste (zweimal klicken) — samt der gesicherten Anhänge.
+
+**Reihenfolge beim Schließen:** Das Transcript entsteht im Hintergrund, die Antwort im Menü wartet nicht darauf. Die Löschfrist (auch „sofort“) wartet dagegen: `Remove()` löscht den Kanal erst, wenn das Transcript steht. Scheitert es, bleibt der Kanal eine Stunde länger, dann versucht der minütliche Lauf es erneut. Wer geschlossen hat und warum, steht am Ticket (`closed_by`, `close_reason`) — auch ein Transcript nach einem Neustart kennt es.
+
+---
+
 ## Was der Bot braucht
 
 - **Rechte:** Kanäle verwalten, Rollen verwalten (für Overwrites), Nachrichten verwalten, Webhooks verwalten (anonymer Modus), im Forum Threads verwalten.
@@ -149,14 +196,16 @@ Unbekannte bleiben stehen, damit ein Tippfehler auffällt. In DMs stehen Namen s
 - **Umbenennen ist gebremst.** Discord erlaubt zwei Namensänderungen je Kanal in zehn Minuten. Der Bot benennt deshalb nur bei Priorität, Verschieben und Schließen um, und ohne zu warten — eine dritte kommt verspätet an.
 - **Ein gesperrter Post (eingefroren, geschlossen) nimmt nur noch Nachrichten von Leuten mit „Threads verwalten“.** Wer im Forum mitschreiben soll, braucht das Recht dort.
 - **Anhänge über 10 MB gehen als Link weiter**, nicht als Datei — mehr darf ein Bot ohne Boost nicht hochladen.
+- **Online-Transcripts brauchen den Dashboard-Login, und der braucht Zwei-Faktor bei Discord.** Wer das nicht hat, öffnet die HTML-Datei aus Log-Kanal oder DM.
+- **Der Ordner `transcripts/` wächst mit jedem Ticket, das Bilder hat.** Er gehört ins Backup wie die Datenbank; gelöscht wird nur, was das Team in der Liste löscht.
 
 ---
 
 ## Prüfen
 
 ```bash
-npm run check:tickets     # Aktionsliste, Platzhalter, Einstellungen, Menü, Datenbank
-npm run check:dashboard   # Platzhalter-Spiegel, Rechte und CSRF der Ticket-Route
+npm run check:tickets     # Aktionsliste, Platzhalter, Einstellungen, Menü, Panel, Transcript-Darstellung, Datenbank
+npm run check:dashboard   # Platzhalter-Spiegel, Rechte und CSRF der Ticket- und Transcript-Routen
 ```
 
-Was nur mit echter Discord-Verbindung geht — Kanäle anlegen, Tags, Relay, Webhooks — prüft erst ein Lauf auf einem Testserver.
+Was nur mit echter Discord-Verbindung geht — Kanäle anlegen, Tags, Relay, Webhooks, Anhänge herunterladen — prüft erst ein Lauf auf einem Testserver.

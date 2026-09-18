@@ -24,6 +24,8 @@ export interface ITicketRow {
     delete_at: number | null;
     created_at: Date;
     closed_at: Date | null;
+    closed_by: string | null;
+    close_reason: string | null;
 }
 
 /** Was sich an einem Ticket ändern lässt, in der Form von ITicket. */
@@ -43,6 +45,8 @@ export type TicketPatch = Partial<
         | "reminderAt"
         | "deleteAt"
         | "closedAt"
+        | "closedBy"
+        | "closeReason"
     >
 >;
 
@@ -60,6 +64,8 @@ const COLUMNS: Record<keyof TicketPatch, keyof ITicketRow> = {
     reminderAt: "reminder_at",
     deleteAt: "delete_at",
     closedAt: "closed_at",
+    closedBy: "closed_by",
+    closeReason: "close_reason",
 };
 
 function ToTicket(row: ITicketRow): ITicket {
@@ -84,6 +90,8 @@ function ToTicket(row: ITicketRow): ITicket {
         deleteAt: row.delete_at === null ? null : Number(row.delete_at),
         createdAt: new Date(row.created_at),
         closedAt: row.closed_at ? new Date(row.closed_at) : null,
+        closedBy: row.closed_by ?? null,
+        closeReason: row.close_reason ?? null,
     };
 }
 
