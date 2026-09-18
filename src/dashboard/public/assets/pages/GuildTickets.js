@@ -8,14 +8,17 @@ import { loadGallery } from "../layout/ImagePicker.js";
 import { renderEditor, renderPreview } from "../layout/MessageEditor.js";
 const MESSAGE_LABELS = {
     panel: "Panel",
+    modmailPanel: "Panel (ModMail)",
     opened: "Ticket geöffnet",
     dm: "ModMail-Bestätigung",
     closed: "Ticket geschlossen",
     frozen: "Ticket eingefroren",
     blacklisted: "User gesperrt",
 };
+// Dieselben Werte wie DELETE_AFTER_HOURS im Bot; -1 steht dort für "sofort".
 const DELETE_LABELS = [
     [0, "nie"],
+    [-1, "sofort"],
     [1, "nach 1 Stunde"],
     [6, "nach 6 Stunden"],
     [24, "nach 1 Tag"],
@@ -182,6 +185,7 @@ export function renderTickets(guildId, canManage, user) {
                 "support.role": role ? `@${role.name}` : "@Team",
                 closer: `@${user.name}`,
                 reason: "Erledigt",
+                bot: "@RL Nexus",
             },
             roles: new Map(resources.roles.map((entry) => [entry.id, entry.name])),
             channels: new Map(resources.channels.map((entry) => [entry.id, entry.name])),
@@ -208,7 +212,7 @@ export function renderTickets(guildId, canManage, user) {
         if (!config || !data)
             return;
         host.replaceChildren(block(heading("Grundlagen"), ...general(), hint(config.contact === "modmail"
-            ? "ModMail: Der User schreibt dem Bot per DM, das Team antwortet auf der Team-Seite. Der User sieht den Server-Kanal nie."
+            ? "ModMail: Der User schreibt dem Bot per DM, das Team antwortet auf der Team-Seite. Der User sieht den Server-Kanal nie. Das Panel erklärt das – sein Text steht unter Nachrichten › Panel (ModMail)."
             : "Klassisch: Der User sitzt mit dem Team im Ticket."), ...(config.contact === "direct" && config.surface === "forum"
             ? [
                 hint("⚠️ Forum-Posts sieht jeder, der das Forum sehen darf – auch die Tickets anderer. Für vertrauliche Anliegen ist der Kanal oder ModMail die bessere Wahl."),
@@ -262,10 +266,12 @@ export function renderTickets(guildId, canManage, user) {
                 touch();
             }, "— Forum wählen —")));
         }
-        rows.push(row("Offene Tickets je User", "0 heißt: ohne Grenze", select(Array.from({ length: 11 }, (_, value) => ({ value: String(value), label: value === 0 ? "ohne Grenze" : String(value) })), String(config.limit), (value) => {
+        // Die 0 ("ohne Grenze", "nie") ist in beiden Menüs der leere erste
+        // Eintrag von select() - stünde sie zusätzlich in der Liste, käme sie doppelt.
+        rows.push(row("Offene Tickets je User", "Wie viele offene Tickets einer gleichzeitig haben darf", select(Array.from({ length: 10 }, (_, index) => ({ value: String(index + 1), label: String(index + 1) })), config.limit === 0 ? null : String(config.limit), (value) => {
             config.limit = Number(value ?? 0);
             touch();
-        }, "ohne Grenze")), row("Kanal löschen", "Nach dem Schließen; Forum-Posts werden ebenfalls entfernt", select(DELETE_LABELS.map(([hours, label]) => ({ value: String(hours), label })), String(config.deleteAfter), (value) => {
+        }, "ohne Grenze")), row("Kanal löschen", "Nach dem Schließen; Forum-Posts werden ebenfalls entfernt", select(DELETE_LABELS.filter(([hours]) => hours !== 0).map(([hours, label]) => ({ value: String(hours), label })), config.deleteAfter === 0 ? null : String(config.deleteAfter), (value) => {
             config.deleteAfter = Number(value ?? 0);
             touch();
         }, "nie")));
@@ -438,16 +444,19 @@ export function renderTickets(guildId, canManage, user) {
             return;
         const tabs = document.createElement("div");
         tabs.className = "seg tkmsgtabs";
+        // Nur, was beim gewählten Kontakt auch verschickt wird: ModMail hat sein
+        // eigenes Panel und die Bestätigung per DM, Klassisch das normale Panel.
+        const modmail = config.contact === "modmail";
         const keys = [
             ...Object.keys(MESSAGE_LABELS)
-                .filter((key) => key !== "dm" || config.contact === "modmail")
+                .filter((key) => (key === "dm" || key === "modmailPanel" ? modmail : key === "panel" ? !modmail : true))
                 .map((key) => ({ value: key, label: MESSAGE_LABELS[key] })),
             ...config.options
                 .filter((option) => option.opened)
                 .map((option) => ({ value: `option:${option.id}`, label: `Eröffnung: ${option.name}` })),
         ];
         if (!keys.some((entry) => entry.value === current))
-            current = "panel";
+            current = modmail ? "modmailPanel" : "panel";
         for (const entry of keys) {
             const tab = document.createElement("button");
             tab.type = "button";
@@ -480,6 +489,9 @@ export function renderTickets(guildId, canManage, user) {
             return "Diese Eröffnung gilt nur für diese Option – sonst gilt die allgemeine.";
         if (key === "panel")
             return "Steht im Server-Kanal. Darunter kommen die Knöpfe bzw. das Auswahlmenü.";
+        if (key === "modmailPanel") {
+            return "Das Panel bei ModMail: erklärt, dass man dem Bot per DM schreibt. Darunter die Themen (ein Klick startet das Ticket per DM) und ein Knopf zum Bot.";
+        }
         if (key === "opened")
             return "Die erste Nachricht im Ticket, mit Statuszeile und Aktions-Menü darunter.";
         if (key === "dm")
@@ -498,7 +510,7 @@ export function renderTickets(guildId, canManage, user) {
     }
     /** Was unter der Nachricht steht: Panel-Knöpfe oder das Aktions-Menü. */
     function mock() {
-        if (current === "panel") {
+        if (current === "panel" || current === "modmailPanel") {
             const box = document.createElement("div");
             box.className = "tkmock";
             if (config.style === "select") {
@@ -514,6 +526,12 @@ export function renderTickets(guildId, canManage, user) {
                     button.textContent = `${option.emoji ?? ""} ${option.name}`.trim();
                     box.append(button);
                 }
+            }
+            if (current === "modmailPanel") {
+                const link = document.createElement("span");
+                link.className = "tkmock__btn tkmock__btn--link";
+                link.textContent = "📬 Bot per DM anschreiben ↗";
+                box.append(link);
             }
             return box;
         }

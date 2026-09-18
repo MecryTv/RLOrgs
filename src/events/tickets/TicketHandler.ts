@@ -345,23 +345,31 @@ export default class TicketHandler extends Event {
                 return;
             }
 
+            // Diese vier reden mehrfach mit Discord, bevor sie fertig sind - länger
+            // als die drei Sekunden, die Discord auf eine erste Antwort wartet.
             case "claim":
+                await interaction.deferReply({ flags: MessageFlags.Ephemeral });
                 await service.Claim(context, member);
 
                 return this.Done(interaction, "✅ Du bearbeitest das Ticket jetzt.");
 
             case "unclaim":
+                await interaction.deferReply({ flags: MessageFlags.Ephemeral });
                 await service.Unclaim(context, member);
 
                 return this.Done(interaction, "↩️ Das Ticket wartet wieder auf das Team.");
 
             case "freeze": {
+                await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
                 const frozen = await service.ToggleFreeze(context, member);
 
                 return this.Done(interaction, frozen ? "🥶 Das Ticket ist eingefroren." : "🔓 Das Ticket ist wieder offen.");
             }
 
             case "anonymous_mode": {
+                await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
                 const on = await service.ToggleAnonymous(context, member);
 
                 return this.Done(
@@ -399,6 +407,8 @@ export default class TicketHandler extends Event {
        Nachfragen
        ---------------------------------------------------------- */
     private async Members(interaction: UserSelectMenuInteraction, ticketId: number, add: boolean): Promise<void> {
+        await interaction.deferUpdate();
+
         const service = this.client.ticketService;
         const context = await service.Context(ticketId);
         const member = await this.Member(interaction);
@@ -409,9 +419,7 @@ export default class TicketHandler extends Event {
         if (add) await service.AddUser(context, member, user);
         else await service.RemoveUser(context, member, user);
 
-        await interaction.update(
-            Edit(InfoView(add ? `➕ ${user} ist jetzt im Ticket.` : `➖ ${user} ist nicht mehr im Ticket.`, "#35e07f"))
-        );
+        await this.Done(interaction, add ? `➕ ${user} ist jetzt im Ticket.` : `➖ ${user} ist nicht mehr im Ticket.`);
     }
 
     /** Eine Auswahl, die eine Aktion auslöst und die Nachfrage danach ersetzt. */
@@ -420,11 +428,12 @@ export default class TicketHandler extends Event {
         ticketId: number,
         work: (context: ITicketContext, member: GuildMember) => Promise<string>
     ): Promise<void> {
+        await interaction.deferUpdate();
+
         const context = await this.client.ticketService.Context(ticketId);
         const member = await this.Member(interaction);
-        const text = await work(context, member);
 
-        await interaction.update(Edit(InfoView(text, "#35e07f")));
+        await this.Done(interaction, await work(context, member));
     }
 
     private async AskText(
@@ -482,6 +491,9 @@ export default class TicketHandler extends Event {
        Modals
        ---------------------------------------------------------- */
     private async Modal(interaction: ModalSubmitInteraction, action: string, argument: string): Promise<void> {
+        // Schließen und Sperren reden mehrfach mit Discord - erst quittieren.
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
         const service = this.client.ticketService;
         const context = await service.Context(Number(argument));
         const member = await this.Member(interaction);
@@ -522,11 +534,13 @@ export default class TicketHandler extends Event {
        ModMail in der DM
        ---------------------------------------------------------- */
     private async CloseFromDirect(interaction: ButtonInteraction, ticketId: number): Promise<void> {
+        await interaction.deferReply();
+
         const service = this.client.ticketService;
         const context = await service.Context(ticketId);
 
         await service.Close(context, interaction.user, "Vom User geschlossen");
-        await interaction.reply(Reply(InfoView("🔒 Dein Ticket ist geschlossen. Danke!", "#35e07f")));
+        await this.Done(interaction, "🔒 Dein Ticket ist geschlossen. Danke!");
     }
 
     private async DirectGuild(interaction: StringSelectMenuInteraction): Promise<void> {
@@ -601,19 +615,24 @@ export default class TicketHandler extends Event {
         return member;
     }
 
-    private async Done(interaction: MessageComponentInteraction | ModalSubmitInteraction, text: string): Promise<void> {
-        const view = Reply(InfoView(text, "#35e07f"));
+    /**
+     * Antwortet dorthin, wo die Interaktion gerade steht: nach einem defer wird
+     * dessen Platzhalter ersetzt (bzw. die Nachfrage bei deferUpdate), sonst
+     * kommt eine neue ephemere Antwort.
+     */
+    private async Answer(interaction: MessageComponentInteraction | ModalSubmitInteraction, view: ITicketView): Promise<void> {
+        if (interaction.deferred && !interaction.replied) await interaction.editReply(Edit(view));
+        else if (interaction.replied) await interaction.followUp(Reply(view));
+        else await interaction.reply(Reply(view));
+    }
 
-        if (interaction.replied || interaction.deferred) await interaction.followUp(view);
-        else await interaction.reply(view);
+    private async Done(interaction: MessageComponentInteraction | ModalSubmitInteraction, text: string): Promise<void> {
+        await this.Answer(interaction, InfoView(text, "#35e07f"));
     }
 
     private async Fail(interaction: MessageComponentInteraction | ModalSubmitInteraction, text: string): Promise<void> {
-        const view = Reply(ErrorView(text));
-
         try {
-            if (interaction.replied || interaction.deferred) await interaction.followUp(view);
-            else await interaction.reply(view);
+            await this.Answer(interaction, ErrorView(text));
         } catch (problem) {
             logger.warn(`🎫 Fehlermeldung nicht zustellbar: ${String(problem)}`);
         }

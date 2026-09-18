@@ -29,6 +29,15 @@
         ],
         "createdAt": "2026-09-11T18:24:58.736Z",
         "reason": "Claude-Triage: absichtlich und vor dieser Session vorhanden - .tabs__glide (L531) passt beim Gleiten die Breite an den aktiven Reiter an, .reward__bar i (L1562) ist die Fortschrittsanzeige des Season-Rewards; beides einzelne Elemente ohne Reflow der Nachbarn, scaleX wuerde 1px-Rahmen, Abschraegung und Pill-Enden verzerren"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/dashboard/public/assets/style.css"
+        ],
+        "createdAt": "2026-09-18T12:54:20.129Z",
+        "reason": "Claude: .tkprev border-left shows the message accent color (IMessageDoc.accent, set by the color picker) exactly as Discord renders a Components-V2 container accent bar - data in the preview, not decoration"
       }
     ]
   }

@@ -33,11 +33,17 @@ export const SURFACE_LABELS: Record<TicketSurface, string> = { channel: "Kanal",
 export const STYLE_LABELS: Record<PanelStyle, string> = { buttons: "Buttons", select: "Auswahlmenü" };
 
 /** Die sechs Nachrichten, die sich bearbeiten lassen. */
-export const MESSAGE_KEYS = ["panel", "opened", "dm", "closed", "frozen", "blacklisted"] as const;
+/**
+ * Die Nachrichten, die sich bearbeiten lassen. Das Panel gibt es zweimal: bei
+ * ModMail erklärt es, dass man dem Bot schreibt - umgestellt wird so nie der
+ * Text, den jemand für den anderen Weg geschrieben hat.
+ */
+export const MESSAGE_KEYS = ["panel", "modmailPanel", "opened", "dm", "closed", "frozen", "blacklisted"] as const;
 export type TicketMessageKey = (typeof MESSAGE_KEYS)[number];
 
 export const MESSAGE_LABELS: Record<TicketMessageKey, string> = {
     panel: "Panel",
+    modmailPanel: "Panel (ModMail)",
     opened: "Ticket geöffnet",
     dm: "ModMail-Bestätigung",
     closed: "Ticket geschlossen",
@@ -80,8 +86,22 @@ export const MAX_LIMIT = 10;
 export const MAX_NOTE = 1000;
 export const MAX_REASON = 300;
 
+/** "Sofort" unter den Löschfristen - kein Stundenwert, deshalb eine eigene Zahl. */
+export const DELETE_NOW = -1;
+
+/** So lange steht ein Kanal bei "sofort" noch, damit das Schließen zu Ende läuft. */
+export const DELETE_NOW_DELAY = 5_000;
+
 /** Löschfristen nach dem Schließen, in Stunden. 0 = der Kanal bleibt. */
-export const DELETE_AFTER_HOURS = [0, 1, 6, 24, 72, 168] as const;
+export const DELETE_AFTER_HOURS = [0, DELETE_NOW, 1, 6, 24, 72, 168] as const;
+
+export function DeleteLabel(hours: number): string {
+    if (hours === 0) return "nie";
+    if (hours === DELETE_NOW) return "sofort";
+    if (hours < 24) return `nach ${hours} Stunde${hours === 1 ? "" : "n"}`;
+
+    return `nach ${hours / 24} Tag${hours === 24 ? "" : "en"}`;
+}
 
 /** Stufen für "Slowmode aktivieren", in Sekunden. */
 export const SLOWMODE_STEPS = [0, 5, 10, 30, 60, 300, 900] as const;
@@ -96,6 +116,10 @@ export const DEFAULT_MESSAGES: Record<TicketMessageKey, IMessageDoc> = {
     panel: Text(
         "#ff1e2d",
         "# 🎫 Support\nDu hast eine Frage, ein Problem oder eine Bewerbung? Wähle unten aus, worum es geht – das Team von **{guild}** meldet sich bei dir."
+    ),
+    modmailPanel: Text(
+        "#ff1e2d",
+        "# 📬 Support per DM\nSchreib {bot} einfach eine Direktnachricht – dein Anliegen landet direkt beim Team von **{guild}**, und die Antwort kommt ebenfalls per DM.\nOder wähle unten dein Thema, dann melde ich mich bei dir.\n-# Damit das klappt, müssen Direktnachrichten von Servermitgliedern erlaubt sein."
     ),
     opened: Text(
         "#00afff",

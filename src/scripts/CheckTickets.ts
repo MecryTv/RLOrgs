@@ -17,13 +17,15 @@ process.env.DEV_CLIENT_SECRET ||= "check-secret";
 import { ChannelType, Guild } from "discord.js";
 import BotClient from "../client/BotClient";
 import { CleanDoc, IsImageSource } from "../builder/MessageDoc";
-import { MenuOptions } from "../builder/TicketPanel";
+import { MenuOptions, PanelView } from "../builder/TicketPanel";
 import { Fill, PLACEHOLDER_KEYS } from "../constants/Placeholders";
 import {
     ACTIONS,
     ACTIONS_CONFIG,
     CORE_ACTIONS,
     DefaultConfig,
+    DELETE_NOW,
+    DeleteLabel,
     MESSAGE_KEYS,
     TicketNumber,
 } from "../constants/Tickets";
@@ -37,6 +39,7 @@ const STAFF = "90071992547409993";
 const ROLE = "90071992547409994";
 const CATEGORY = "90071992547409995";
 const FORUM = "90071992547409996";
+const BOT = "90071992547409997";
 
 let failures = 0;
 
@@ -209,6 +212,10 @@ function checkClean(client: BotClient): void {
 
     check("Ein unmögliches Limit bleibt beim alten Wert", kept.limit === 3, String(kept.limit));
     check("Eine unbekannte Löschfrist bleibt beim alten Wert", kept.deleteAfter === 24, String(kept.deleteAfter));
+    check(
+        "„Sofort“ ist eine gültige Löschfrist",
+        client.ticketService.Clean(guild, { deleteAfter: DELETE_NOW }, config).deleteAfter === DELETE_NOW && DeleteLabel(DELETE_NOW) === "sofort"
+    );
     check("Was nicht mitkommt, bleibt stehen", kept.options.length === 2 && kept.contact === "modmail");
 
     let thrown: unknown;
@@ -242,6 +249,42 @@ function checkMenu(client: BotClient): void {
     check("Mit Bearbeiter ist es umgekehrt", claimed.map((entry) => entry.value).includes("unclaim") && !claimed.map((entry) => entry.value).includes("claim"));
     check("Ein eingefrorenes Ticket bietet das Auftauen an", frozen.find((entry) => entry.value === "freeze")?.label === "Ticket auftauen");
     check("Das Menü bleibt unter Discords Grenze von 25", MenuOptions(client, { ...config, actions: [...ACTIONS] as never }, FakeTicket()).length <= 25);
+}
+
+/**
+ * Das Panel: Klassisch zeigt den normalen Text, ModMail den DM-Hinweis mit einem
+ * Knopf zum Bot - die Themen bleiben in beiden Fällen stehen.
+ */
+async function checkPanel(client: BotClient): Promise<void> {
+    console.log("\n  — Panel —");
+
+    // Ohne Login gibt es keinen client.user; für Erwähnung und Link reicht eine ID.
+    (client as unknown as { user: unknown }).user = { id: BOT, displayName: "RL Nexus" };
+
+    const guild = {
+        id: GUILD,
+        name: "Check-Server",
+        memberCount: 3,
+        iconURL: () => null,
+        roles: { cache: new Map() },
+        client,
+    } as unknown as Guild;
+
+    const text = (view: Awaited<ReturnType<typeof PanelView>>) =>
+        JSON.stringify(view.components.map((component) => component.toJSON()));
+
+    const config = DefaultConfig();
+    const direct = text(await PanelView(client, guild, config));
+
+    config.contact = "modmail";
+
+    const modmail = text(await PanelView(client, guild, config));
+
+    check("Klassisch: das normale Panel ohne Link zum Bot", direct.includes("Support") && !direct.includes("discord.com/users/"));
+    check("ModMail: der DM-Hinweis steht im Panel", modmail.includes("Support per DM"), modmail.slice(0, 160));
+    check("ModMail: {bot} wird zur Erwähnung des Bots", modmail.includes(`<@${BOT}>`));
+    check("ModMail: ein Knopf führt zum Bot", modmail.includes(`https://discord.com/users/${BOT}`));
+    check("ModMail: die Themen bleiben stehen", modmail.includes("ticket:open:support"));
 }
 
 async function checkDatabase(client: BotClient): Promise<void> {
@@ -337,6 +380,7 @@ async function main(): Promise<void> {
     checkDocs();
     checkClean(client);
     checkMenu(client);
+    await checkPanel(client);
 
     if (await client.databaseService.Connect()) {
         try {

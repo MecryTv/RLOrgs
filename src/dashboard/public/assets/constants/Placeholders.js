@@ -15,6 +15,7 @@ export const PLACEHOLDERS = [
     { key: "support.role", label: "Support-Rolle", sample: "@Team" },
     { key: "closer", label: "Wer geschlossen hat", sample: "@Team" },
     { key: "reason", label: "Grund", sample: "Erledigt" },
+    { key: "bot", label: "Der Bot (Erwähnung)", sample: "@RL Nexus" },
 ];
 /** Die beiden, die als Bildquelle taugen - sie ergeben eine URL. */
 export const IMAGE_PLACEHOLDERS = ["{user.avatar}", "{guild.icon}"];

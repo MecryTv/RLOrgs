@@ -55,6 +55,7 @@ export function TicketValues(
         "guild.icon": guild.iconURL({ extension: "png", size: 256 }) ?? "",
         "guild.members": String(guild.memberCount),
         "support.role": role ? (mentions ? `<@&${role.id}>` : role.name) : "das Team",
+        bot: guild.client.user ? (mentions ? `<@${guild.client.user.id}>` : guild.client.user.displayName) : "dem Bot",
     };
 
     if (user) {
@@ -131,12 +132,16 @@ function StatusLine(config: ITicketConfig, ticket: ITicket): string {
 export async function PanelView(client: BotClient, guild: Guild, config: ITicketConfig): Promise<ITicketView> {
     const options = config.options;
     const rows = Math.ceil(options.length / 5);
-    const reserve = config.style === "buttons" ? rows + options.length : 2;
+    const modmail = config.contact === "modmail";
+    // Bei ModMail steht unter den Themen noch ein Link zum Bot: eine Reihe, ein Knopf.
+    const reserve = (config.style === "buttons" ? rows + options.length : 2) + (modmail ? 2 : 0);
 
-    const { builder, files } = await RenderDoc(client, config.messages.panel, TicketValues(guild, config), {
-        reserve,
-        fallback: "# 🎫 Tickets",
-    });
+    const { builder, files } = await RenderDoc(
+        client,
+        modmail ? config.messages.modmailPanel : config.messages.panel,
+        TicketValues(guild, config),
+        { reserve, fallback: modmail ? "# 📬 Schreib {bot} eine DM" : "# 🎫 Tickets" }
+    );
 
     if (config.style === "select") {
         builder.select({
@@ -160,6 +165,12 @@ export async function PanelView(client: BotClient, guild: Guild, config: ITicket
                 }))
             );
         }
+    }
+
+    // Öffnet das Profil des Bots - von dort ist es ein Klick bis zur DM. Einen
+    // direkten Link in eine DM, die es noch nicht gibt, kennt Discord nicht.
+    if (modmail && client.user) {
+        builder.buttons({ url: `https://discord.com/users/${client.user.id}`, label: "Bot per DM anschreiben", emoji: "📬" });
     }
 
     return View(builder, files);

@@ -38,6 +38,8 @@ import {
     CONTACTS,
     CORE_ACTIONS,
     DELETE_AFTER_HOURS,
+    DELETE_NOW,
+    DELETE_NOW_DELAY,
     HOUR_MS,
     MAX_LIMIT,
     MAX_NOTE,
@@ -338,7 +340,34 @@ export default class TicketService {
 
         await this.client.ticketSettings.Save(guild.id, config);
 
+        // Ein schon gesendetes Panel zeigt sofort den neuen Stand - etwa den
+        // DM-Hinweis, sobald ModMail an ist. Die Antwort wartet nicht darauf.
+        void this.RefreshPanel(guild, config);
+
         return config;
+    }
+
+    /** Zieht ein gesendetes Panel auf den gespeicherten Stand nach. Ohne Panel passiert nichts. */
+    private async RefreshPanel(guild: Guild, config: ITicketConfig): Promise<void> {
+        const { channelId, messageId } = config.panel;
+
+        if (!channelId || !messageId || config.options.length === 0) return;
+
+        const channel = guild.channels.cache.get(channelId);
+
+        if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) return;
+
+        const message = await channel.messages.fetch(messageId).catch(() => null);
+
+        if (!message) return;
+
+        try {
+            const view = await PanelView(this.client, guild, config);
+
+            await message.edit({ ...view, attachments: [], allowedMentions: { parse: [] } });
+        } catch (error) {
+            logger.warn(`🎫 Panel auf ${guild.id} nicht nachgezogen: ${String(error)}`);
+        }
     }
 
     /**
@@ -1020,11 +1049,19 @@ export default class TicketService {
 
         if (actor.id !== ticket.openerId && !staff) throw new TicketError("Schließen dürfen nur der Ersteller und das Team.");
 
+        const now = config.deleteAfter === DELETE_NOW;
+
+        // Auch "sofort" steht als Zeitpunkt in der Datenbank: stirbt der Bot in
+        // den paar Sekunden, räumt der minütliche Lauf den Kanal trotzdem weg.
         await this.Update(context, {
             status: "closed",
             closedAt: new Date(),
             reminderAt: null,
-            deleteAt: config.deleteAfter > 0 ? Date.now() + config.deleteAfter * HOUR_MS : null,
+            deleteAt: now
+                ? Date.now() + DELETE_NOW_DELAY
+                : config.deleteAfter > 0
+                  ? Date.now() + config.deleteAfter * HOUR_MS
+                  : null,
         });
 
         const opener = await this.client.users.fetch(ticket.openerId).catch(() => null);
@@ -1062,7 +1099,27 @@ export default class TicketService {
             await this.SendDirect(opener, await MessageView(this.client, guild, config, "closed", values));
         }
 
+        if (now) {
+            setTimeout(() => {
+                void this.client.tickets
+                    .Get(ticket.id)
+                    .then((fresh) => (fresh?.deleteAt ? this.Remove(fresh) : undefined))
+                    .catch((error) => logger.warn(`🎫 Sofort-Löschen von ${ticket.id}: ${String(error)}`));
+            }, DELETE_NOW_DELAY);
+        }
+
         logger.user(`🔒 Ticket ${TicketNumber(ticket.number)} auf ${guild.id} geschlossen (von ${actor.id})`);
+    }
+
+    /** Löscht den Kanal eines geschlossenen Tickets und trägt die Frist aus. */
+    private async Remove(ticket: ITicket): Promise<void> {
+        await this.client.tickets.Patch(ticket.id, { deleteAt: null });
+
+        const channel = ticket.channelId ? await this.client.channels.fetch(ticket.channelId).catch(() => null) : null;
+
+        if (channel && (channel.type === ChannelType.GuildText || channel.isThread())) {
+            await channel.delete("Löschfrist nach dem Schließen abgelaufen").catch(() => undefined);
+        }
     }
 
     /* ----------------------------------------------------------
@@ -1299,15 +1356,7 @@ export default class TicketService {
             await this.Refresh(context);
         }
 
-        for (const due of await this.client.tickets.DueDeletions(now)) {
-            await this.client.tickets.Patch(due.id, { deleteAt: null });
-
-            const channel = due.channelId ? await this.client.channels.fetch(due.channelId).catch(() => null) : null;
-
-            if (channel && (channel.type === ChannelType.GuildText || channel.isThread())) {
-                await channel.delete("Löschfrist nach dem Schließen abgelaufen").catch(() => undefined);
-            }
-        }
+        for (const due of await this.client.tickets.DueDeletions(now)) await this.Remove(due);
     }
 }
 

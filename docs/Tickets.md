@@ -41,7 +41,11 @@ Welche Kombination gilt, steht am Ticket selbst (`tickets.contact`): ein Umstell
 
 ## Einrichten
 
-**Dashboard:** Modul „Ticket System“ einschalten, dann unter *Ticket System*: Grundlagen, Öffnungs-Optionen, Aktionen, die sechs Nachrichten, Panel senden, gesperrte User. Gespeichert wird mit der Leiste unten; das Panel geht erst raus, wenn nichts mehr ungespeichert ist.
+**Dashboard:** Modul „Ticket System“ einschalten, dann unter *Ticket System*: Grundlagen, Öffnungs-Optionen, Aktionen, die Nachrichten, Panel senden, gesperrte User. Gespeichert wird mit der Leiste unten; das Panel geht erst raus, wenn nichts mehr ungespeichert ist.
+
+**Ein gesendetes Panel zieht sich selbst nach:** Nach jedem Speichern (Dashboard wie Assistent) bearbeitet der Bot die Panel-Nachricht mit dem neuen Stand. Wer auf ModMail umstellt, hat damit sofort den DM-Hinweis im Kanal. „Panel senden“ braucht es nur für das erste Mal oder einen anderen Kanal.
+
+**Kanal löschen** nach dem Schließen: nie, sofort (nach 5 Sekunden, damit das Schließen zu Ende läuft) oder nach 1 Stunde bis 7 Tagen. Auch „sofort“ steht als Zeitpunkt in der Datenbank — stirbt der Bot dazwischen, räumt der minütliche Lauf den Kanal weg.
 
 **Discord** (alles mit „Server verwalten“):
 
@@ -100,11 +104,12 @@ Die Beschriftungen kommen aus `src/config/ticketactions.json`; `npm run check:ti
 
 ## Nachrichten
 
-Sechs Stück, jede ein Dokument aus Bausteinen (`src/interfaces/builder/IMessageDoc.ts`):
+Sieben Stück, jede ein Dokument aus Bausteinen (`src/interfaces/builder/IMessageDoc.ts`):
 
 | Schlüssel | Wo sie landet |
 |---|---|
-| `panel` | im Server-Kanal, mit Buttons oder Auswahlmenü darunter |
+| `panel` | im Server-Kanal bei Klassisch, mit Buttons oder Auswahlmenü darunter |
+| `modmailPanel` | im Server-Kanal bei ModMail: erklärt, dass man dem Bot per DM schreibt. Darunter die Themen (ein Klick startet das Ticket per DM) und der Link-Knopf „Bot per DM anschreiben“ zum Profil des Bots |
 | `opened` | Eröffnung im Ticket; jede Option darf eine eigene haben |
 | `dm` | Bestätigung an den User bei ModMail, mit Knopf zum Schließen |
 | `closed` | beim Schließen — mit `{closer}` und `{reason}` |
@@ -121,8 +126,10 @@ Sechs Stück, jede ein Dokument aus Bausteinen (`src/interfaces/builder/IMessage
 {user} {user.name} {user.id} {user.avatar}
 {guild} {guild.id} {guild.icon} {guild.members}
 {ticket.id} {ticket.option} {ticket.priority} {ticket.opened} {ticket.claimer}
-{support.role} {closer} {reason}
+{support.role} {closer} {reason} {bot}
 ```
+
+`{bot}` ist die Erwähnung des Bots — gedacht für das ModMail-Panel („Schreib {bot} eine DM“).
 
 Unbekannte bleiben stehen, damit ein Tippfehler auffällt. In DMs stehen Namen statt Erwähnungen — Discord zeigt eine Rollen-Erwähnung dort als „@unbekannte-rolle“.
 

@@ -7,6 +7,7 @@ import {
     CONTACT_LABELS,
     CORE_ACTIONS,
     DELETE_AFTER_HOURS,
+    DeleteLabel,
     MAX_LIMIT,
     MESSAGE_KEYS,
     MESSAGE_LABELS,
@@ -48,13 +49,6 @@ function Mention(id: string | null, kind: "role" | "channel"): string {
     if (!id) return "_nicht gesetzt_";
 
     return kind === "role" ? `<@&${id}>` : `<#${id}>`;
-}
-
-function DeleteLabel(hours: number): string {
-    if (hours === 0) return "nie";
-    if (hours < 24) return `nach ${hours} Stunde${hours === 1 ? "" : "n"}`;
-
-    return `nach ${hours / 24} Tag${hours === 24 ? "" : "en"}`;
 }
 
 /** Die Zeile unter der Überschrift: der ganze Aufbau in einem Satz. */
@@ -205,8 +199,15 @@ function Messages(builder: ComponentV2Builder, config: ITicketConfig): void {
         .text(
             MESSAGE_KEYS.map((key) => {
                 const blocks = config.messages[key].blocks.length;
+                const modmail = config.contact === "modmail";
+                const unused =
+                    (key === "dm" || key === "modmailPanel") && !modmail
+                        ? " _(nur bei ModMail)_"
+                        : key === "panel" && modmail
+                          ? " _(nur bei Klassisch)_"
+                          : "";
 
-                return `${MESSAGE_LABELS[key]} — ${blocks} Baustein(e)${key === "dm" && config.contact !== "modmail" ? " _(nur bei ModMail)_" : ""}`;
+                return `${MESSAGE_LABELS[key]} — ${blocks} Baustein(e)${unused}`;
             }).join("\n")
         )
         .subtext("Hier gibt es die Kurzfassung: Text, Farbe, ein Bild. Bausteine, Platzhalter-Hilfe und die Bildauswahl stehen im Dashboard.")

@@ -107,6 +107,11 @@ export default class TicketSetupHandler extends Event {
 
         state.notice = null;
 
+        // Alles außer den drei Modals erst quittieren: Speichern legt im Forum
+        // unter Umständen Tags an und zieht das Panel nach - das dauert länger als
+        // die drei Sekunden, die Discord auf eine erste Antwort wartet.
+        if (!["add", "edit", "msg"].includes(action)) await interaction.deferUpdate();
+
         if (action === "page" && interaction.isStringSelectMenu()) {
             state.page = interaction.values[0] as SetupPage;
 
@@ -212,8 +217,6 @@ export default class TicketSetupHandler extends Event {
 
             if (!channelId) throw new TicketError("Wähle zuerst einen Kanal.");
 
-            await interaction.deferUpdate();
-
             const url = await this.client.ticketService.SendPanel(guild, channelId);
 
             state.notice = `📮 Panel steht in <#${channelId}>. [Ansehen](${url})`;
@@ -249,6 +252,8 @@ export default class TicketSetupHandler extends Event {
         const state = this.State(interaction.message?.id ?? "");
 
         state.notice = null;
+
+        if (interaction.isFromMessage()) await interaction.deferUpdate();
 
         if (action === "opt") {
             const name = interaction.fields.getTextInputValue("name").trim();
@@ -436,17 +441,11 @@ export default class TicketSetupHandler extends Event {
         const view = await SetupView(this.client, guild, state);
         const payload = { ...view, flags: MessageFlags.IsComponentsV2 as const };
 
-        if (interaction.isModalSubmit()) {
-            if (interaction.isFromMessage()) await interaction.update(payload);
-            else await interaction.reply({ ...view, flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
-
-            return;
-        }
-
         if (interaction.deferred || interaction.replied) await interaction.editReply(payload);
+        else if (interaction.isModalSubmit()) await interaction.reply({ ...view, flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
         else await interaction.update(payload);
 
-        SetupStates.set(interaction.message.id, state);
+        if (interaction.message) SetupStates.set(interaction.message.id, state);
     }
 
     private async Fail(interaction: MessageComponentInteraction | ModalSubmitInteraction, text: string): Promise<void> {

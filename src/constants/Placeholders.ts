@@ -20,6 +20,7 @@ export const PLACEHOLDER_KEYS = [
     "support.role",
     "closer",
     "reason",
+    "bot",
 ] as const;
 
 export type PlaceholderKey = (typeof PLACEHOLDER_KEYS)[number];
