@@ -16,6 +16,7 @@ import { readFile } from "node:fs/promises";
 import BotClient from "../client/BotClient";
 import { SNOWFLAKE } from "../constants/Discord";
 import { MAX_IMAGE_BYTES } from "../constants/Gallery";
+import { PLACEHOLDER_KEYS } from "../constants/Placeholders";
 import { MODULE_IDS } from "../constants/Modules";
 import { DASHBOARD_HOME, DASHBOARD_PATH, DISCORD_EPOCH, OAUTH_SCOPES, SESSION_COOKIE } from "../constants/Dashboard";
 import IDashboardSession from "../interfaces/services/dashboard/IDashboardSession";
@@ -578,16 +579,31 @@ async function main(): Promise<void> {
         modules.find((entry) => entry.id === "gallery")?.always === true
     );
 
-    // Die Galerie-Seite weist zu grosse Bilder ab, bevor sie durchs Netz gehen.
-    // Sie kann MAX_IMAGE_BYTES nicht importieren und traegt die Zahl selbst -
+    // Das Dashboard weist zu grosse Bilder ab, bevor sie durchs Netz gehen.
+    // Es kann MAX_IMAGE_BYTES nicht importieren und traegt die Zahl selbst -
     // laufen beide auseinander, nennt die Kachel eine falsche Grenze.
-    const galleryPage = await readFile(path.join(ASSETS, "pages", "GuildGallery.js"), "utf8");
-    const clientLimit = Number(/MAX_UPLOAD_BYTES = (\d+)/.exec(galleryPage)?.[1]);
+    const galleryCore = await readFile(path.join(ASSETS, "core", "Gallery.js"), "utf8");
+    const clientLimit = Number(/MAX_UPLOAD_BYTES = (\d+)/.exec(galleryCore)?.[1]);
 
     check(
         "Upload-Grenze im Dashboard und im Bot stimmen ueberein",
         clientLimit === MAX_IMAGE_BYTES,
         `Dashboard: ${clientLimit} | Bot: ${MAX_IMAGE_BYTES}`
+    );
+
+    // Die Platzhalter der Ticket-Nachrichten kennt der Bot; das Dashboard fuehrt
+    // dieselbe Liste mit Beschriftung und Beispiel. Fehlt dort einer, bietet der
+    // Editor ihn nie an - steht dort einer zu viel, ersetzt ihn niemand.
+    const placeholderFile = path.join(ASSETS, "constants", "Placeholders.js");
+    const placeholders = existsSync(placeholderFile)
+        ? ((await import(pathToFileURL(placeholderFile).href)) as { PLACEHOLDERS?: { key: string }[] })
+        : {};
+    const clientKeys = (placeholders.PLACEHOLDERS ?? []).map((entry) => entry.key);
+
+    check(
+        `Platzhalter im Dashboard und im Bot stimmen ueberein (${PLACEHOLDER_KEYS.length})`,
+        clientKeys.length === PLACEHOLDER_KEYS.length && PLACEHOLDER_KEYS.every((key) => clientKeys.includes(key)),
+        `Dashboard: ${clientKeys.join(", ")} | Bot: ${PLACEHOLDER_KEYS.join(", ")}`
     );
 
     const up = await fetch(`${BASE}${P}/assets/..%2Findex.html`);
@@ -704,6 +720,16 @@ async function main(): Promise<void> {
         switchable.length === MODULE_IDS.length && MODULE_IDS.every((known) => switchable.includes(known)),
         `Dashboard: ${switchable.join(", ")} | Bot: ${MODULE_IDS.join(", ")}`
     );
+
+    const ticketsApi = await fetch(`${BASE}${P}/api/guild/${id}/tickets`, MANUAL);
+    check("Tickets ohne Sitzung ist 401", ticketsApi.status === 401, `${ticketsApi.status}`);
+
+    const ticketsAlsText = await fetch(`${BASE}${P}/api/guild/${id}/tickets`, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "text/plain" },
+        body: JSON.stringify({ action: "save" }),
+    });
+    check("Tickets-Schreiben nimmt nur JSON (CSRF)", ticketsAlsText.status === 415, `${ticketsAlsText.status}`);
 
     const activityApi = await fetch(`${BASE}${P}/api/guild/${id}/activity`, MANUAL);
     check("Aktivität ohne Sitzung ist 401", activityApi.status === 401, `${activityApi.status}`);

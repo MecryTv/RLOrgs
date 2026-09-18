@@ -11,7 +11,7 @@ import IRunnableService, { ITaskState } from "../interfaces/services/runnables/I
 import { ParseDuration } from "../utils/duration";
 import logger from "../utils/logger";
 
-const TIME_ZONE = "Europe/Berlin";
+export const TIME_ZONE = "Europe/Berlin";
 const POLL_INTERVAL = 30_000;
 
 const MAX_RETRIES = 3;
@@ -62,7 +62,7 @@ function ZoneOffset(date: Date): number {
     return asUTC - Math.floor(date.getTime() / 1000) * 1000;
 }
 
-function ZonedDate(year: number, month: number, day: number, hours: number, minutes: number): Date {
+export function ZonedDate(year: number, month: number, day: number, hours: number, minutes: number): Date {
     const guess = Date.UTC(year, month - 1, day, hours, minutes, 0, 0);
 
     const firstOffset = ZoneOffset(new Date(guess));
@@ -72,14 +72,14 @@ function ZonedDate(year: number, month: number, day: number, hours: number, minu
     return secondOffset === firstOffset ? candidate : new Date(guess - secondOffset);
 }
 
-function ParseTime(value: string | null): { hours: number; minutes: number } | null {
+export function ParseTime(value: string | null): { hours: number; minutes: number } | null {
     const match = TIME_PATTERN.exec(value?.trim() ?? "");
     if (!match) return null;
 
     return { hours: Number(match[1]), minutes: Number(match[2]) };
 }
 
-function ParseDate(value: string | null): { day: number; month: number; year: number } | null {
+export function ParseDate(value: string | null): { day: number; month: number; year: number } | null {
     const match = DATE_PATTERN.exec(value?.trim() ?? "");
     if (!match) return null;
 

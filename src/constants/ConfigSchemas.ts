@@ -14,7 +14,10 @@ export const OPTION: IFieldSchema = {
 export const OPTIONS: IFieldSchema = { type: "array", of: OPTION };
 
 // Pro JSON-Datei in src/config ein Eintrag. Leer heißt: alles erlaubt.
-export const CONFIG_SCHEMAS: Record<string, IConfigSchema> = {};
+export const CONFIG_SCHEMAS: Record<string, IConfigSchema> = {
+    // Das Aktions-Menü im Ticket. Die values prüft check:tickets gegen ACTIONS.
+    ticketactions: { options: OPTIONS },
+};
 
 export function ValidateField(value: unknown, schema: IFieldSchema, path: string, errors: string[]): void {
     if (value === undefined || value === null) {

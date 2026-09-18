@@ -1,23 +1,8 @@
 import Model from "../structures/Model";
-import { TABLES, TableName } from "../constants/Database";
+import { TABLES, TableName, Unpack } from "../constants/Database";
 import { PLAYLIST_IDS } from "../constants/Prime";
 import { IWTSIInput } from "../constants/WTSI";
 import { IPrimeClub, IPrimeRank, IPrimeStat } from "../interfaces/services/prime/IPrimeService";
-
-/**
- * MariaDB gibt JSON je nach Version als Text oder schon ausgepackt zurueck -
- * und eine kaputte Zeile darf die ganze Seite nicht kippen.
- */
-function Unpack<T>(value: unknown, fallback: T): T {
-    if (value === null || value === undefined) return fallback;
-    if (typeof value !== "string") return value as T;
-
-    try {
-        return JSON.parse(value) as T;
-    } catch {
-        return fallback;
-    }
-}
 
 export interface IPlayerRankRow {
     user_id: string;

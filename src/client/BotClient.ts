@@ -1,4 +1,4 @@
-import { Client, Collection, GatewayIntentBits } from "discord.js";
+import { Client, Collection, GatewayIntentBits, Partials } from "discord.js";
 import IBotClient from "../interfaces/client/IBotClient";
 import Command from "../structures/Command";
 import logger from "../utils/logger";
@@ -15,6 +15,7 @@ import DashboardService from "../services/DashboardService";
 import DatabaseService from "../services/DatabaseService";
 import PrimeService from "../services/PrimeService";
 import ActivityService from "../services/ActivityService";
+import TicketService from "../services/TicketService";
 import GuildSettings from "../models/GuildSettings";
 import DashboardGroups from "../models/DashboardGroups";
 import Notifications from "../models/Notifications";
@@ -24,6 +25,9 @@ import Team from "../models/Team";
 import PlayerAccount from "../models/PlayerAccount";
 import Match from "../models/Match";
 import Activity from "../models/Activity";
+import TicketSettings from "../models/TicketSettings";
+import Tickets from "../models/Tickets";
+import TicketBlacklist from "../models/TicketBlacklist";
 
 export default class BotClient extends Client implements IBotClient {
 
@@ -42,6 +46,7 @@ export default class BotClient extends Client implements IBotClient {
     databaseService: DatabaseService;
     primeService: PrimeService;
     activityService: ActivityService;
+    ticketService: TicketService;
 
     // Ein Model je Tabelle. Sie hängen am Client, damit Befehle, Events und
     // Routen dieselbe Instanz benutzen - und damit denselben Cache.
@@ -54,6 +59,9 @@ export default class BotClient extends Client implements IBotClient {
     accounts: PlayerAccount;
     matches: Match;
     activity: Activity;
+    ticketSettings: TicketSettings;
+    tickets: Tickets;
+    ticketBlacklist: TicketBlacklist;
 
     constructor() {
         // Vor super(): die Intents hängen an der Konfiguration, und this gibt es
@@ -71,8 +79,14 @@ export default class BotClient extends Client implements IBotClient {
                 GatewayIntentBits.GuildMessages,
                 GatewayIntentBits.MessageContent,
                 GatewayIntentBits.GuildVoiceStates,
+                // ModMail lebt in der DM: ohne dieses Intent bekommt der Bot sie nie
+                // zu sehen. Es ist nicht privilegiert.
+                GatewayIntentBits.DirectMessages,
                 ...(config.GUILD_MEMBER_INTENT ? [GatewayIntentBits.GuildMembers] : []),
             ],
+            // Einen DM-Kanal kennt der Bot beim ersten Mal noch nicht - ohne dieses
+            // Partial verwirft discord.js die Nachricht, statt sie zu melden.
+            partials: [Partials.Channel],
         });
 
         this.config = config;
@@ -90,6 +104,7 @@ export default class BotClient extends Client implements IBotClient {
         this.databaseService = new DatabaseService(this);
         this.primeService = new PrimeService(this);
         this.activityService = new ActivityService(this);
+        this.ticketService = new TicketService(this);
 
         this.groups = new DashboardGroups(this);
         this.notifications = new Notifications(this);
@@ -100,6 +115,9 @@ export default class BotClient extends Client implements IBotClient {
         this.accounts = new PlayerAccount(this);
         this.matches = new Match(this);
         this.activity = new Activity(this);
+        this.ticketSettings = new TicketSettings(this);
+        this.tickets = new Tickets(this);
+        this.ticketBlacklist = new TicketBlacklist(this);
     }
 
     Init(): void {

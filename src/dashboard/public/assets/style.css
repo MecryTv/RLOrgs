@@ -2320,3 +2320,164 @@ body.no-motion .hero__field .run{display:none}
   /* Zwei Spalten statt einer: auf dem Handy fuellte sonst ein Logo den Bildschirm. */
   .galgrid{grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px}
 }
+
+/* ----------------------------------------------------------
+   Ticket-System
+
+   Die Karte nutzt die Bausteine der Einstellungen (.set, .row, .switch,
+   .pick, .seg, .acct). Neu sind nur drei Dinge: die Karten der
+   Oeffnungs-Optionen, der Nachrichten-Editor mit seiner Vorschau und die
+   Leiste zum Speichern.
+   ---------------------------------------------------------- */
+.tknote{margin-bottom:16px}
+
+/* Speichern klebt unten an der Karte, damit der Weg dorthin nie scrollt. */
+.tkbar{
+  position:sticky;bottom:12px;z-index:2;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-top:18px;padding:12px 14px;
+  border:1px solid color-mix(in srgb,var(--brand) 40%,transparent);
+  background:color-mix(in srgb,var(--brand) 10%,var(--bg-panel));
+  box-shadow:0 12px 28px rgba(0,0,0,.45);
+}
+.tkbar__text{flex:1;min-width:0;font-size:13px;color:var(--text-2)}
+
+/* ---------- Oeffnungs-Optionen ---------- */
+.tkopts{display:grid;gap:10px;margin:12px 0}
+.tkopt{
+  display:grid;gap:8px;padding:12px 13px;
+  border:1px solid var(--line);background:rgba(255,255,255,.022);
+}
+.tkopt__head{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.tkopt__head .text{flex:1;min-width:140px;width:auto}
+.tkopt__emoji{flex:0 0 74px;min-width:0;text-align:center}
+.tkopt__head .pick{flex:0 0 150px}
+.tkopt__tools{margin-left:auto;display:flex;gap:6px}
+.tkopt .row{padding:6px 0}
+.tkopt .row + .row{border-top:1px solid rgba(255,255,255,.045)}
+.tkopt > .text{width:100%}
+.tkopt .hintline{margin:0}
+
+.iconbtn.is-danger:hover{color:var(--loss);border-color:color-mix(in srgb,var(--loss) 45%,transparent)}
+.iconbtn:disabled{opacity:.35;cursor:not-allowed}
+
+.tktoggle{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-2);cursor:pointer}
+
+/* ---------- Nachrichten ---------- */
+.tkmsgtabs{flex-wrap:wrap;margin:10px 0 14px}
+.tkedit{display:grid;gap:16px;align-items:start;grid-template-columns:minmax(0,1fr) minmax(0,420px)}
+.tkedit__form{display:grid;gap:10px;min-width:0}
+.tkedit__preview{min-width:0;position:sticky;top:calc(var(--topbar-h) + 16px)}
+.tkedit__preview h4{
+  margin:0 0 8px;font-family:var(--f-label);font-size:11.5px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);
+}
+
+.tktools{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+/* .btn waechst sonst mit flex:1 und schneidet in einer vollen Reihe seinen Text ab. */
+.tktools .btn,.tkchips .btn,.tkbar .btn,.tkopts ~ .btn,.tkedit ~ .btn{flex:none}
+.tktools .btn{height:34px;padding:0 10px;font-size:11.5px}
+.tkcolor{
+  width:44px;height:34px;padding:2px;flex:none;cursor:pointer;
+  border:1px solid var(--line-strong);background:var(--glass);
+}
+.tktools .pick{width:auto;max-width:240px}
+
+.tkblocks{display:grid;gap:8px}
+.tkblock{display:grid;gap:8px;padding:10px 11px;border:1px solid var(--line);background:rgba(255,255,255,.02)}
+.tkblock__head{display:flex;align-items:center;gap:8px}
+.tkblock__head b{
+  flex:1;font-family:var(--f-label);font-size:11.5px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);
+}
+.tkblock__head div{display:flex;gap:6px}
+.tkarea{width:100%;min-height:96px;resize:vertical;padding:10px 12px;line-height:1.5}
+.tkrow{display:flex;flex-wrap:wrap;gap:16px}
+.tkchips{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.tkchip{
+  display:inline-flex;align-items:center;gap:6px;max-width:100%;
+  padding:4px 4px 4px 10px;font-size:12px;color:var(--text-2);
+  border:1px solid var(--line-strong);background:var(--glass);
+}
+.tkchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tkchip button{
+  width:22px;height:22px;flex:none;display:grid;place-items:center;
+  color:var(--text-3);border:0;background:none;cursor:pointer;
+}
+.tkchip button:hover{color:var(--loss)}
+.tkchip svg{width:13px;height:13px}
+
+/* ---------- Vorschau ---------- */
+.tkprev{
+  display:grid;gap:10px;padding:14px 16px;
+  border:1px solid var(--line);border-left:3px solid var(--accent,var(--line-strong));
+  background:#0b1016;font-size:14px;line-height:1.55;overflow-wrap:anywhere;
+}
+.tkprev__line{margin:0}
+.tkprev h2,.tkprev h3,.tkprev h4{font-family:var(--f-display);line-height:1.25}
+.tkprev h2{font-size:19px;font-weight:700}
+.tkprev h3{font-size:16px;font-weight:600}
+.tkprev h4{font-size:14px;font-weight:600}
+.tkprev ul{margin:0;padding-left:20px}
+.tkprev code{font-family:var(--f-mono);font-size:12.5px;padding:1px 5px;background:var(--glass-2)}
+.tkprev__small{display:block;font-size:12px;color:var(--text-3)}
+.tkprev__sep{height:1px;background:var(--line);margin:2px 0}
+.tkprev__sep.is-big{margin:10px 0}
+.tkprev__sep.is-blank{background:none}
+.tkprev__gallery{display:flex;flex-wrap:wrap;gap:6px}
+.tkprev__image{max-width:100%;max-height:220px;border:1px solid var(--line)}
+.tkprev__section{display:flex;gap:12px;align-items:flex-start}
+.tkprev__section > div{flex:1;min-width:0}
+.tkprev__thumb{width:76px;height:76px;object-fit:cover;flex:none;border:1px solid var(--line)}
+.tkmention{
+  padding:1px 5px;border-radius:0;font-weight:500;
+  color:var(--blue-soft);background:color-mix(in srgb,var(--blue) 14%,transparent);
+}
+.tklink{color:var(--blue-soft);text-decoration:underline}
+.tkmissing{
+  display:inline-block;padding:3px 8px;font-size:12px;color:var(--warn);
+  border:1px dashed color-mix(in srgb,var(--warn) 40%,transparent);
+}
+
+/* Was Discord unter die Nachricht setzt - angedeutet, nicht nachgebaut. */
+.tkmock{display:flex;flex-wrap:wrap;gap:6px;padding-top:4px;border-top:1px solid var(--line);margin-top:4px}
+.tkmock__status{width:100%;margin:0;font-size:12px;color:var(--text-3)}
+.tkmock__btn{
+  padding:6px 12px;font-size:12.5px;color:#fff;
+  background:color-mix(in srgb,var(--purple) 55%,#3b3f7a);
+}
+.tkmock__select{
+  width:100%;padding:8px 12px;font-size:12.5px;color:var(--text-3);
+  border:1px solid var(--line-strong);background:var(--glass);
+}
+.tkmock__chips{display:flex;flex-wrap:wrap;gap:4px;width:100%}
+.tkmock__chips .tagline{font-size:10.5px}
+
+/* ---------- Bildauswahl ----------
+   Heisst imgpick und nicht pick: .pick ist das Auswahlfeld des Dashboards und
+   haette dem Dialog dessen feste Hoehe gegeben. */
+.imgpick{width:min(720px,calc(100vw - 32px))}
+.imgpick__tabs{margin:10px 0 14px}
+.imgpick__pane{display:grid;gap:12px}
+.imgpick__album{width:100%}
+.imgpick .galgrid{margin-top:0;max-height:min(46vh,420px);overflow-y:auto;grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+.galtile--pick{padding:0;text-align:left;cursor:pointer}
+.galtile--pick:hover{border-color:var(--blue)}
+.galtile--pick:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--blue)}
+.imgpick__note{margin-top:10px;font-size:12.5px;color:var(--warn)}
+.imgpick__foot{
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  margin-top:14px;padding-top:12px;border-top:1px solid var(--line);
+  font-size:12.5px;color:var(--text-3);
+}
+.imgpick__foot .tagline{cursor:pointer}
+.imgpick__foot .tagline:hover{color:var(--blue);border-color:var(--blue)}
+
+/* Auf schmalen Seiten steht die Vorschau unter dem Editor statt daneben. */
+@media (max-width:1100px){
+  .tkedit{grid-template-columns:1fr}
+  .tkedit__preview{position:static}
+}
+@media (hover:none){
+  .tkopt__tools .iconbtn,.tkblock__head .iconbtn{width:44px;height:44px}
+}

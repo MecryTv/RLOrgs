@@ -1,0 +1,97 @@
+[
+    {
+        "pagination": false,
+        "options": [
+            {
+                "name": "Ticket beanspruchen",
+                "value": "claim",
+                "description": "Claim dieses Ticket und übernehme die Bearbeitung",
+                "emoji": "✅"
+            },
+            {
+                "name": "Ticket zurückgeben",
+                "value": "unclaim",
+                "description": "Gib dieses Ticket zurück in die Warteschlange für andere Teammitglieder",
+                "emoji": "↩️"
+            },
+            {
+                "name": "Ticket verschieben",
+                "value": "transfer",
+                "description": "Verschiebe dieses Ticket in eine andere Kategorie",
+                "emoji": "🔁"
+            },
+            {
+                "name": "Priorität setzen",
+                "value": "priority",
+                "description": "Setze die Dringlichkeit dieses Tickets (Fügt Forum-Tag hinzu)",
+                "emoji": "⚡"
+            },
+            {
+                "name": "Anonymer Modus",
+                "value": "anonymous_mode",
+                "description": "Schreibe inkognito unter einem Team-Alias (Webhook)",
+                "emoji": "🛡️"
+            },
+            {
+                "name": "Medien-Tresor",
+                "value": "media_vault",
+                "description": "Zeige alle in diesem Ticket hochgeladenen Dateien als Galerie",
+                "emoji": "🖼️"
+            },
+            {
+                "name": "Slowmode aktivieren",
+                "value": "slowmode",
+                "description": "Aktiviere eine Nachrichtensperre gegen User-Spam im Thread",
+                "emoji": "⏱️"
+            },
+            {
+                "name": "Ticket-Zusammenfassung",
+                "value": "tldr_summary",
+                "description": "Generiere eine schnelle Übersicht der wichtigsten Ticket-Fakten",
+                "emoji": "📖"
+            },
+            {
+                "name": "Team-Notiz hinzufügen",
+                "value": "staff_note",
+                "description": "Füge eine interne Notiz für das Team hinzu",
+                "emoji": "📝"
+            },
+            {
+                "name": "Benutzer hinzufügen",
+                "value": "add_user",
+                "description": "Füge einen weiteren Benutzer zum Ticket hinzu",
+                "emoji": "➕"
+            },
+            {
+                "name": "Benutzer entfernen",
+                "value": "remove_user",
+                "description": "Entferne einen Benutzer aus diesem Ticket",
+                "emoji": "➖"
+            },
+            {
+                "name": "Ticket einfrieren",
+                "value": "freeze",
+                "description": "Sperre den Ticket-Ersteller temporär vom Schreiben",
+                "emoji": "🥶"
+            },
+            {
+                "name": "Benutzer sperren",
+                "value": "blacklist",
+                "description": "Sperre diesen User permanent für das Ticketsystem",
+                "emoji": "🚫"
+            },
+            {
+                "name": "Termin vereinbaren",
+                "value": "schedule_meeting",
+                "description": "Plane ein Support-Gespräch und aktiviere eine automatische Erinnerung",
+                "emoji": "📅"
+            },
+            {
+                "name": "Ticket schließen",
+                "value": "close",
+                "description": "Schließe das Ticket und speichere das Transcript",
+                "emoji": "❌"
+            }
+        ]
+    }
+]

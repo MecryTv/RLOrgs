@@ -8,6 +8,7 @@ import { clickSound } from "../core/Sound.js";
 import { BASE } from "../core/Base.js";
 import { fetchActivity, renderOverview } from "./GuildOverview.js";
 import { renderGallery } from "./GuildGallery.js";
+import { renderTickets } from "./GuildTickets.js";
 /* ----------------------------------------------------------
    Seite: Serverdetail
 
@@ -145,6 +146,7 @@ export function renderGuild(data) {
     const show = bindSections(guild.id);
     void renderOverview(guild, data.user.id, waiting.activity);
     renderGallery(guild.id, guild.canManage);
+    renderTickets(guild.id, guild.canManage, { id: data.user.id, name: data.user.name, avatar: data.user.avatar });
     void waiting.detail.then((detail) => {
         paintDetails(detail);
         // Kommt keiner der beiden Blöcke an, sagt die Übersicht das, statt leer

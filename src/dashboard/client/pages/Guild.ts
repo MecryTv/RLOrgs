@@ -11,6 +11,7 @@ import { clickSound } from "../core/Sound.js";
 import { BASE } from "../core/Base.js";
 import { ActivityResult, fetchActivity, renderOverview } from "./GuildOverview.js";
 import { renderGallery } from "./GuildGallery.js";
+import { renderTickets } from "./GuildTickets.js";
 
 /* ----------------------------------------------------------
    Seite: Serverdetail
@@ -180,6 +181,7 @@ export function renderGuild(data: IPayload): void {
 
     void renderOverview(guild, data.user.id, waiting.activity);
     renderGallery(guild.id, guild.canManage);
+    renderTickets(guild.id, guild.canManage, { id: data.user.id, name: data.user.name, avatar: data.user.avatar });
 
     void waiting.detail.then((detail) => {
         paintDetails(detail);

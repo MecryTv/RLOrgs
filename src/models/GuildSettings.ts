@@ -1,5 +1,5 @@
 import Model from "../structures/Model";
-import { OrNull, TABLES, TableName } from "../constants/Database";
+import { OrNull, TABLES, TableName, Unpack } from "../constants/Database";
 import { ModuleId, PERMANENT_MODULES } from "../constants/Modules";
 
 /** Eine Zeile aus guild_settings, so wie MariaDB sie liefert. */
@@ -28,19 +28,6 @@ export const DEFAULT_SETTINGS: Omit<IGuildSettings, "guildId"> = {
     matchChannel: null,
     queueChannel: null,
 };
-
-// MariaDB gibt JSON-Spalten je nach Version als Text oder schon ausgepackt
-// zurück. Beides wird hier auf dieselbe Form gebracht.
-function Unpack<T>(value: unknown, fallback: T): T {
-    if (value === null || value === undefined) return fallback;
-    if (typeof value !== "string") return value as T;
-
-    try {
-        return JSON.parse(value) as T;
-    } catch {
-        return fallback;
-    }
-}
 
 // Feste Module stehen in jeder Liste, egal was in der Spalte steht: so muss
 // keine aufrufende Stelle wissen, dass es sie gibt.

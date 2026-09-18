@@ -1,40 +1,9 @@
 /** Abschnitt: Galerie eines Servers. */
 import { icon, need } from "../core/Dom.js";
 import { BASE } from "../core/Base.js";
+import { failureText, MAX_UPLOAD_BYTES, megabytes, uploadImage } from "../core/Gallery.js";
 import { clickSound } from "../core/Sound.js";
 import { toast } from "../core/Toast.js";
-// MAX_IMAGE_BYTES aus src/constants/Gallery.ts (8 MiB). Der Client kann von dort
-// nicht importieren; check:dashboard vergleicht beide Zahlen.
-const MAX_UPLOAD_BYTES = 8388608;
-function megabytes(bytes) {
-    return `${(bytes / 1048576).toLocaleString("de-DE", { maximumFractionDigits: 1 })} MB`;
-}
-// Warum eine Antwort dieser Seite abgelehnt wurde. Vorbild: FAILED in Guild.ts -
-// derselbe Gedanke (Sitzung/Recht/Ansturm/Datenbank werden zu einem deutschen
-// Satz statt zum rohen "Unauthorized"/"Forbidden"), eigener Wortlaut fuer die
-// Galerie und absichtlich nicht dieselbe Konstante: Guild.ts spricht von
-// "Schaltern", hier gibt es keine.
-const FAILED = {
-    401: "Deine Sitzung ist abgelaufen, lade die Seite neu.",
-    403: "Diesen Server darfst du nicht verwalten.",
-    // Fastify antwortet englisch ("Payload Too Large"), bevor die Route laeuft.
-    413: `Zu groß – höchstens ${megabytes(MAX_UPLOAD_BYTES)}.`,
-    429: "Zu viele Anfragen auf einmal, warte einen Moment.",
-    503: "Der Bot erreicht gerade seine Datenbank nicht.",
-};
-// 400/415 zeigen die Meldung der Route selbst (data.error), ein unbekannter
-// Code einen festen Rueckfalltext.
-function reasonOf(status, data) {
-    return FAILED[status] ?? data.error ?? `Der Bot hat abgelehnt (${status}).`;
-}
-// Liest eine abgelehnte Antwort fuer send() und load(). null heisst Erfolg; der
-// Rumpf ist dann noch ungelesen, der Aufrufer liest ihn selbst (ein
-// Response-Rumpf laesst sich nur einmal lesen).
-async function failureText(response) {
-    if (response.ok)
-        return null;
-    return reasonOf(response.status, (await response.json().catch(() => ({}))));
-}
 // Identitaet eines Albums fuer die Auswahl - guildId traegt den Scope schon
 // mit (Vorlagen liegen unter "default", eigene Alben unter der echten Guild-ID),
 // ein drittes Feld dafuer braucht es nicht.
@@ -577,39 +546,6 @@ export function renderGallery(guildId, canManage) {
     /* ------------------------------------------------------------
        Hochladen
        ------------------------------------------------------------ */
-    // XMLHttpRequest statt fetch: nur er meldet, wie weit der Upload ist. Kommt
-    // zurueck mit dem Grund einer Ablehnung, oder mit der ID des neuen Bildes.
-    function sendFile(entry) {
-        const query = new URLSearchParams({ category: entry.category, name: entry.file.name });
-        if (entry.subcategory)
-            query.set("subcategory", entry.subcategory);
-        return new Promise((resolve) => {
-            const request = new XMLHttpRequest();
-            request.open("POST", `${BASE}/api/guild/${encodeURIComponent(guildId)}/gallery/image?${query}`);
-            request.setRequestHeader("Content-Type", entry.file.type);
-            request.setRequestHeader("Accept", "application/json");
-            request.responseType = "json";
-            request.upload.addEventListener("progress", (event) => {
-                if (!event.lengthComputable)
-                    return;
-                entry.progress = event.loaded / event.total;
-                paintBusy(entry);
-            });
-            // Alle Bytes sind beim Bot - ab jetzt verkleinert er.
-            request.upload.addEventListener("load", () => {
-                entry.progress = 1;
-                entry.phase = "shrink";
-                paintBusy(entry);
-            });
-            request.addEventListener("load", () => {
-                const data = (request.response ?? {});
-                const ok = request.status >= 200 && request.status < 300;
-                resolve(ok ? { error: null, id: data.image?.id } : { error: reasonOf(request.status, data) });
-            });
-            request.addEventListener("error", () => resolve({ error: "Der Bot antwortet gerade nicht." }));
-            request.send(entry.file);
-        });
-    }
     async function uploadFiles(chosen) {
         if (!isWritable() || !current)
             return;
@@ -655,7 +591,11 @@ export function renderGallery(guildId, canManage) {
         for (const entry of queue) {
             entry.phase = "upload";
             paintBusy(entry);
-            const result = await sendFile(entry);
+            const result = await uploadImage(guildId, entry, entry.file, (phase, fraction) => {
+                entry.phase = phase;
+                entry.progress = fraction;
+                paintBusy(entry);
+            });
             if (result.error !== null) {
                 entry.phase = "failed";
                 entry.error = result.error;

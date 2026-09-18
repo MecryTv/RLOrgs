@@ -21,6 +21,9 @@ export const TABLES = {
     activity: "guild_activity",
     channelActivity: "channel_activity",
     memberActivity: "member_activity",
+    ticketSettings: "ticket_settings",
+    tickets: "tickets",
+    ticketBlacklist: "ticket_blacklist",
 } as const;
 
 export type TableName = (typeof TABLES)[keyof typeof TABLES];
@@ -77,4 +80,17 @@ export function OrNull(value: string | null | undefined): string | null {
     const text = value?.trim();
 
     return text ? text : null;
+}
+
+// MariaDB gibt JSON-Spalten je nach Version als Text oder schon ausgepackt
+// zurück. Beides wird hier auf dieselbe Form gebracht.
+export function Unpack<T>(value: unknown, fallback: T): T {
+    if (value === null || value === undefined) return fallback;
+    if (typeof value !== "string") return value as T;
+
+    try {
+        return JSON.parse(value) as T;
+    } catch {
+        return fallback;
+    }
 }
