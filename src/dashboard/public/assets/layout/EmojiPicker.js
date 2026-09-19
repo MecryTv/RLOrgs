@@ -119,12 +119,14 @@ export function emojiPicker(options) {
     button.setAttribute("aria-haspopup", "dialog");
     function show() {
         button.replaceChildren(value ? emojiNode(value, options.emojis) : icon("#i-smile"));
-        button.setAttribute("aria-label", `${options.label}: ${labelOf(value)} – ändern`);
-        button.title = value ? `${labelOf(value)} – ändern` : "Emoji wählen";
+        button.setAttribute("aria-label", options.insert ? options.label : `${options.label}: ${labelOf(value)} – ändern`);
+        button.title = options.insert ? options.label : value ? `${labelOf(value)} – ändern` : "Emoji wählen";
     }
     function choose(next) {
-        value = next;
-        show();
+        if (!options.insert) {
+            value = next;
+            show();
+        }
         options.onPick(next);
         pop?.hidePopover();
         button.focus();
@@ -138,7 +140,7 @@ export function emojiPicker(options) {
         button.dataset.owner ??= String(Math.random());
         panel.dataset.owner = button.dataset.owner;
         anchor = button;
-        panel.replaceChildren(...content(options.emojis, value, choose));
+        panel.replaceChildren(...content(options.emojis, value, choose, Boolean(options.insert)));
         panel.showPopover();
         place(panel, button);
         // Mit Maus direkt ins Suchfeld; auf dem Handy nicht - sonst springt die Tastatur auf.
@@ -150,7 +152,7 @@ export function emojiPicker(options) {
     show();
     return button;
 }
-function content(emojis, current, choose) {
+function content(emojis, current, choose, insert) {
     let mode = emojis.length > 0 ? "server" : "standard";
     const search = document.createElement("input");
     search.type = "search";
@@ -244,7 +246,10 @@ function content(emojis, current, choose) {
     none.addEventListener("click", () => choose(null));
     const foot = document.createElement("div");
     foot.className = "emojipop__foot";
-    foot.append(own, take, none);
+    foot.append(own, take);
+    // Beim Einfügen gibt es nichts zu leeren.
+    if (!insert)
+        foot.append(none);
     paint();
     return [search, tabs, grid, empty, foot];
 }

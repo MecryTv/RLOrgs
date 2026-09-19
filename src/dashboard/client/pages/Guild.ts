@@ -13,6 +13,10 @@ import { ActivityResult, fetchActivity, renderOverview } from "./GuildOverview.j
 import { renderGallery } from "./GuildGallery.js";
 import { renderTickets } from "./GuildTickets.js";
 import { renderTranscripts } from "./GuildTranscripts.js";
+import { renderLive } from "./GuildLive.js";
+
+// Was ein Supporter ohne "Server verwalten" sieht - die Teile des Ticket-Systems.
+const SUPPORT_SECTIONS = new Set(["live-tickets", "transcriptions"]);
 
 /* ----------------------------------------------------------
    Seite: Serverdetail
@@ -170,20 +174,39 @@ export function renderGuild(data: IPayload): void {
     meta.replaceChildren(role, members, bots, created);
     countMembers(meta, guild);
 
-    if (!guild.canManage) need<HTMLElement>("#readonly").hidden = false;
+    // Supporter: kein Verwalten, aber eine Support-Rolle - sie sehen nur die Tickets.
+    const supportOnly = !guild.canManage && guild.role === "Support";
+
+    if (!guild.canManage) {
+        const note = need<HTMLElement>("#readonly");
+
+        note.hidden = false;
+
+        if (supportOnly) {
+            note.querySelector("span")!.textContent =
+                "Du bist hier im Support-Team: Live Tickets und Transcriptions stehen dir offen. Einstellungen brauchen „Server verwalten“ auf dem Server selbst.";
+        }
+    }
 
     // Wurde die Seite direkt aufgerufen, laufen die Abfragen schon; sonst hier.
     const waiting = pending ?? { detail: fetchDetail(guild.id), activity: fetchActivity(guild.id) };
 
     // Erst die Leiste mit dem Stand aus /api/me, dann die Abschnitte: sonst
     // landete eine Adresse auf einem ausgeschalteten Modul auf dessen Karte.
-    const loadModules = bindModules(guild);
-    const show = bindSections(guild.id);
+    const loadModules = bindModules(guild, supportOnly ? SUPPORT_SECTIONS : null);
+    const show = bindSections(guild.id, supportOnly ? "live-tickets" : "uebersicht");
 
-    void renderOverview(guild, data.user.id, waiting.activity);
-    renderGallery(guild.id, guild.canManage);
-    renderTickets(guild.id, guild.canManage, { id: data.user.id, name: data.user.name, avatar: data.user.avatar });
+    const user = { id: data.user.id, name: data.user.name, avatar: data.user.avatar };
+
+    // Was ein Supporter nicht sehen darf, wird gar nicht erst geladen.
+    if (!supportOnly) {
+        void renderOverview(guild, data.user.id, waiting.activity);
+        renderGallery(guild.id, guild.canManage);
+        renderTickets(guild.id, guild.canManage, user);
+    }
+
     renderTranscripts(guild.id);
+    renderLive(guild.id, user);
 
     void waiting.detail.then((detail) => {
         paintDetails(detail);
@@ -229,7 +252,7 @@ function reveal(link: HTMLElement, nav: HTMLElement): void {
  * hängt einen Eintrag in den Verlauf - neu geladen wird nichts, die Seite hat
  * schon alles. Zurück und Vorwärts funktionieren trotzdem.
  */
-function bindSections(guildId: string): (section: string) => void {
+function bindSections(guildId: string, fallback: string): (section: string) => void {
     const nav = need<HTMLElement>("#setNav");
     const cards = [...document.querySelectorAll<HTMLElement>("#moduleCards > section")];
     const links = (): HTMLAnchorElement[] => [...nav.querySelectorAll<HTMLAnchorElement>("a[data-section]")];
@@ -239,10 +262,10 @@ function bindSections(guildId: string): (section: string) => void {
     for (const link of links()) link.href = `${BASE}/guild/${guildId}/${link.dataset.section ?? "uebersicht"}`;
 
     function show(wanted: string): void {
-        // Unbekannt oder ausgeschaltet: dann die Übersicht - und die Adresse
-        // sagt danach auch, was zu sehen ist.
+        // Unbekannt oder ausgeschaltet: dann die Übersicht (für Supporter Live
+        // Tickets) - und die Adresse sagt danach auch, was zu sehen ist.
         const open = links().find((link) => !link.hidden && link.dataset.section === wanted);
-        const section = open?.dataset.section ?? "uebersicht";
+        const section = open?.dataset.section ?? fallback;
 
         for (const card of cards) card.hidden = card.id !== section;
 
@@ -306,7 +329,7 @@ const FAILED: Record<number, string> = {
  * einem Stand. Zurück kommt der Weg, den Stand aus der Datenbank nachzureichen;
  * null heißt, es gibt keinen, und die Schalter bleiben gesperrt.
  */
-function bindModules(guild: IGuild): (modules: string[] | null) => void {
+function bindModules(guild: IGuild, only: Set<string> | null): (modules: string[] | null) => void {
     const nav = need<HTMLElement>("#setNav");
     const cards = need<HTMLElement>("#moduleCards");
     const list = need<HTMLElement>("#moduleList");
@@ -425,11 +448,16 @@ function bindModules(guild: IGuild): (modules: string[] | null) => void {
         });
     }
 
+    // Supporter sehen weder Übersicht noch Module - nur, was in only steht.
+    if (only) {
+        for (const fixed of nav.querySelectorAll<HTMLElement>('a[data-section="uebersicht"], a[data-section="module"]')) fixed.hidden = true;
+    }
+
     function paint(): void {
         for (const [id, entry] of entries) {
             const on = shown.has(id) || entry.always;
 
-            for (const anchor of entry.links) anchor.hidden = !on;
+            for (const anchor of entry.links) anchor.hidden = !on || (only !== null && !only.has(anchor.dataset.section ?? ""));
 
             entry.input.checked = on;
             entry.input.disabled = entry.always || !ready || !guild.canManage;
@@ -439,7 +467,7 @@ function bindModules(guild: IGuild): (modules: string[] | null) => void {
         // Eine Ueberschrift ohne eingeschaltetes Modul darunter waere eine
         // Zeile, die auf nichts zeigt.
         for (const group of groups) {
-            group.cap.hidden = !group.ids.some((id) => shown.has(id) || entries.get(id)?.always);
+            group.cap.hidden = !group.ids.some((id) => entries.get(id)?.links.some((anchor) => !anchor.hidden));
         }
     }
 

@@ -1,6 +1,6 @@
 /** Ein Server, wie ihn /api/me liefert. Spiegelt IDashboardGuild aus dem Backend. */
 
-export type DashboardRole = "Owner" | "Admin" | "Staff";
+export type DashboardRole = "Owner" | "Admin" | "Staff" | "Support";
 
 export interface IGuild {
     id: string;
@@ -12,6 +12,8 @@ export interface IGuild {
     active: boolean;
     role: DashboardRole;
     canManage: boolean;
+    /** Live Tickets und Transcriptions - wer verwaltet, und die Support-Rollen. */
+    canSupport: boolean;
     created: string;
     teams: number;
     modules: string[];

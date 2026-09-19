@@ -754,6 +754,30 @@ async function main(): Promise<void> {
     });
     check("Transcript-Löschen nimmt nur JSON (CSRF)", transcriptsAlsText.status === 415, `${transcriptsAlsText.status}`);
 
+    // Live Tickets: nichts ohne Sitzung, auch nicht der Stream; schreiben nur als JSON bzw. roh.
+    for (const [was, pfad] of [
+        ["Live-Liste", "live"],
+        ["Live-Stream", "live/stream"],
+        ["Live-Verlauf", "live/1"],
+    ]) {
+        const antwort = await fetch(`${BASE}${P}/api/guild/${id}/${pfad}`, MANUAL);
+        check(`${was} ohne Sitzung ist 401`, antwort.status === 401, `${antwort.status}`);
+    }
+
+    const liveAlsText = await fetch(`${BASE}${P}/api/guild/${id}/live/1`, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "text/plain" },
+        body: JSON.stringify({ action: "send", content: "hallo" }),
+    });
+    check("Live-Schreiben nimmt nur JSON (CSRF)", liveAlsText.status === 415, `${liveAlsText.status}`);
+
+    const liveDateiAlsText = await fetch(`${BASE}${P}/api/guild/${id}/live/1/file?name=a.txt`, {
+        method: "POST",
+        headers: { ...mitSitzung, "Content-Type": "text/plain" },
+        body: "hallo",
+    });
+    check("Live-Datei nimmt nur rohe Daten", liveDateiAlsText.status === 415, `${liveDateiAlsText.status}`);
+
     const activityApi = await fetch(`${BASE}${P}/api/guild/${id}/activity`, MANUAL);
     check("Aktivität ohne Sitzung ist 401", activityApi.status === 401, `${activityApi.status}`);
 

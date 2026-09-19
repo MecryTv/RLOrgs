@@ -334,6 +334,21 @@
           </div>
         </section>
 
+        <!-- Live Tickets: offene Tickets mitlesen und direkt antworten. Teil des
+             Ticket-Systems, gefuellt von GuildLive.ts. Neues kommt als
+             Server-Sent Events, die Nachrichten im Discord-Look (Shadow DOM). -->
+        <section class="setcard" id="live-tickets" hidden>
+          <h2 class="modhead"><svg><use href="#i-message"/></svg>Live Tickets</h2>
+          <p class="modlead">Offene Tickets live mitlesen und direkt antworten. Deine Nachricht erscheint in Discord mit deinem Namen und Bild.</p>
+
+          <div class="notice ltnote" id="ltNote" hidden>
+            <svg><use href="#i-warn"/></svg>
+            <span></span>
+          </div>
+
+          <div class="lt" id="ltBody"></div>
+        </section>
+
         <!-- Die Transcripts geschlossener Tickets. Teil des Ticket-Systems (steht
              in der Leiste unter ihm), gefuellt von GuildTranscripts.ts. Angesehen
              wird ein Transcript auf seiner eigenen Seite /transcript/<ticket>. -->

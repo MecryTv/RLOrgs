@@ -13,7 +13,8 @@ const PAGE_SIZE = 25;
  * Die Transcripts eines Servers für die Seite "Transcriptions". GET: neueste
  * zuerst, 25 je Abruf, weiter über ?before=<ticket>, Suche mit ?q= nach Nummer,
  * User-ID oder Name. POST { action: "delete", id }: ein Transcript samt
- * Anhängen löschen. Nur wer den Server verwalten darf - wie die Einstellungen.
+ * Anhängen löschen. Lesen darf auch die Support-Rolle (nur ihre Themen),
+ * löschen nur, wer den Server verwalten darf.
  */
 export default class DashboardApiTranscripts extends Route {
     constructor(client: BotClient) {
@@ -41,9 +42,13 @@ export default class DashboardApiTranscripts extends Route {
 
         if (writing && !WantsJSON(request)) return reply.code(415).send({ error: "Nur application/json" });
 
+        let manage: boolean;
+
         try {
-            if (!(await service.CanManage(session, id))) {
-                return reply.code(403).send({ error: "Forbidden", hint: "Nur wer den Server verwalten darf." });
+            manage = await service.CanManage(session, id);
+
+            if (!manage && !(await service.CanSupport(session, id))) {
+                return reply.code(403).send({ error: "Forbidden", hint: "Nur das Team dieses Servers." });
             }
         } catch (error) {
             if (!(error instanceof SessionExpired)) throw error;
@@ -59,6 +64,8 @@ export default class DashboardApiTranscripts extends Route {
         }
 
         if (writing) {
+            if (!manage) return reply.code(403).send({ error: "Forbidden", hint: "Löschen darf nur, wer den Server verwalten darf." });
+
             const body = (request.body ?? {}) as { action?: unknown; id?: unknown };
             const entry = typeof body.id === "number" ? await this.client.ticketTranscripts.Entry(body.id) : null;
 
@@ -75,13 +82,23 @@ export default class DashboardApiTranscripts extends Route {
         const query = request.query as { q?: string; before?: string };
         const before = query.before && /^\d{1,10}$/.test(query.before) ? Number(query.before) : null;
         const search = typeof query.q === "string" ? query.q.slice(0, 100) : "";
-        const rows = await this.client.ticketTranscripts.List(id, search, before, PAGE_SIZE + 1);
+        // Supporter: nur die Themen ihrer Rolle. Ohne Mitglied gibt es für sie nichts.
+        let visible: { include?: string[]; exclude?: string[] } = {};
+
+        if (!manage) {
+            const access = await this.client.liveService.Access(session.userId, id);
+
+            visible = access ? this.client.transcriptService.Visible(access.member, access.config) : { include: [] };
+        }
+
+        const rows = await this.client.ticketTranscripts.List(id, search, before, PAGE_SIZE + 1, visible);
 
         return reply.header("Cache-Control", "no-store").send({
             transcripts: rows.slice(0, PAGE_SIZE).map((row) => ({ id: row.ticketId, number: row.number, ...row.meta })),
             more: rows.length > PAGE_SIZE,
             // Damit die leere Liste sagen kann, warum sie leer ist.
             enabled: (await this.client.ticketSettings.Of(id)).transcripts.enabled,
+            canDelete: manage,
         });
     }
 }

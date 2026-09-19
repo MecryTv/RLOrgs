@@ -200,8 +200,11 @@ Anmelden darf sich **jeder** Discord-Account. Was danach in der Liste steht, hä
 |---|---|---|
 | Owner des Servers | ja | ja |
 | `MANAGE_GUILD` oder `ADMINISTRATOR` | ja | ja |
+| Support-Rolle eines Ticket-Themas | ja, Marke „Support“ | nein — nur **Live Tickets** und **Transcriptions**, siehe [Tickets.md](Tickets.md#live-tickets) |
 | Weder noch | nein | — |
 | Gruppe `administrator` oder `developer` | zusätzlich **jeder** Server, auf dem der Bot ist | nur mit eigenem Recht auf dem Server |
+
+Die Support-Rolle kommt nicht aus Discords Serverliste, sondern vom Bot: er schaut, ob das Mitglied die allgemeine Support-Rolle oder die eines Themas trägt. Nur auf Servern mit eingeschaltetem Ticket-Modul, und nur für Server, die sonst nicht in der Liste stünden. Die Übersicht mit Aktivität bleibt für sie zu.
 
 Karten ohne Bearbeitungsrecht tragen die Marke „Nur Ansicht“, die Detailseite blendet dort einen Hinweis ein. Wer Seiten-Admins auch dort schreiben lassen will, setzt in `DashboardService.Guilds()` beim Staff-Zweig `canManage` auf `true` — eine Zeile.
 

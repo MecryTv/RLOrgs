@@ -28,7 +28,7 @@ import {
     TRANSCRIPT_INLINE_BYTES,
     TRANSCRIPT_ROOT,
 } from "../constants/Transcripts";
-import { ITicket } from "../interfaces/services/tickets/ITicket";
+import { ITicket, ITicketConfig } from "../interfaces/services/tickets/ITicket";
 import { ITranscript, ITranscriptMessage, ITranscriptUser } from "../interfaces/services/tickets/ITranscript";
 import { ITranscriptEntry } from "../models/TicketTranscripts";
 import { ITicketContext } from "./TicketService";
@@ -125,34 +125,7 @@ export default class TranscriptService {
         const people = await this.People(guild, messages, ticket);
         const media = await this.SaveMedia(guild.id, ticket.id, messages);
 
-        const list: ITranscriptMessage[] = messages.map((message) => ({
-            id: message.id,
-            type: message.type,
-            author: this.Author(message, people),
-            at: message.createdTimestamp,
-            edited: message.editedTimestamp,
-            content: message.content,
-            reply: message.type === MessageType.Reply ? (message.reference?.messageId ?? null) : null,
-            embeds: message.embeds.map((embed) => embed.toJSON()),
-            components: message.components.map((component) => component.toJSON()),
-            files: message.attachments.map((attachment) => ({
-                name: attachment.name,
-                size: attachment.size,
-                type: attachment.contentType,
-                url: attachment.url,
-                width: attachment.width,
-                height: attachment.height,
-                spoiler: attachment.spoiler,
-                description: attachment.description,
-            })),
-            stickers: message.stickers.map((sticker) => ({ name: sticker.name, url: sticker.url })),
-            reactions: message.reactions.cache.map((reaction) => ({
-                emoji: reaction.emoji.id
-                    ? `<${reaction.emoji.animated ? "a" : ""}:${reaction.emoji.name}:${reaction.emoji.id}>`
-                    : (reaction.emoji.name ?? "?"),
-                count: reaction.count,
-            })),
-        }));
+        const list = messages.map((message) => this.Snapshot(message, people));
 
         const participants = new Map<string, ITranscriptUser>();
 
@@ -190,7 +163,39 @@ export default class TranscriptService {
         };
     }
 
-    private Person(member: GuildMember): ITranscriptUser {
+    /** Eine Nachricht, wie sie im Transcript steht - auch für den Chat in Live Tickets. */
+    Snapshot(message: Message, people: Map<string, ITranscriptUser>): ITranscriptMessage {
+        return {
+            id: message.id,
+            type: message.type,
+            author: this.Author(message, people),
+            at: message.createdTimestamp,
+            edited: message.editedTimestamp,
+            content: message.content,
+            reply: message.type === MessageType.Reply ? (message.reference?.messageId ?? null) : null,
+            embeds: message.embeds.map((embed) => embed.toJSON()),
+            components: message.components.map((component) => component.toJSON()),
+            files: message.attachments.map((attachment) => ({
+                name: attachment.name,
+                size: attachment.size,
+                type: attachment.contentType,
+                url: attachment.url,
+                width: attachment.width,
+                height: attachment.height,
+                spoiler: attachment.spoiler,
+                description: attachment.description,
+            })),
+            stickers: message.stickers.map((sticker) => ({ name: sticker.name, url: sticker.url })),
+            reactions: message.reactions.cache.map((reaction) => ({
+                emoji: reaction.emoji.id
+                    ? `<${reaction.emoji.animated ? "a" : ""}:${reaction.emoji.name}:${reaction.emoji.id}>`
+                    : (reaction.emoji.name ?? "?"),
+                count: reaction.count,
+            })),
+        };
+    }
+
+    Person(member: GuildMember): ITranscriptUser {
         return {
             id: member.id,
             name: member.displayName,
@@ -205,7 +210,7 @@ export default class TranscriptService {
      * liefert Discord keine Mitglieder mit - also einzeln nachschlagen, höchstens
      * MAX_LOOKUPS. Wer den Server verlassen hat, erscheint mit seinem Profil.
      */
-    private async People(guild: Guild, messages: Message[], ticket: ITicket): Promise<Map<string, ITranscriptUser>> {
+    async People(guild: Guild, messages: Message[], ticket: ITicket): Promise<Map<string, ITranscriptUser>> {
         const ids = new Set<string>([ticket.openerId, ...ticket.members]);
 
         if (ticket.claimedBy) ids.add(ticket.claimedBy);
@@ -239,7 +244,7 @@ export default class TranscriptService {
         return people;
     }
 
-    private Author(message: Message, people: Map<string, ITranscriptUser>): ITranscriptUser {
+    Author(message: Message, people: Map<string, ITranscriptUser>): ITranscriptUser {
         // Webhooks (anonymer Modus) tragen Name und Bild je Nachricht selbst.
         if (message.webhookId) {
             return {
@@ -263,7 +268,7 @@ export default class TranscriptService {
     }
 
     /** Namen zu allen <@id>, <@&id> und <#id> - in Texten, Embeds und Components V2. */
-    private async Mentions(guild: Guild, messages: Message[], people: Map<string, ITranscriptUser>): Promise<ITranscript["mentions"]> {
+    async Mentions(guild: Guild, messages: Message[], people: Map<string, ITranscriptUser>): Promise<ITranscript["mentions"]> {
         const text = JSON.stringify(
             messages.map((message) => [
                 message.content,
@@ -455,6 +460,22 @@ export default class TranscriptService {
        ---------------------------------------------------------- */
     private Directory(guildId: string, ticketId: number): string {
         return path.join(TRANSCRIPT_ROOT, guildId, String(ticketId));
+    }
+
+    /**
+     * Welche Transcripts ein Mitglied in der Liste sieht - dieselbe Regel wie
+     * CanRead: "Server verwalten" alles; die allgemeine Support-Rolle alles außer
+     * Themen mit eigener Rolle, die es nicht hat; sonst nur die Themen seiner Rollen.
+     */
+    Visible(member: GuildMember, config: ITicketConfig): { include?: string[]; exclude?: string[] } {
+        if (member.permissions.has(PermissionFlagsBits.ManageGuild)) return {};
+
+        const has = (role: string | null): boolean => role !== null && member.roles.cache.has(role);
+        const own = config.options.filter((option) => option.supportRoleId !== null);
+
+        if (has(config.supportRoleId)) return { exclude: own.filter((option) => !has(option.supportRoleId)).map((option) => option.id) };
+
+        return { include: own.filter((option) => has(option.supportRoleId)).map((option) => option.id) };
     }
 
     /** Löscht ein Transcript samt gesicherter Anhänge - etwa auf Wunsch des Erstellers. */

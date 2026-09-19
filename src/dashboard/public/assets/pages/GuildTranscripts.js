@@ -62,7 +62,13 @@ function row(entry, onDelete) {
     download.href = `${page}?download=1`;
     download.title = "Als HTML-Datei herunterladen";
     download.setAttribute("aria-label", `Transcript ${ticketNumber(entry.number)} als HTML-Datei herunterladen`);
-    // Zweimal klicken: weg ist weg - auch die gesicherten Anhänge.
+    const actions = el("div", "trrow__act", openLink, download);
+    if (onDelete)
+        actions.append(removeButton(entry, onDelete));
+    return el("article", "trrow", el("span", "trrow__num", ticketNumber(entry.number)), main, actions);
+}
+// Zweimal klicken: weg ist weg - auch die gesicherten Anhänge.
+function removeButton(entry, onDelete) {
     const remove = el("button", "iconbtn is-danger", icon("#i-trash"));
     const label = `Transcript ${ticketNumber(entry.number)} löschen`;
     let sure = null;
@@ -85,7 +91,7 @@ function row(entry, onDelete) {
         if (!(await onDelete(entry)))
             remove.disabled = false;
     });
-    return el("article", "trrow", el("span", "trrow__num", ticketNumber(entry.number)), main, el("div", "trrow__act", openLink, download, remove));
+    return remove;
 }
 function skeleton() {
     return Array.from({ length: 4 }, () => el("div", "trrow trrow--skel", el("span", "sb trskel__num"), el("span", "sb trskel__line"), el("span", "sb trskel__btn")));
@@ -99,6 +105,7 @@ export function renderTranscripts(guildId) {
     let entries = [];
     let hasMore = false;
     let enabled = true;
+    let canDelete = false;
     let query = "";
     // Nur die Antwort auf die letzte Anfrage zählt - schnelles Tippen überholt sich sonst.
     let ticket = 0;
@@ -113,8 +120,10 @@ export function renderTranscripts(guildId) {
         }
         const box = el("div", "tkempty tkempty--big", icon("#i-archive"), el("b", "", enabled ? "Noch keine Transcripts." : "Transcripts sind ausgeschaltet."), el("span", "", enabled
             ? "Sie entstehen, sobald ein Ticket geschlossen wird – samt Bildern und Anhängen."
-            : "Einschalten geht im Ticket System unter Einrichtung › Nach dem Schließen."));
-        if (!enabled) {
+            : canDelete
+                ? "Einschalten geht im Ticket System unter Einrichtung › Nach dem Schließen."
+                : "Einschalten kann, wer den Server verwaltet."));
+        if (!enabled && canDelete) {
             const go = el("a", "btn btn--quiet", icon("#i-sliders"), "Zur Einrichtung");
             go.href = `${BASE}/guild/${guildId}/tickets#einrichtung`;
             box.append(go);
@@ -145,7 +154,7 @@ export function renderTranscripts(guildId) {
         return true;
     }
     function paint() {
-        list.replaceChildren(...(entries.length ? entries.map((entry) => row(entry, destroy)) : [empty()]));
+        list.replaceChildren(...(entries.length ? entries.map((entry) => row(entry, canDelete ? destroy : null)) : [empty()]));
         count.textContent = entries.length ? `${entries.length}${hasMore ? "+" : ""} Transcript${entries.length === 1 ? "" : "s"}` : "";
         more.hidden = !hasMore;
     }
@@ -178,6 +187,7 @@ export function renderTranscripts(guildId) {
             entries = reset ? data.transcripts : [...entries, ...data.transcripts];
             hasMore = data.more;
             enabled = data.enabled;
+            canDelete = data.canDelete;
             paint();
         }
         catch {

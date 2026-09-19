@@ -17,6 +17,7 @@ import PrimeService from "../services/PrimeService";
 import ActivityService from "../services/ActivityService";
 import TicketService from "../services/TicketService";
 import TranscriptService from "../services/TranscriptService";
+import LiveService from "../services/LiveService";
 import GuildSettings from "../models/GuildSettings";
 import DashboardGroups from "../models/DashboardGroups";
 import Notifications from "../models/Notifications";
@@ -50,6 +51,7 @@ export default class BotClient extends Client implements IBotClient {
     activityService: ActivityService;
     ticketService: TicketService;
     transcriptService: TranscriptService;
+    liveService: LiveService;
 
     // Ein Model je Tabelle. Sie hängen am Client, damit Befehle, Events und
     // Routen dieselbe Instanz benutzen - und damit denselben Cache.
@@ -110,6 +112,7 @@ export default class BotClient extends Client implements IBotClient {
         this.activityService = new ActivityService(this);
         this.ticketService = new TicketService(this);
         this.transcriptService = new TranscriptService(this);
+        this.liveService = new LiveService(this);
 
         this.groups = new DashboardGroups(this);
         this.notifications = new Notifications(this);
@@ -152,6 +155,9 @@ export default class BotClient extends Client implements IBotClient {
 
         this.runnableService.Initialize().catch((err) => logger.error("🔄 RunnableService konnte nicht starten", err));
         this.galleryService.Initialize().catch((err) => logger.error("🖼️  Galerie konnte nicht starten", err));
+
+        // Live Tickets: Nachrichten in Ticket-Kanälen gehen an offene Dashboards.
+        this.liveService.Initialize();
 
         // Zählt Nachrichten, Sprachkanäle und Beitritte mit und schreibt einmal
         // pro Minute gebündelt weg - siehe docs/Activity.md.

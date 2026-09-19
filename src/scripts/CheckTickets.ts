@@ -14,11 +14,11 @@
 process.env.CLIENT_SECRET ||= "check-secret";
 process.env.DEV_CLIENT_SECRET ||= "check-secret";
 
-import { ChannelType, Guild, Message } from "discord.js";
+import { ChannelType, Guild, GuildMember, Message } from "discord.js";
 import BotClient from "../client/BotClient";
 import { CleanDoc, IsImageSource } from "../builder/MessageDoc";
 import { IsPanelMessage, MenuOptions, PanelView } from "../builder/TicketPanel";
-import { Duration, RenderTranscript } from "../builder/TranscriptHtml";
+import { Duration, LIVE_CSS, RenderLive, RenderTranscript } from "../builder/TranscriptHtml";
 import { Fill, PLACEHOLDER_KEYS } from "../constants/Placeholders";
 import {
     ACTIONS,
@@ -35,6 +35,7 @@ import { AttachmentKey } from "../constants/Transcripts";
 import { ITicket, ITicketConfig } from "../interfaces/services/tickets/ITicket";
 import { ITranscript, ITranscriptMessage, ITranscriptUser } from "../interfaces/services/tickets/ITranscript";
 import { SlowmodeLabel } from "../services/TicketService";
+import { ILiveAccess } from "../services/LiveService";
 
 // Erfundene Snowflakes - 17-stellig wie echte, aber es gibt sie bei Discord nicht.
 const GUILD = "90071992547409991";
@@ -45,6 +46,7 @@ const CATEGORY = "90071992547409995";
 const FORUM = "90071992547409996";
 const BOT = "90071992547409997";
 const TEXT = "90071992547409998";
+const RECRUIT = "90071992547409999";
 
 let failures = 0;
 
@@ -501,6 +503,58 @@ async function checkTranscripts(client: BotClient): Promise<void> {
     );
 }
 
+/* ----------------------------------------------------------
+   Live Tickets
+   ---------------------------------------------------------- */
+async function checkLive(client: BotClient): Promise<void> {
+    console.log("\n  — Live Tickets —");
+
+    const transcript = SampleTranscript();
+    const rendered = RenderLive(transcript.messages.slice(1, 3), transcript.mentions);
+
+    check("Live: jede Nachricht einzeln gerendert", rendered.length === 2 && rendered[0].id === "11");
+    check("Live: dieselbe Person kurz danach ohne Kopf", rendered[0].html.includes("msg--head") && !rendered[1].html.includes("msg--head"));
+    check("Live: compact ist dieselbe Nachricht ohne Kopf", !rendered[0].compact.includes("msg--head") && rendered[0].compact.includes('id="m-11"'));
+    check(
+        "Live: Discord-Links sind frisch - nichts ist „nicht gesichert“",
+        !rendered[1].html.includes("nicht gesichert") && rendered[1].html.includes("cdn.discordapp.com/attachments/1/2/weg.png")
+    );
+    check("Live: auch hier bleibt ein Skript Text", !rendered[1].html.includes("<script>") && rendered[1].html.includes("&lt;script&gt;"));
+    check("Live: Antwort auf eine Nachricht außerhalb", RenderLive([transcript.messages[3]], transcript.mentions)[0].html.includes("Antwort auf eine ältere Nachricht"));
+    check("Live: das Aussehen passt ins Shadow DOM", LIVE_CSS.includes(":host{") && !LIVE_CSS.includes(":root{") && !/^body\{/m.test(LIVE_CSS));
+
+    // Wer was sieht: dieselbe Regel wie im Ticket - "Server verwalten" oder die Rolle des Themas.
+    const config = DefaultConfig();
+
+    config.supportRoleId = ROLE;
+    config.options.push({
+        id: "bewerbung",
+        name: "Bewerbung",
+        description: "",
+        emoji: null,
+        categoryId: null,
+        tagId: null,
+        supportRoleId: RECRUIT,
+        opened: null,
+    });
+
+    const member = (roles: string[], manage = false) =>
+        ({ id: STAFF, permissions: { has: () => manage }, roles: { cache: new Map(roles.map((role) => [role, {}])) } }) as unknown as GuildMember;
+    const visible = (roles: string[], manage = false) => JSON.stringify(client.transcriptService.Visible(member(roles, manage), config));
+
+    check("Transcripts: „Server verwalten“ sieht alles", visible([], true) === "{}");
+    check("Transcripts: die allgemeine Rolle sieht alles außer Themen mit eigener Rolle", visible([ROLE]) === JSON.stringify({ exclude: ["bewerbung"] }));
+    check("Transcripts: eine Themen-Rolle sieht nur ihr Thema", visible([RECRUIT]) === JSON.stringify({ include: ["bewerbung"] }));
+    check("Transcripts: ohne Rolle nichts", visible([]) === JSON.stringify({ include: [] }));
+
+    const access = (roles: string[]): ILiveAccess => ({ guild: { id: GUILD } as Guild, member: member(roles), config, manage: false });
+
+    check("Live: die Support-Rolle sieht Support-Tickets", client.liveService.CanSee(access([ROLE]), FakeTicket()));
+    check("Live: aber keine Bewerbungen mit eigener Rolle", !client.liveService.CanSee(access([ROLE]), FakeTicket({ optionId: "bewerbung" })));
+    check("Live: die Themen-Rolle sieht ihre Bewerbungen", client.liveService.CanSee(access([RECRUIT]), FakeTicket({ optionId: "bewerbung" })));
+    check("Live: Tickets anderer Server nie", !client.liveService.CanSee(access([ROLE]), FakeTicket({ guildId: "90071992547400000" })));
+}
+
 async function checkDatabase(client: BotClient): Promise<void> {
     console.log("\n  — Datenbank —");
 
@@ -532,6 +586,7 @@ async function checkDatabase(client: BotClient): Promise<void> {
     check("JSON-Spalten bleiben Listen", patched?.members.length === 1 && patched?.notes[0]?.text === "Notiz");
     check("Das Ticket ist über seinen Kanal auffindbar", (await tickets.ByChannel("111111111111111111"))?.id === first.id);
     check("Offene Tickets eines Users", (await tickets.OpenOf(GUILD, USER)).length === 1);
+    check("Offene Tickets des Servers für Live Tickets", (await tickets.OpenOfGuild(GUILD)).length === 2);
 
     const due = await tickets.DueReminders(Date.now());
 
@@ -610,6 +665,10 @@ async function checkDatabase(client: BotClient): Promise<void> {
     check("Suche nach Name", (await client.ticketTranscripts.List(GUILD, "kund", null, 10)).length === 1);
     check("Suche ohne Treffer, auch mit % und _", (await client.ticketTranscripts.List(GUILD, "niemand_%", null, 10)).length === 0);
     check("Seitenweise über before", (await client.ticketTranscripts.List(GUILD, "", first.id, 10)).length === 0);
+    check("Nur die eigenen Themen: include", (await client.ticketTranscripts.List(GUILD, "", null, 10, { include: ["support"] })).length === 1);
+    check("Nur die eigenen Themen: ein fremdes Thema", (await client.ticketTranscripts.List(GUILD, "", null, 10, { include: ["bewerbung"] })).length === 0);
+    check("Nur die eigenen Themen: exclude", (await client.ticketTranscripts.List(GUILD, "", null, 10, { exclude: ["support"] })).length === 0);
+    check("Ohne eine einzige Rolle: nichts", (await client.ticketTranscripts.List(GUILD, "", null, 10, { include: [] })).length === 0);
 
     await tickets.Patch(first.id, { closedBy: STAFF, closeReason: "Erledigt" });
 
@@ -656,6 +715,7 @@ async function main(): Promise<void> {
     checkMenu(client);
     await checkPanel(client);
     await checkTranscripts(client);
+    await checkLive(client);
 
     if (await client.databaseService.Connect()) {
         try {

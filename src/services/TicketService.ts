@@ -133,6 +133,13 @@ function AliasOf(guild: Guild): string {
     return /discord|clyde/i.test(alias) ? "Support-Team" : alias;
 }
 
+// Der Name einer Nachricht aus dem Dashboard - mit Zusatz, damit das Team sieht, woher sie kam.
+function HookName(name: string): string {
+    const text = `${name.slice(0, 60)} · via Dashboard`;
+
+    return /discord|clyde/i.test(text) ? "Support · via Dashboard" : text;
+}
+
 function Allowed(guild: Guild, wanted: PermissionsString[]): PermissionsString[] {
     // Ein Overwrite darf nichts erlauben, was der Bot selbst nicht hat - sonst
     // lehnt Discord den ganzen Kanal ab.
@@ -724,6 +731,8 @@ export default class TicketService {
             this.channels.add(channel.id);
             ticket = (await this.client.tickets.Get(ticket.id))!;
 
+            void this.client.liveService.Changed(ticket.id);
+
             logger.user(`🎫 Ticket ${TicketNumber(ticket.number)} auf ${guild.id} geöffnet (${option.id}, von ${user.id})`);
 
             return ticket;
@@ -787,6 +796,9 @@ export default class TicketService {
         await this.client.tickets.Patch(context.ticket.id, patch);
 
         context.ticket = (await this.client.tickets.Get(context.ticket.id)) ?? context.ticket;
+
+        // Wer Live Tickets offen hat, sieht die Änderung sofort.
+        void this.client.liveService.Changed(context.ticket.id);
     }
 
     private async Say(context: ITicketContext, text: string, accent?: string): Promise<void> {
@@ -1176,6 +1188,72 @@ export default class TicketService {
         }
 
         await this.Refresh(context);
+    }
+
+    /**
+     * Eine Nachricht aus dem Dashboard (Live Tickets). Im Ticket erscheint sie per
+     * Webhook mit Namen und Bild des Teammitglieds - im anonymen Modus unter dem
+     * Team-Alias. Bei ModMail geht sie wie jede Team-Antwort per DM an den User.
+     * Ohne Webhook-Recht schreibt der Bot sie selbst, mit dem Namen davor.
+     */
+    async SendAsMember(
+        context: ITicketContext,
+        member: GuildMember,
+        content: string,
+        files: { attachment: Buffer | string; name: string }[] = []
+    ): Promise<void> {
+        this.RequireStaff(context, member);
+        this.RequireOpen(context);
+
+        const channel = this.RequireChannel(context);
+        const text = content.trim().slice(0, 2000);
+
+        if (!text && files.length === 0) throw new TicketError("Die Nachricht ist leer.");
+
+        const anonymous = context.ticket.anonymous.includes(member.id);
+        const name = anonymous ? AliasOf(context.guild) : member.displayName;
+        const scope = channel.isThread() ? channel.parent : channel;
+        const hook =
+            scope && (scope.type === ChannelType.GuildText || scope.type === ChannelType.GuildForum) ? await this.Webhook(scope) : null;
+
+        try {
+            if (hook) {
+                await hook.send({
+                    username: HookName(name),
+                    avatarURL: anonymous
+                        ? (context.guild.iconURL({ extension: "png", size: 256 }) ?? undefined)
+                        : member.displayAvatarURL({ extension: "png", size: 256 }),
+                    content: text || undefined,
+                    files,
+                    threadId: channel.isThread() ? channel.id : undefined,
+                    allowedMentions: { parse: [] },
+                });
+            } else {
+                await channel.send({
+                    content: `**${escapeMarkdown(name)}** · via Dashboard${text ? `\n${text}` : ""}`.slice(0, 2000),
+                    files,
+                    allowedMentions: { parse: [] },
+                });
+            }
+        } catch (error) {
+            throw this.Explain(error);
+        }
+
+        void this.client.tickets.CountMessage(context.ticket.id).catch(() => undefined);
+
+        if (context.ticket.contact !== "modmail") return;
+
+        const opener = await this.client.users.fetch(context.ticket.openerId).catch(() => null);
+        const delivered = opener
+            ? await opener
+                  .send({ content: `**${escapeMarkdown(name)}:** ${text}`.slice(0, 2000), files, allowedMentions: { parse: [] } })
+                  .then(() => true)
+                  .catch(() => false)
+            : false;
+
+        if (!delivered) {
+            throw new TicketError("Im Ticket steht die Nachricht, beim User kam sie nicht an – er hat DMs vermutlich geschlossen.");
+        }
     }
 
     /** actor ist ein Mitglied (Menü im Ticket) oder der User selbst (Knopf in der DM). */

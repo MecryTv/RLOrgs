@@ -41,9 +41,11 @@ export const ROLE_ICONS = {
     Owner: "#i-crown",
     Admin: "#i-shield",
     Staff: "#i-badge",
+    Support: "#i-ticket",
 };
 export const ROLE_LABELS = {
     Owner: "Owner",
     Admin: "Admin",
     Staff: "Staff-Zugriff",
+    Support: "Support",
 };

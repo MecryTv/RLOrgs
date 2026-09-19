@@ -1,4 +1,6 @@
-export type DashboardRole = "Owner" | "Admin" | "Staff";
+// Support: weder Owner noch Admin, aber eine Support-Rolle des Ticket-Systems -
+// sieht nur Live Tickets und Transcriptions (siehe docs/Tickets.md).
+export type DashboardRole = "Owner" | "Admin" | "Staff" | "Support";
 
 // Eine Karte im Dashboard. "teams" ist ein Platzhalter, solange der Bot keine
 // Teams führt. "modules" sind die eingeschalteten Module aus
@@ -16,6 +18,8 @@ export default interface IDashboardGuild {
     active: boolean;
     role: DashboardRole;
     canManage: boolean;
+    // Darf Live Tickets und Transcriptions nutzen: wer verwaltet, und die Support-Rollen.
+    canSupport: boolean;
     created: string;
     teams: number;
     modules: string[];

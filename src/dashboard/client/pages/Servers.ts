@@ -104,8 +104,16 @@ export function cardFor(guild: IGuild, position: number, animate: boolean): HTML
                 "Du bist hier weder Owner noch Admin - sichtbar ist der Server über deine RL Nexus-Gruppe. Öffnen darfst du ihn, Änderungen brauchen „Server verwalten“ auf dem Server selbst.";
         }
 
+        // Supporter landen direkt bei den Tickets - mehr steht für sie nicht offen.
+        if (guild.role === "Support") {
+            hint.hidden = false;
+            hint.textContent = "Du bist hier im Support-Team: Live Tickets und Transcriptions stehen dir offen.";
+        }
+
         foot.append(
-            link("btn btn--primary", "Dashboard öffnen", `${BASE}/guild/${guild.id}/uebersicht`),
+            guild.role === "Support"
+                ? link("btn btn--primary", "Live Tickets öffnen", `${BASE}/guild/${guild.id}/live-tickets`)
+                : link("btn btn--primary", "Dashboard öffnen", `${BASE}/guild/${guild.id}/uebersicht`),
             ghost("#i-sliders", `Kurzinfo zu ${guild.name}`)
         );
     } else {

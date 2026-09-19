@@ -48,10 +48,12 @@ export const ROLE_ICONS: Record<DashboardRole, string> = {
     Owner: "#i-crown",
     Admin: "#i-shield",
     Staff: "#i-badge",
+    Support: "#i-ticket",
 };
 
 export const ROLE_LABELS: Record<DashboardRole, string> = {
     Owner: "Owner",
     Admin: "Admin",
     Staff: "Staff-Zugriff",
+    Support: "Support",
 };

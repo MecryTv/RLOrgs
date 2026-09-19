@@ -2761,3 +2761,111 @@ body.no-motion .hero__field .run{display:none}
 @media (hover:none){
   .tktopic__tools .iconbtn,.tkblock__head .iconbtn,.trrow__act .iconbtn{width:44px;height:44px}
 }
+
+/* ----------------------------------------------------------
+   Live Tickets: Liste links, Chat rechts
+
+   Beide scrollen fuer sich, die Seite steht still. Die Nachrichten selbst
+   stehen in einem Shadow DOM mit dem Aussehen des Transcripts - hier geht es
+   nur um den Rahmen drumherum. Unter 900px kommt erst die Liste, nach einem
+   Klick der Chat (.lt.is-chat), mit einem Knopf zurueck.
+   ---------------------------------------------------------- */
+.ltnote{margin-bottom:14px}
+.lt{
+  display:grid;grid-template-columns:minmax(0,330px) minmax(0,1fr);
+  height:clamp(540px,calc(100vh - 230px),880px);
+  border:1px solid var(--line);background:rgba(255,255,255,.015);
+}
+.lt__list{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line)}
+.lt__head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.ltlive{
+  display:inline-flex;align-items:center;gap:7px;
+  font-family:var(--f-label);font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--live);
+}
+.ltlive::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 22%,transparent)}
+.ltlive.is-off{color:var(--warn)}
+.lt__head .iconbtn[aria-pressed="false"]{opacity:.55}
+.lt__tools{display:grid;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.ltfilter{display:flex}
+.ltfilter button{flex:1;padding:0 8px}
+.ltsearch{width:100%}
+.ltitems{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.ltitems__empty{padding:28px 16px;font-size:13px;text-align:center;color:var(--text-3)}
+.ltitem{
+  position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:start;
+  width:100%;padding:12px;text-align:left;border-bottom:1px solid rgba(255,255,255,.045);
+  transition:background var(--t-fast) var(--ease);
+}
+.ltitem:hover{background:var(--glass)}
+.ltitem.is-on{background:color-mix(in srgb,var(--brand) 9%,transparent);box-shadow:inset 3px 0 0 var(--brand)}
+.ltitem:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--blue)}
+.ltitem .travatar{width:32px;height:32px;font-size:13px;margin-top:2px}
+.ltitem__main{display:grid;gap:3px;min-width:0}
+.ltitem__top{display:flex;align-items:baseline;gap:8px;min-width:0}
+.ltitem__top b{font-family:var(--f-accent);font-size:11.5px;letter-spacing:.06em;color:var(--brand)}
+.ltitem__option{display:inline-flex;align-items:center;gap:5px;min-width:0;overflow:hidden;font-size:13px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+.ltitem__who{overflow:hidden;font-size:12.5px;color:var(--text-2);text-overflow:ellipsis;white-space:nowrap}
+.ltitem__preview{overflow:hidden;font-size:12px;color:var(--text-3);text-overflow:ellipsis;white-space:nowrap}
+.ltitem.is-unread .ltitem__preview{color:var(--text)}
+.ltitem__chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
+.ltchip{padding:1px 7px;font-size:11px;color:var(--text-2);border:1px solid var(--line);background:rgba(255,255,255,.03);white-space:nowrap}
+.ltchip.is-free{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
+.ltchip.is-claimed{color:var(--live);border-color:color-mix(in srgb,var(--live) 30%,transparent)}
+.ltitem__side{display:grid;justify-items:end;gap:6px}
+.ltitem__side time{font-size:11px;color:var(--text-3);white-space:nowrap}
+.ltitem__badge{min-width:20px;padding:1px 6px;font-size:11px;font-weight:700;text-align:center;color:#fff;background:var(--brand)}
+
+.lt__chat{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0}
+.ltempty{flex:1;display:grid;place-content:center;justify-items:center;gap:6px;padding:24px;text-align:center}
+.ltempty svg{width:28px;height:28px;margin-bottom:4px;color:var(--text-3)}
+.ltempty b{font-size:14.5px}
+.ltempty span{max-width:44ch;font-size:12.5px;color:var(--text-3)}
+.ltchat__head{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.ltchat__back{display:none}
+.ltchat__back svg{transform:rotate(180deg)}
+.ltchat__title{flex:1;display:grid;gap:2px;min-width:180px}
+.ltchat__title b{font-size:14.5px}
+.ltchat__title span{font-size:12px;color:var(--text-3)}
+.ltchat__actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.ltchat__actions .btn{flex:none;height:38px;padding:0 12px;font-size:11.5px}
+.ltprio{width:auto;height:38px}
+.ltclose{
+  display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;
+  border-bottom:1px solid color-mix(in srgb,var(--loss) 35%,transparent);background:color-mix(in srgb,var(--loss) 8%,transparent);
+}
+.ltclose > svg{width:16px;height:16px;flex:none;color:var(--loss)}
+.ltclose__reason{flex:1;min-width:200px;width:auto}
+.ltclose .btn{flex:none;height:38px;padding:0 12px;font-size:11.5px}
+.ltlog{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;background:#313338}
+.ltfresh{
+  position:absolute;left:50%;bottom:118px;z-index:2;transform:translateX(-50%);
+  display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r-pill);
+  font-size:12.5px;font-weight:600;color:#fff;background:var(--blue);box-shadow:0 8px 20px rgba(0,0,0,.4);
+}
+.ltfresh svg{width:14px;height:14px}
+.ltcompose{display:grid;gap:8px;padding:10px 14px 12px;border-top:1px solid var(--line);background:var(--bg-panel)}
+.ltcompose__files{display:flex;flex-wrap:wrap;gap:6px}
+.ltcompose__thumb{width:22px;height:22px;object-fit:cover}
+.ltcompose__row{display:flex;align-items:flex-end;gap:8px}
+.ltcompose__tools{display:flex;gap:6px;flex:none}
+.ltcompose__tools .iconbtn,.ltcompose__tools .emojibtn{width:44px;height:44px}
+.ltcompose__input{flex:1;min-width:0;width:auto;height:44px;min-height:44px;max-height:180px;padding:11px 12px;line-height:1.45;resize:none}
+.ltcompose__send{flex:none;height:44px;padding:0 16px}
+.ltcompose__hint{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:var(--text-3)}
+.ltcompose__count{flex:none;color:var(--warn)}
+
+@media (max-width:900px){
+  .lt{grid-template-columns:1fr}
+  .lt__list{border-right:0}
+  .lt__chat{display:none}
+  .lt.is-chat .lt__list{display:none}
+  .lt.is-chat .lt__chat{display:flex}
+  .ltchat__back{display:grid}
+}
+@media (max-width:620px){
+  .ltcompose__row{flex-wrap:wrap}
+  .ltcompose__input{flex-basis:100%;order:-1}
+  .ltcompose__send{margin-left:auto}
+  .ltcompose__hint{display:none}
+  .ltfresh{bottom:150px}
+}

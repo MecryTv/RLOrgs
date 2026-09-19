@@ -94,6 +94,12 @@ export default class Server implements IServer {
             (_request, body, done) => done(null, body)
         );
 
+        // Dasselbe für beliebige Dateien aus Live Tickets. Die Grenze setzt auch
+        // hier die eine Route, die sie erwartet (DashboardApiLiveFile).
+        instance.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_request, body, done) =>
+            done(null, body)
+        );
+
         await instance.register(rateLimit, {
             global: true,
             max: this.client.config.SERVER_RATE_LIMIT_MAX,

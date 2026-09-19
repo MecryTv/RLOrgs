@@ -36,6 +36,8 @@ interface IPayload {
     transcripts: IEntry[];
     more: boolean;
     enabled: boolean;
+    /** Löschen darf nur, wer den Server verwalten darf - Supporter lesen. */
+    canDelete: boolean;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
@@ -76,7 +78,7 @@ function avatar(person: IPerson): HTMLElement {
     return box;
 }
 
-function row(entry: IEntry, onDelete: (entry: IEntry) => Promise<boolean>): HTMLElement {
+function row(entry: IEntry, onDelete: ((entry: IEntry) => Promise<boolean>) | null): HTMLElement {
     const page = `${BASE}/transcript/${entry.id}`;
 
     const title = el(
@@ -118,7 +120,15 @@ function row(entry: IEntry, onDelete: (entry: IEntry) => Promise<boolean>): HTML
     download.title = "Als HTML-Datei herunterladen";
     download.setAttribute("aria-label", `Transcript ${ticketNumber(entry.number)} als HTML-Datei herunterladen`);
 
-    // Zweimal klicken: weg ist weg - auch die gesicherten Anhänge.
+    const actions = el("div", "trrow__act", openLink, download);
+
+    if (onDelete) actions.append(removeButton(entry, onDelete));
+
+    return el("article", "trrow", el("span", "trrow__num", ticketNumber(entry.number)), main, actions);
+}
+
+// Zweimal klicken: weg ist weg - auch die gesicherten Anhänge.
+function removeButton(entry: IEntry, onDelete: (entry: IEntry) => Promise<boolean>): HTMLButtonElement {
     const remove = el("button", "iconbtn is-danger", icon("#i-trash"));
     const label = `Transcript ${ticketNumber(entry.number)} löschen`;
     let sure: ReturnType<typeof setTimeout> | null = null;
@@ -145,7 +155,7 @@ function row(entry: IEntry, onDelete: (entry: IEntry) => Promise<boolean>): HTML
         if (!(await onDelete(entry))) remove.disabled = false;
     });
 
-    return el("article", "trrow", el("span", "trrow__num", ticketNumber(entry.number)), main, el("div", "trrow__act", openLink, download, remove));
+    return remove;
 }
 
 function skeleton(): HTMLElement[] {
@@ -162,6 +172,7 @@ export function renderTranscripts(guildId: string): void {
     let entries: IEntry[] = [];
     let hasMore = false;
     let enabled = true;
+    let canDelete = false;
     let query = "";
     // Nur die Antwort auf die letzte Anfrage zählt - schnelles Tippen überholt sich sonst.
     let ticket = 0;
@@ -193,11 +204,13 @@ export function renderTranscripts(guildId: string): void {
                 "",
                 enabled
                     ? "Sie entstehen, sobald ein Ticket geschlossen wird – samt Bildern und Anhängen."
-                    : "Einschalten geht im Ticket System unter Einrichtung › Nach dem Schließen."
+                    : canDelete
+                      ? "Einschalten geht im Ticket System unter Einrichtung › Nach dem Schließen."
+                      : "Einschalten kann, wer den Server verwaltet."
             )
         );
 
-        if (!enabled) {
+        if (!enabled && canDelete) {
             const go = el("a", "btn btn--quiet", icon("#i-sliders"), "Zur Einrichtung");
 
             go.href = `${BASE}/guild/${guildId}/tickets#einrichtung`;
@@ -236,7 +249,7 @@ export function renderTranscripts(guildId: string): void {
     }
 
     function paint(): void {
-        list.replaceChildren(...(entries.length ? entries.map((entry) => row(entry, destroy)) : [empty()]));
+        list.replaceChildren(...(entries.length ? entries.map((entry) => row(entry, canDelete ? destroy : null)) : [empty()]));
         count.textContent = entries.length ? `${entries.length}${hasMore ? "+" : ""} Transcript${entries.length === 1 ? "" : "s"}` : "";
         more.hidden = !hasMore;
     }
@@ -275,6 +288,7 @@ export function renderTranscripts(guildId: string): void {
             entries = reset ? data.transcripts : [...entries, ...data.transcripts];
             hasMore = data.more;
             enabled = data.enabled;
+            canDelete = data.canDelete;
             paint();
         } catch {
             if (mine === ticket) warn("Der Bot antwortet gerade nicht.");

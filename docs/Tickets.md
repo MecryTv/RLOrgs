@@ -182,6 +182,37 @@ Beim Schließen liest der Bot den ganzen Verlauf des Tickets und legt ihn ab —
 
 ---
 
+## Live Tickets
+
+Im Dashboard unter **Live Tickets**: links alle offenen Tickets des Servers, rechts der Verlauf — so, wie ihn auch das Transcript zeigt (Components V2 inklusive), nur live. Neue Tickets, Nachrichten, Bearbeitungen und Löschungen kommen ohne Neuladen an.
+
+**Wer es sieht:** „Server verwalten“ alle Tickets. Dazu die **Support-Rollen** — sie bekommen den Server in ihrer Liste, obwohl sie ihn nicht verwalten dürfen, sehen dort aber nur **Live Tickets** und **Transcriptions**, und darin nur die Tickets ihrer Rolle. Das ist dieselbe Regel wie im Ticket selbst (`IsStaff()`): die allgemeine Support-Rolle sieht alles außer Themen mit eigener Rolle, eine Themen-Rolle nur ihr Thema. Einstellungen, Panel und Löschen bleiben bei „Server verwalten“.
+
+**Schreiben:** Die Nachricht geht über einen Webhook mit Namen und Bild des Teammitglieds und dem Zusatz „· via Dashboard“ — im Discord sieht jeder, woher sie kam. Im anonymen Modus steht dort der Team-Alias mit dem Server-Bild. Ohne Webhook-Recht schreibt der Bot sie selbst, mit dem Namen davor. Bei ModMail geht sie wie jede Team-Antwort per DM an den User; kommt sie dort nicht an (DMs zu), sagt das Dashboard es.
+
+| Aktion | Wirkung |
+|---|---|
+| Übernehmen / Zurückgeben | wie im Ticket-Menü, mit derselben Nachricht im Ticket |
+| Priorität | nur, wenn die Aktion unter *Aktionen* eingeschaltet ist |
+| Schließen | mit Grund; im Ticket steht „(Dashboard)“ dahinter, ohne Grund „Im Dashboard geschlossen“. Transcript und Löschfrist wie immer |
+| Dateien | bis 8 MB je Datei, bis 10 auf einmal — oder Bilder aus der Galerie |
+
+**Hinweise:** Zähler ungelesener Nachrichten je Ticket und im Tab-Titel, ein leiser Ton bei neuen Tickets (abschaltbar, merkt sich der Browser). Entwürfe bleiben je Ticket stehen, solange die Seite offen ist.
+
+**Technik:** Die Seite hält eine Server-Sent-Events-Verbindung (`/live/stream`), höchstens 6 je Person, mit einem Ping alle 25 Sekunden. Reißt sie ab, verbindet der Browser neu und holt die Liste frisch. Der Verlauf lädt 50 Nachrichten, ältere auf Knopfdruck. Gerendert wird mit `RenderLive()` aus `TranscriptHtml.ts` — dieselbe Darstellung wie im Transcript, in einem Shadow DOM, damit das Aussehen des Dashboards und des Verlaufs sich nicht beißen. Discord-Links auf Anhänge sind hier frisch, deshalb gibt es kein „nicht gesichert“.
+
+| Datei | Aufgabe |
+|---|---|
+| `services/LiveService.ts` | Zugriff, Liste, Verlauf, Streams, Ereignisse aus Discord |
+| `utils/live.ts` | Anmeldung, Recht und Ticket prüfen — für alle Live-Routen gleich |
+| `routes/DashboardApiLive.ts` | `GET …/live` — Liste, eigene Rechte, Emojis, Aussehen |
+| `routes/DashboardApiLiveStream.ts` | `GET …/live/stream` — die Ereignisse |
+| `routes/DashboardApiLiveTicket.ts` | `GET …/live/:ticket` Verlauf, `POST` die Aktionen (nur JSON) |
+| `routes/DashboardApiLiveFile.ts` | `POST …/live/:ticket/file` — eine Datei, roh als `application/octet-stream` |
+| `dashboard/client/pages/GuildLive.ts` | die Seite |
+
+---
+
 ## Was der Bot braucht
 
 - **Rechte:** Kanäle verwalten, Rollen verwalten (für Overwrites), Nachrichten verwalten, Webhooks verwalten (anonymer Modus), im Forum Threads verwalten.
@@ -197,6 +228,7 @@ Beim Schließen liest der Bot den ganzen Verlauf des Tickets und legt ihn ab —
 - **Ein gesperrter Post (eingefroren, geschlossen) nimmt nur noch Nachrichten von Leuten mit „Threads verwalten“.** Wer im Forum mitschreiben soll, braucht das Recht dort.
 - **Anhänge über 10 MB gehen als Link weiter**, nicht als Datei — mehr darf ein Bot ohne Boost nicht hochladen.
 - **Online-Transcripts brauchen den Dashboard-Login, und der braucht Zwei-Faktor bei Discord.** Wer das nicht hat, öffnet die HTML-Datei aus Log-Kanal oder DM.
+- **Live Tickets zeigen höchstens 200 offene Tickets**, die neuesten zuerst.
 - **Der Ordner `transcripts/` wächst mit jedem Ticket, das Bilder hat.** Er gehört ins Backup wie die Datenbank; gelöscht wird nur, was das Team in der Liste löscht.
 
 ---
@@ -204,8 +236,8 @@ Beim Schließen liest der Bot den ganzen Verlauf des Tickets und legt ihn ab —
 ## Prüfen
 
 ```bash
-npm run check:tickets     # Aktionsliste, Platzhalter, Einstellungen, Menü, Panel, Transcript-Darstellung, Datenbank
-npm run check:dashboard   # Platzhalter-Spiegel, Rechte und CSRF der Ticket- und Transcript-Routen
+npm run check:tickets     # Aktionsliste, Platzhalter, Einstellungen, Menü, Panel, Transcript- und Live-Darstellung, wer was sieht, Datenbank
+npm run check:dashboard   # Platzhalter-Spiegel, Rechte und CSRF der Ticket-, Transcript- und Live-Routen
 ```
 
-Was nur mit echter Discord-Verbindung geht — Kanäle anlegen, Tags, Relay, Webhooks, Anhänge herunterladen — prüft erst ein Lauf auf einem Testserver.
+Was nur mit echter Discord-Verbindung geht — Kanäle anlegen, Tags, Relay, Webhooks, Anhänge herunterladen, Live-Ereignisse — prüft erst ein Lauf auf einem Testserver.

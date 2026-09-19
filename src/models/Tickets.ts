@@ -158,6 +158,16 @@ export default class Tickets extends Model<ITicketRow> {
         return rows.map(ToTicket);
     }
 
+    /** Die nicht geschlossenen Tickets eines Servers, neueste zuerst - für Live Tickets. */
+    async OpenOfGuild(guildId: string): Promise<ITicket[]> {
+        const rows = await this.db.Query<ITicketRow>(
+            `SELECT * FROM \`${this.Table}\` WHERE guild_id = ? AND status <> 'closed' ORDER BY id DESC LIMIT 200`,
+            [guildId]
+        );
+
+        return rows.map(ToTicket);
+    }
+
     /** Das offene ModMail-Ticket eines Users - server-übergreifend höchstens eins. */
     async OpenModMail(userId: string): Promise<ITicket | null> {
         const row = await this.db.Cached(this.Table, `modmail:${userId}`, () =>

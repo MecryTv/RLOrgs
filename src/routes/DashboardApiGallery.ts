@@ -33,9 +33,11 @@ export default class DashboardApiGallery extends Route {
 
         if (!id || !SNOWFLAKE.test(id)) return reply.code(404).send({ error: "Not Found" });
 
+        // Lesen darf auch der Support: in Live Tickets verschickt er Bilder aus der
+        // Galerie. Ändern bleibt bei "Server verwalten" (DashboardApiGalleryEdit).
         try {
-            if (!(await service.CanManage(session, id))) {
-                return reply.code(403).send({ error: "Forbidden", hint: "Nur wer den Server verwalten darf." });
+            if (!(await service.CanSupport(session, id))) {
+                return reply.code(403).send({ error: "Forbidden", hint: "Nur das Team dieses Servers." });
             }
         } catch (error) {
             if (!(error instanceof SessionExpired)) throw error;

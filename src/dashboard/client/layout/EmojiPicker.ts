@@ -149,6 +149,8 @@ export interface IEmojiPickerOptions {
     /** Wofür das Emoji ist - für Vorleser: "Emoji für Support". */
     label: string;
     onPick: (value: string | null) => void;
+    /** Einfügen statt wählen: der Knopf zeigt immer das Symbol, nie das Gewählte. */
+    insert?: boolean;
 }
 
 /** Der Knopf mit dem gewählten Emoji. Ein Klick öffnet die Auswahl. */
@@ -162,13 +164,16 @@ export function emojiPicker(options: IEmojiPickerOptions): HTMLButtonElement {
 
     function show(): void {
         button.replaceChildren(value ? emojiNode(value, options.emojis) : icon("#i-smile"));
-        button.setAttribute("aria-label", `${options.label}: ${labelOf(value)} – ändern`);
-        button.title = value ? `${labelOf(value)} – ändern` : "Emoji wählen";
+        button.setAttribute("aria-label", options.insert ? options.label : `${options.label}: ${labelOf(value)} – ändern`);
+        button.title = options.insert ? options.label : value ? `${labelOf(value)} – ändern` : "Emoji wählen";
     }
 
     function choose(next: string | null): void {
-        value = next;
-        show();
+        if (!options.insert) {
+            value = next;
+            show();
+        }
+
         options.onPick(next);
         pop?.hidePopover();
         button.focus();
@@ -186,7 +191,7 @@ export function emojiPicker(options: IEmojiPickerOptions): HTMLButtonElement {
         button.dataset.owner ??= String(Math.random());
         panel.dataset.owner = button.dataset.owner;
         anchor = button;
-        panel.replaceChildren(...content(options.emojis, value, choose));
+        panel.replaceChildren(...content(options.emojis, value, choose, Boolean(options.insert)));
         panel.showPopover();
         place(panel, button);
 
@@ -200,7 +205,7 @@ export function emojiPicker(options: IEmojiPickerOptions): HTMLButtonElement {
     return button;
 }
 
-function content(emojis: IServerEmoji[], current: string | null, choose: (value: string | null) => void): HTMLElement[] {
+function content(emojis: IServerEmoji[], current: string | null, choose: (value: string | null) => void, insert: boolean): HTMLElement[] {
     let mode: "server" | "standard" = emojis.length > 0 ? "server" : "standard";
 
     const search = document.createElement("input");
@@ -321,7 +326,10 @@ function content(emojis: IServerEmoji[], current: string | null, choose: (value:
     const foot = document.createElement("div");
 
     foot.className = "emojipop__foot";
-    foot.append(own, take, none);
+    foot.append(own, take);
+
+    // Beim Einfügen gibt es nichts zu leeren.
+    if (!insert) foot.append(none);
 
     paint();
 

@@ -383,6 +383,17 @@ export default class DashboardService implements IDashboardService {
         return Boolean(guild?.canManage);
     }
 
+    /**
+     * Darf diese Sitzung Live Tickets und Transcriptions dieses Servers nutzen?
+     * Wer verwaltet, und wer eine Support-Rolle des Ticket-Systems hat. Welche
+     * Tickets davon, entscheidet danach jedes Ticket selbst. Wirft SessionExpired.
+     */
+    async CanSupport(session: IDashboardSession, guildId: string): Promise<boolean> {
+        const guild = (await this.GuildsOf(session)).find((entry) => entry.id === guildId);
+
+        return Boolean(guild?.canSupport);
+    }
+
     // Frisch aus der Datenbank statt aus der zwischengespeicherten Serverliste,
     // sonst stünde nach dem Umschalten bis zu einer Minute der alte Stand da.
     // null heißt: ohne Datenbank lässt sich nichts schalten.
@@ -406,7 +417,8 @@ export default class DashboardService implements IDashboardService {
     async Activity(session: IDashboardSession, guildId: string): Promise<IDashboardActivity | "offline" | null> {
         const guild = (await this.GuildsOf(session)).find((entry) => entry.id === guildId);
 
-        if (!guild) return null;
+        // Supporter sehen Tickets, nicht die Zahlen des Servers - darin stehen Namen.
+        if (!guild || guild.role === "Support") return null;
         if (!this.client.databaseService.Ready) return "offline";
 
         return this.client.activityService.Overview(guildId);
@@ -477,6 +489,11 @@ export default class DashboardService implements IDashboardService {
             picked.set(guild.id, { raw: guild, role: guild.owner ? "Owner" : "Admin", canManage: true });
         }
 
+        // Supporter: kein Verwalten, aber eine Support-Rolle des Ticket-Systems.
+        for (const guild of await this.Supported(session.userId, raw.filter((entry) => !picked.has(entry.id)))) {
+            picked.set(guild.id, { raw: guild, role: "Support", canManage: false });
+        }
+
         // Entwickler und Seiten-Admins sehen zusätzlich jeden Server, auf dem der Bot
         // sitzt. Bearbeiten dürfen sie dort nur mit eigener Berechtigung (canManage).
         if (await this.IsStaff(session.userId)) {
@@ -525,6 +542,44 @@ export default class DashboardService implements IDashboardService {
         }
     }
 
+    /**
+     * Die Server, auf denen der User eine Support-Rolle des Ticket-Systems hat -
+     * die allgemeine oder die eines Themas. Nur wo der Bot sitzt und das Modul an
+     * ist; die Rollen kennt der Bot, Discords Liste nennt sie nicht.
+     */
+    private async Supported(userId: string, candidates: IRawGuild[]): Promise<IRawGuild[]> {
+        const present = candidates.filter((guild) => this.client.guilds.cache.has(guild.id));
+
+        if (present.length === 0 || !this.client.databaseService.Ready) return [];
+
+        try {
+            const modules = await this.client.settings.ModulesOf(present.map((guild) => guild.id));
+            const found: IRawGuild[] = [];
+
+            for (const raw of present) {
+                if (!modules.get(raw.id)?.includes("tickets")) continue;
+
+                const config = await this.client.ticketSettings.Of(raw.id);
+                const roles = [config.supportRoleId, ...config.options.map((option) => option.supportRoleId)].filter(
+                    (role): role is string => Boolean(role)
+                );
+
+                if (roles.length === 0) continue;
+
+                const guild = this.client.guilds.cache.get(raw.id)!;
+                const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+
+                if (member && roles.some((role) => member.roles.cache.has(role))) found.push(raw);
+            }
+
+            return found;
+        } catch (error) {
+            logger.warn(`🗄️  Dashboard: Support-Rollen nicht prüfbar - ${String(error)}`);
+
+            return [];
+        }
+    }
+
     private Card(guild: IRawGuild, role: DashboardRole, canManage: boolean, facts: IGuildFacts): IDashboardGuild {
         const known = this.client.guilds.cache.get(guild.id);
 
@@ -543,6 +598,7 @@ export default class DashboardService implements IDashboardService {
             active: Boolean(known),
             role,
             canManage,
+            canSupport: canManage || role === "Support",
             created: CreatedAt(guild.id).toISOString(),
             teams: facts.teams.get(guild.id) ?? 0,
             modules: facts.modules.get(guild.id) ?? [],

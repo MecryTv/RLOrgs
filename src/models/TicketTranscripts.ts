@@ -73,10 +73,30 @@ export default class TicketTranscripts extends Model<ITicketTranscriptRow> {
      * Die Liste im Dashboard, neueste zuerst, seitenweise über before. Gesucht
      * wird nach Nummer (#42), User-ID oder Name des Erstellers.
      */
-    async List(guildId: string, search: string, before: number | null, limit: number): Promise<ITranscriptEntry[]> {
+    async List(
+        guildId: string,
+        search: string,
+        before: number | null,
+        limit: number,
+        options: { include?: string[]; exclude?: string[] } = {}
+    ): Promise<ITranscriptEntry[]> {
         const where = ["guild_id = ?"];
         const values: unknown[] = [guildId];
         const text = search.trim();
+        const option = "JSON_UNQUOTE(JSON_EXTRACT(meta, '$.optionId'))";
+
+        // Supporter sehen nur die Themen ihrer Rolle (TranscriptService.Visible).
+        if (options.include) {
+            if (options.include.length === 0) return [];
+
+            where.push(`${option} IN (${options.include.map(() => "?").join(", ")})`);
+            values.push(...options.include);
+        }
+
+        if (options.exclude?.length) {
+            where.push(`${option} NOT IN (${options.exclude.map(() => "?").join(", ")})`);
+            values.push(...options.exclude);
+        }
 
         if (before !== null) {
             where.push("ticket_id < ?");
