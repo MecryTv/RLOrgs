@@ -14,10 +14,10 @@
 process.env.CLIENT_SECRET ||= "check-secret";
 process.env.DEV_CLIENT_SECRET ||= "check-secret";
 
-import { ChannelType, Guild, GuildMember, Message } from "discord.js";
+import { ChannelType, Collection, Guild, GuildMember, Message, User } from "discord.js";
 import BotClient from "../client/BotClient";
 import { CleanDoc, IsImageSource } from "../builder/MessageDoc";
-import { IsPanelMessage, MenuOptions, PanelView } from "../builder/TicketPanel";
+import { InfoView, IsImageFile, IsPanelMessage, ITicketView, MenuOptions, PanelView, RELAY_MARK, RelayView } from "../builder/TicketPanel";
 import { Duration, LIVE_CSS, RenderLive, RenderTranscript } from "../builder/TranscriptHtml";
 import { Fill, PLACEHOLDER_KEYS } from "../constants/Placeholders";
 import {
@@ -34,8 +34,8 @@ import {
 import { AttachmentKey } from "../constants/Transcripts";
 import { ITicket, ITicketConfig } from "../interfaces/services/tickets/ITicket";
 import { ITranscript, ITranscriptMessage, ITranscriptUser } from "../interfaces/services/tickets/ITranscript";
-import { SlowmodeLabel } from "../services/TicketService";
-import { ILiveAccess } from "../services/LiveService";
+import { ITicketContext, SlowmodeLabel, TicketError } from "../services/TicketService";
+import { ILiveAccess, Preview } from "../services/LiveService";
 
 // Erfundene Snowflakes - 17-stellig wie echte, aber es gibt sie bei Discord nicht.
 const GUILD = "90071992547409991";
@@ -555,6 +555,112 @@ async function checkLive(client: BotClient): Promise<void> {
     check("Live: Tickets anderer Server nie", !client.liveService.CanSee(access([ROLE]), FakeTicket({ guildId: "90071992547400000" })));
 }
 
+/* ----------------------------------------------------------
+   ModMail: Karten, Marken, Schließen
+   ---------------------------------------------------------- */
+interface IRawNode {
+    type?: number;
+    content?: string;
+    items?: { media: { url: string } }[];
+    file?: { url: string };
+    components?: IRawNode[];
+}
+
+async function checkModMail(client: BotClient): Promise<void> {
+    console.log("\n  — ModMail —");
+
+    const team = RelayView("team", "Joe", "Hallo **du**", []);
+    const teamJson = team.components[0].toJSON() as IRawNode;
+
+    check("Team-Karte: oben steht, dass das Team schreibt", teamJson.components?.[0]?.content === `-# ${RELAY_MARK.team} · **Joe**`, teamJson.components?.[0]?.content);
+    check("Team-Karte: der Text darunter", teamJson.components?.[1]?.content === "Hallo **du**");
+
+    const files = [
+        { attachment: "https://cdn.discordapp.com/a/1.png", name: "Mein Bild.png", image: true },
+        { attachment: "https://cdn.discordapp.com/a/2.pdf", name: "Rechnung März.pdf", image: false },
+        { attachment: "https://cdn.discordapp.com/a/3.jpg", name: "zwei.jpg", image: true },
+    ];
+    const user = RelayView("user", null, "", files, ["📎 https://cdn.discordapp.com/a/gross.zip"]);
+    const userJson = user.components[0].toJSON() as IRawNode;
+    const parts = userJson.components ?? [];
+    const gallery = parts.find((part) => part.type === 12);
+    const file = parts.find((part) => part.type === 13);
+    const names = user.files.map((entry) => entry.name);
+
+    check("User-Karte ohne Namen: nur die Marke (Name und Bild trägt der Webhook)", parts[0]?.content === `-# ${RELAY_MARK.user}`, parts[0]?.content);
+    check("Große Dateien stehen als Link im Text", parts[1]?.content === "📎 https://cdn.discordapp.com/a/gross.zip", parts[1]?.content);
+    check(
+        "Bilder als Galerie, mit Verweis auf den Anhang",
+        JSON.stringify(gallery?.items?.map((item) => item.media.url)) === JSON.stringify(["attachment://0-Mein_Bild.png", "attachment://2-zwei.jpg"]),
+        JSON.stringify(gallery?.items)
+    );
+    check("Andere Dateien als Datei-Baustein", file?.file?.url === "attachment://1-Rechnung_Marz.pdf", file?.file?.url);
+    check("Jeder Verweis hat seinen Anhang", JSON.stringify(names) === JSON.stringify(["0-Mein_Bild.png", "1-Rechnung_Marz.pdf", "2-zwei.jpg"]), names.join(", "));
+    check("Bilder erkennt der Name, wenn der Typ fehlt", IsImageFile("a.WEBP") && !IsImageFile("a.pdf") && IsImageFile("x", "image/png"));
+
+    const many = RelayView("user", "Kevin", "x", Array.from({ length: 14 }, (_, index) => ({ attachment: "a", name: `${index}.png`, image: true })));
+
+    check("Höchstens zehn Anhänge", many.files.length === 10);
+    check("Ohne Webhook steht der Name in der Karte", (many.components[0].toJSON() as IRawNode).components?.[0]?.content === `-# ${RELAY_MARK.user} · **Kevin**`);
+
+    // Die Vorschau in der Liste liest Karten ohne Kopfzeile.
+    const card = (view: ITicketView) =>
+        ({ content: "", components: view.components, embeds: [], attachments: new Collection() }) as unknown as Parameters<typeof Preview>[0];
+
+    check("Vorschau: der Text der Karte, ohne Kopfzeile", Preview(card(RelayView("user", "Kevin", "Mein **Rang** fehlt", []))) === "Mein Rang fehlt");
+    check("Vorschau: Karten vom Bot zeigen ihren Text", Preview(card(InfoView("✅ Joe übernimmt das Ticket."))) === "✅ Joe übernimmt das Ticket.");
+
+    // Weitergeleitet per Webhook: im Verlauf steht der Ersteller selbst - mit USER-Marke.
+    const opener: ITranscriptUser = { id: USER, name: "Kevin", avatar: null, bot: false, color: null, team: false };
+    const people = new Map([[USER, opener]]);
+    const hook = (username: string, view: ITicketView | null) =>
+        ({
+            webhookId: "1",
+            author: { id: "2", username, displayAvatarURL: () => "https://cdn.discordapp.com/embed/avatars/0.png" },
+            components: view ? view.components : [],
+        }) as unknown as Message;
+    const transcripts = client.transcriptService;
+
+    check("Weitergeleitete User-Nachricht zählt als der Ersteller", transcripts.Author(hook("Kevin", RelayView("user", null, "hi", [])), people, USER) === opener);
+    check("Nachricht aus dem Dashboard: Team, kein Bot", JSON.stringify(transcripts.Author(hook("Joe · via Dashboard", null), people, USER)).includes('"bot":false,"color":null,"team":true'));
+    check("Andere Webhooks bleiben ein Bot", transcripts.Author(hook("Server Team", null), people, USER).bot === true);
+
+    const tagged = (team: boolean | undefined) => {
+        const transcript = SampleTranscript();
+        const [message] = transcript.messages.slice(1, 2);
+
+        return RenderLive([{ ...message, author: { ...message.author, team } }], transcript.mentions)[0].html;
+    };
+
+    check("Marke TEAM", tagged(true).includes('class="tag tag--team">TEAM<'));
+    check("Marke USER", tagged(false).includes('class="tag tag--user">USER<'));
+    check("Ältere Transcripts ohne Angabe: keine Marke", !tagged(undefined).includes("tag--"));
+
+    // Bei ModMail schließt nur das Team - der Ersteller aus der DM nicht.
+    const config = DefaultConfig();
+    const context = { ticket: FakeTicket({ contact: "modmail" }), config, guild: { id: GUILD } as Guild, option: config.options[0] ?? null, channel: null };
+    let refused = "";
+
+    try {
+        await client.ticketService.Close(context as unknown as ITicketContext, { id: USER } as User, null);
+    } catch (error) {
+        refused = error instanceof TicketError ? error.message : String(error);
+    }
+
+    check("ModMail: der User kann nicht selbst schließen", refused === "Schließen kann nur das Team.", refused);
+
+    // Die Server-Frage kommt einmal, bis ein Ticket aufgeht.
+    const service = client.ticketService;
+    const asker = "90071992547409990";
+
+    check("Server-Frage beim ersten Mal", service.AskServer(asker));
+    check("Keine zweite Frage für jede weitere Zeile", !service.AskServer(asker));
+
+    await service.FlushPending({ id: asker } as User, FakeTicket());
+
+    check("Nach dem Öffnen fragt der Bot beim nächsten Mal wieder", service.AskServer(asker));
+}
+
 async function checkDatabase(client: BotClient): Promise<void> {
     console.log("\n  — Datenbank —");
 
@@ -716,6 +822,7 @@ async function main(): Promise<void> {
     await checkPanel(client);
     await checkTranscripts(client);
     await checkLive(client);
+    await checkModMail(client);
 
     if (await client.databaseService.Connect()) {
         try {

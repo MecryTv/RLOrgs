@@ -21,7 +21,6 @@ import {
     InfoView,
     ITicketView,
     MessageView,
-    OptionPickerView,
     PanelView,
     SummaryView,
     TicketValues,
@@ -95,7 +94,7 @@ export default class TicketHandler extends Event {
         if (action === "open") return this.Open(interaction, argument);
         if (action === "dm" && interaction.isButton()) return this.StartDirect(interaction);
         if (action === "act" && interaction.isStringSelectMenu()) return this.Action(interaction, Number(argument));
-        if (action === "dmclose" && interaction.isButton()) return this.CloseFromDirect(interaction, Number(argument));
+        if (action === "dmclose" && interaction.isButton()) return this.CloseFromDirect(interaction);
         if (action === "dmguild" && interaction.isStringSelectMenu()) return this.DirectGuild(interaction);
         if (action === "dmopt" && interaction.isStringSelectMenu()) return this.OpenFromDirect(interaction, argument, interaction.values[0]);
         if (action === "adduser" && interaction.isUserSelectMenu()) return this.Members(interaction, Number(argument), true);
@@ -164,7 +163,7 @@ export default class TicketHandler extends Event {
         }
     }
 
-    /** "Ticket per DM starten" im ModMail-Panel: Themenwahl per DM, bei einer Option gleich das Ticket. */
+    /** "Ticket per DM starten" im ModMail-Panel: Der Server steht fest - die DM fragt nach dem Thema. */
     private async StartDirect(interaction: ButtonInteraction): Promise<void> {
         const guild = interaction.guild;
 
@@ -173,13 +172,9 @@ export default class TicketHandler extends Event {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
-            const { ticket, channelId } = await this.client.ticketService.OfferDirect(guild, interaction.user);
+            const channelId = await this.client.ticketService.OfferDirect(guild, interaction.user);
             const builder = new ComponentV2Builder({ accentColor: "#35e07f" })
-                .text(
-                    ticket
-                        ? `📬 Dein Ticket ${TicketNumber(ticket.number)} ist offen – schreib mir einfach per DM.`
-                        : "📬 Schau in deine DMs – dort wählst du dein Thema."
-                )
+                .text("📬 Schau in deine DMs – dort wählst du dein Thema.")
                 .buttons({ url: `https://discord.com/channels/@me/${channelId}`, label: "Zur DM", emoji: "📬" });
 
             await interaction.editReply(Edit({ components: [builder.build()], files: [] }));
@@ -565,28 +560,21 @@ export default class TicketHandler extends Event {
     /* ----------------------------------------------------------
        ModMail in der DM
        ---------------------------------------------------------- */
-    private async CloseFromDirect(interaction: ButtonInteraction, ticketId: number): Promise<void> {
-        await interaction.deferReply();
-
-        const service = this.client.ticketService;
-        const context = await service.Context(ticketId);
-
-        await service.Close(context, interaction.user, "Vom User geschlossen");
-        await this.Done(interaction, "🔒 Dein Ticket ist geschlossen. Danke!");
+    /** Ältere DMs tragen noch einen Knopf zum Schließen. Bei ModMail schließt aber nur das Team. */
+    private async CloseFromDirect(interaction: ButtonInteraction): Promise<void> {
+        await this.Answer(
+            interaction,
+            InfoView("🔒 Schließen kann nur das Team. Schreib einfach hier, wenn sich dein Anliegen erledigt hat – dann schließt es das Ticket.")
+        );
     }
 
+    /** Server gewählt - jetzt das Thema, auch wenn es nur eins gibt. */
     private async DirectGuild(interaction: StringSelectMenuInteraction): Promise<void> {
         const guild = this.client.guilds.cache.get(interaction.values[0]);
 
         if (!guild) throw new TicketError("Diesen Server erreiche ich gerade nicht.");
 
-        const config = await this.client.ticketSettings.Of(guild.id);
-
-        if (config.options.length <= 1) {
-            return this.OpenFromDirect(interaction, guild.id, config.options[0]?.id ?? "");
-        }
-
-        await interaction.update(Edit(OptionPickerView(guild, config)));
+        await interaction.update(Edit(await this.client.ticketService.TopicPicker(guild, interaction.user)));
     }
 
     private async OpenFromDirect(interaction: StringSelectMenuInteraction, guildId: string, optionId: string): Promise<void> {

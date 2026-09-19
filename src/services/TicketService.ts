@@ -24,6 +24,8 @@ import { CleanDoc } from "../builder/MessageDoc";
 import {
     DirectView,
     InfoView,
+    IRelayFile,
+    IsImageFile,
     IsPanelMessage,
     ITicketView,
     IVaultItem,
@@ -32,6 +34,7 @@ import {
     OptionOf,
     OptionPickerView,
     PanelView,
+    RelayView,
     SupportRoleOf,
     TicketValues,
 } from "../builder/TicketPanel";
@@ -85,7 +88,19 @@ export interface ITicketContext {
 
 interface IPending {
     content: string;
-    files: { url: string; name: string; size: number }[];
+    files: { url: string; name: string; size: number; type: string | null }[];
+}
+
+function Pending(message: Message): IPending {
+    return {
+        content: message.content,
+        files: message.attachments.map((attachment) => ({
+            url: attachment.url,
+            name: attachment.name,
+            size: attachment.size,
+            type: attachment.contentType,
+        })),
+    };
 }
 
 const MEMBER_ALLOW: PermissionsString[] = ["ViewChannel", "SendMessages", "ReadMessageHistory", "AttachFiles", "EmbedLinks"];
@@ -133,11 +148,14 @@ function AliasOf(guild: Guild): string {
     return /discord|clyde/i.test(alias) ? "Support-Team" : alias;
 }
 
+// Discord lehnt Webhook-Namen mit "discord" oder "clyde" ab.
+function SafeHookName(name: string, fallback: string): string {
+    return /discord|clyde/i.test(name) ? fallback : name.slice(0, 80);
+}
+
 // Der Name einer Nachricht aus dem Dashboard - mit Zusatz, damit das Team sieht, woher sie kam.
 function HookName(name: string): string {
-    const text = `${name.slice(0, 60)} · via Dashboard`;
-
-    return /discord|clyde/i.test(text) ? "Support · via Dashboard" : text;
+    return SafeHookName(`${name.slice(0, 60)} · via Dashboard`, "Support · via Dashboard");
 }
 
 function Allowed(guild: Guild, wanted: PermissionsString[]): PermissionsString[] {
@@ -176,6 +194,8 @@ export default class TicketService {
 
     // Die erste DM eines Users ohne Ticket: sie geht ins Ticket, sobald es steht.
     private pending = new LRUCache<string, IPending>({ max: 500, ttl: 10 * 60_000 });
+    // Wer die Server-Auswahl gerade bekommen hat, bekommt nicht zu jeder weiteren Zeile eine neue.
+    private asked = new LRUCache<string, boolean>({ max: 500, ttl: 5 * 60_000 });
 
     constructor(client: BotClient) {
         this.client = client;
@@ -598,34 +618,41 @@ export default class TicketService {
     }
 
     /**
-     * Klick auf "Ticket per DM starten" im ModMail-Panel. Mit nur einer Option
-     * öffnet der Bot das Ticket gleich; sonst schickt er die Themenwahl per DM.
-     * Zurück kommt die DM, damit die Antwort im Server dorthin verlinken kann.
+     * Klick auf "Ticket per DM starten" im ModMail-Panel: Der Server steht fest,
+     * die DM fragt nach dem Thema - auch bei nur einem. Zurück kommt die DM,
+     * damit die Antwort im Server dorthin verlinken kann.
      */
-    async OfferDirect(guild: Guild, user: User): Promise<{ ticket: ITicket | null; channelId: string }> {
+    async OfferDirect(guild: Guild, user: User): Promise<string> {
+        const view = await this.TopicPicker(guild, user);
+        const channel = await user.createDM().catch(() => null);
+        const sent = channel ? await channel.send({ ...view, flags: MessageFlags.IsComponentsV2 }).catch(() => null) : null;
+
+        if (!channel || !sent) throw new TicketError(NO_DM);
+
+        return channel.id;
+    }
+
+    /** Die Themenwahl per DM. Vorher gilt schon alles, was vor einem Ticket gilt - gesperrt, Limit, offenes Ticket. */
+    async TopicPicker(guild: Guild, user: User): Promise<ITicketView> {
         if (!this.client.databaseService.Ready) throw new TicketError(NO_DATABASE);
 
         const config = await this.client.ticketSettings.Of(guild.id);
 
-        if (config.contact !== "modmail") throw new TicketError("Dieses Panel ist veraltet – Tickets laufen hier nicht mehr per DM.");
+        if (config.contact !== "modmail") throw new TicketError("Auf diesem Server laufen Tickets nicht per DM.");
         if (config.options.length === 0) throw new TicketError("Hier ist noch kein Thema eingerichtet.");
-
-        if (config.options.length === 1) {
-            const ticket = await this.Open(guild, user, config.options[0].id);
-
-            return { ticket, channelId: (await user.createDM()).id };
-        }
 
         await this.Gate(guild, user, config, null);
 
-        const channel = await user.createDM().catch(() => null);
-        const sent = channel
-            ? await channel.send({ ...OptionPickerView(guild, config), flags: MessageFlags.IsComponentsV2 }).catch(() => null)
-            : null;
+        return OptionPickerView(guild, config);
+    }
 
-        if (!channel || !sent) throw new TicketError(NO_DM);
+    /** true: jetzt nach dem Server fragen. Danach fünf Minuten nicht wieder - es sei denn, ein Ticket ging auf. */
+    AskServer(userId: string): boolean {
+        if (this.asked.has(userId)) return false;
 
-        return { ticket: null, channelId: channel.id };
+        this.asked.set(userId, true);
+
+        return true;
     }
 
     /**
@@ -742,9 +769,7 @@ export default class TicketService {
             if (channel) await channel.delete().catch(() => undefined);
 
             if (sentDirect) {
-                await user
-                    .send({ content: "⚠️ Das Ticket ließ sich auf dem Server doch nicht anlegen – versuch es gleich nochmal." })
-                    .catch(() => undefined);
+                await this.SendDirect(user, InfoView("⚠️ Das Ticket ließ sich auf dem Server doch nicht anlegen – versuch es gleich nochmal.", "#ffc53d"));
             }
 
             throw this.Explain(error);
@@ -812,6 +837,20 @@ export default class TicketService {
             .send({ ...view, flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } })
             .then(() => true)
             .catch(() => false);
+    }
+
+    /** Bei ModMail sieht der User das Ticket nicht - was das Team daran ändert, erfährt er per DM. */
+    private async Notify(context: ITicketContext, text: string, accent?: string): Promise<void> {
+        if (context.ticket.contact !== "modmail") return;
+
+        const opener = await this.client.users.fetch(context.ticket.openerId).catch(() => null);
+
+        if (opener) await this.SendDirect(opener, InfoView(text, accent));
+    }
+
+    /** Wie ein Teammitglied beim User heißt - im anonymen Modus der Team-Alias. */
+    private ShownName(context: ITicketContext, member: GuildMember): string {
+        return context.ticket.anonymous.includes(member.id) ? AliasOf(context.guild) : member.displayName;
     }
 
     /** Status und Menü der Eröffnungs-Nachricht auf den Stand des Tickets bringen. */
@@ -884,6 +923,11 @@ export default class TicketService {
 
         await this.Update(context, { claimedBy: member.id });
         await this.Say(context, `✅ ${member} übernimmt das Ticket.`, "#35e07f");
+        await this.Notify(
+            context,
+            `✅ **${escapeMarkdown(this.ShownName(context, member))}** kümmert sich jetzt um dein Ticket ${TicketNumber(context.ticket.number)}.`,
+            "#35e07f"
+        );
 
         void this.SyncThread(context);
         await this.Refresh(context);
@@ -903,6 +947,7 @@ export default class TicketService {
 
         await this.Update(context, { claimedBy: null });
         await this.Say(context, `↩️ ${member} gibt das Ticket zurück – es wartet wieder auf das Team.`);
+        await this.Notify(context, `↩️ Dein Ticket ${TicketNumber(context.ticket.number)} wartet wieder auf das Team.`);
 
         void this.SyncThread(context);
         await this.Refresh(context);
@@ -984,6 +1029,7 @@ export default class TicketService {
         context.option = target;
 
         await this.Say(context, `🔁 ${member} hat das Ticket nach **${escapeMarkdown(target.name)}** verschoben.`);
+        await this.Notify(context, `🔁 Dein Ticket ${TicketNumber(context.ticket.number)} liegt jetzt bei **${escapeMarkdown(target.name)}**.`);
 
         void this.SyncThread(context);
         this.Rename(context);
@@ -998,6 +1044,7 @@ export default class TicketService {
 
         await this.Update(context, { priority });
         await this.Say(context, `⚡ ${member} setzt die Priorität auf ${label.emoji} **${label.name}**.`);
+        await this.Notify(context, `⚡ Priorität deines Tickets ${TicketNumber(context.ticket.number)}: ${label.emoji} **${label.name}**.`);
 
         void this.SyncThread(context);
         this.Rename(context);
@@ -1082,6 +1129,12 @@ export default class TicketService {
             context,
             seconds === 0 ? `⏱️ ${member} hat den Slowmode ausgeschaltet.` : `⏱️ ${member} hat den Slowmode auf **${SlowmodeLabel(seconds)}** gesetzt.`
         );
+        await this.Notify(
+            context,
+            seconds === 0
+                ? "⏱️ Slowmode aus – du kannst wieder ohne Pause schreiben."
+                : `⏱️ Slowmode: Du kannst nur alle **${SlowmodeLabel(seconds)}** eine Nachricht schicken.`
+        );
     }
 
     async AddNote(context: ITicketContext, member: GuildMember, text: string): Promise<void> {
@@ -1130,6 +1183,8 @@ export default class TicketService {
                 if (direct) await channel.send({ ...view, flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } });
                 else await this.SendDirect(opener, view);
             }
+        } else {
+            await this.Notify(context, `🔓 Dein Ticket ${TicketNumber(context.ticket.number)} ist wieder offen – du kannst weiterschreiben.`, "#35e07f");
         }
 
         await this.Say(context, frozen ? `🥶 ${member} hat das Ticket eingefroren.` : `🔓 ${member} hat das Ticket wieder freigegeben.`);
@@ -1244,12 +1299,8 @@ export default class TicketService {
         if (context.ticket.contact !== "modmail") return;
 
         const opener = await this.client.users.fetch(context.ticket.openerId).catch(() => null);
-        const delivered = opener
-            ? await opener
-                  .send({ content: `**${escapeMarkdown(name)}:** ${text}`.slice(0, 2000), files, allowedMentions: { parse: [] } })
-                  .then(() => true)
-                  .catch(() => false)
-            : false;
+        const relay = RelayView("team", name, text, files.map((file) => ({ ...file, image: IsImageFile(file.name) })));
+        const delivered = opener ? await this.SendDirect(opener, relay) : false;
 
         if (!delivered) {
             throw new TicketError("Im Ticket steht die Nachricht, beim User kam sie nicht an – er hat DMs vermutlich geschlossen.");
@@ -1263,7 +1314,9 @@ export default class TicketService {
         const { ticket, config, guild } = context;
         const staff = actor instanceof GuildMember && this.IsStaff(actor, context);
 
-        if (actor.id !== ticket.openerId && !staff) throw new TicketError("Schließen dürfen nur der Ersteller und das Team.");
+        // Bei ModMail schließt nur das Team - der User schreibt einfach nicht weiter.
+        if (!staff && ticket.contact === "modmail") throw new TicketError("Schließen kann nur das Team.");
+        if (!staff && actor.id !== ticket.openerId) throw new TicketError("Schließen dürfen nur der Ersteller und das Team.");
 
         const now = config.deleteAfter === DELETE_NOW;
         const why = reason?.trim() || "Kein Grund angegeben";
@@ -1380,27 +1433,34 @@ export default class TicketService {
         const ticket = await this.client.tickets.OpenModMail(message.author.id);
 
         if (!ticket) {
-            this.pending.set(message.author.id, {
-                content: message.content,
-                files: message.attachments.map((attachment) => ({ url: attachment.url, name: attachment.name, size: attachment.size })),
-            });
+            // Bis Server und Thema gewählt sind, schreiben viele schon weiter - nichts davon geht verloren.
+            const before = this.pending.get(message.author.id);
+            const next = Pending(message);
+
+            this.pending.set(
+                message.author.id,
+                before
+                    ? {
+                          content: [before.content, next.content].filter(Boolean).join("\n").slice(0, 4000),
+                          files: [...before.files, ...next.files].slice(0, 10),
+                      }
+                    : next
+            );
 
             return false;
         }
 
-        await this.RelayToTeam(message.author, ticket, {
-            content: message.content,
-            files: message.attachments.map((attachment) => ({ url: attachment.url, name: attachment.name, size: attachment.size })),
-        }, message);
+        await this.RelayToTeam(message.author, ticket, Pending(message), message);
 
         return true;
     }
 
-    /** Die gemerkte erste DM ins frisch geöffnete Ticket. */
+    /** Die gemerkten DMs von vor der Themenwahl ins frisch geöffnete Ticket. */
     async FlushPending(user: User, ticket: ITicket): Promise<void> {
         const first = this.pending.get(user.id);
 
         this.pending.delete(user.id);
+        this.asked.delete(user.id);
 
         if (first && (first.content || first.files.length > 0)) await this.RelayToTeam(user, ticket, first, null);
     }
@@ -1424,19 +1484,27 @@ export default class TicketService {
         return found;
     }
 
-    private Files(pending: IPending): { files: { attachment: string; name: string }[]; links: string } {
-        const small = pending.files.filter((file) => file.size <= MAX_RELAY_FILE);
+    /** Anhänge zum Weiterleiten: bis 10 MB als Datei, größere als Link. */
+    private Files(pending: IPending): { files: IRelayFile[]; links: string[] } {
+        const small = pending.files.filter((file) => file.size <= MAX_RELAY_FILE).slice(0, 10);
         const large = pending.files.filter((file) => file.size > MAX_RELAY_FILE);
 
         return {
-            files: small.map((file) => ({ attachment: file.url, name: file.name })),
-            links: large.map((file) => `\n📎 ${file.url}`).join(""),
+            files: small.map((file) => ({ attachment: file.url, name: file.name, image: IsImageFile(file.name, file.type) })),
+            links: large.map((file) => `📎 ${file.url}`),
         };
+    }
+
+    /** Eine kurze Antwort auf eine Nachricht - wie alles vom Bot als Components V2. */
+    private async Answer(message: Message | null, text: string, accent = "#ffc53d"): Promise<void> {
+        await message
+            ?.reply({ ...InfoView(text, accent), flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [], repliedUser: false } })
+            .catch(() => undefined);
     }
 
     private async RelayToTeam(user: User, ticket: ITicket, pending: IPending, original: Message | null): Promise<void> {
         if (ticket.status === "frozen") {
-            await original?.reply("❄️ Dein Ticket ist gerade eingefroren – das Team meldet sich bei dir.").catch(() => undefined);
+            await this.Answer(original, "❄️ Dein Ticket ist gerade eingefroren – das Team meldet sich bei dir.", "#5ccdff");
             return;
         }
 
@@ -1444,33 +1512,57 @@ export default class TicketService {
             const wait = (this.lastRelay.get(ticket.id) ?? 0) + ticket.slowmode * 1000 - Date.now();
 
             if (wait > 0) {
-                await original.reply(`⏱️ Slowmode: warte noch ${Math.ceil(wait / 1000)} Sekunden.`).catch(() => undefined);
+                await this.Answer(original, `⏱️ Slowmode: warte noch ${Math.ceil(wait / 1000)} Sekunden.`);
                 return;
             }
         }
 
         this.lastRelay.set(ticket.id, Date.now());
 
-        const channel = ticket.channelId ? await this.client.channels.fetch(ticket.channelId).catch(() => null) : null;
+        const found = ticket.channelId ? await this.client.channels.fetch(ticket.channelId).catch(() => null) : null;
 
-        if (!channel || !(channel.type === ChannelType.GuildText || channel.isThread())) {
-            await original?.reply("⚠️ Dein Ticket ist auf dem Server nicht mehr erreichbar.").catch(() => undefined);
+        if (!found || !(found.type === ChannelType.GuildText || found.isThread())) {
+            await this.Answer(original, "⚠️ Dein Ticket ist auf dem Server nicht mehr erreichbar.");
             return;
         }
 
+        const channel = found as TicketChannel;
         const { files, links } = this.Files(pending);
+        const view = (name: string | null) => ({
+            ...RelayView("user", name, pending.content, files, links),
+            flags: MessageFlags.IsComponentsV2 as const,
+            allowedMentions: { parse: [] },
+        });
+
+        // Per Webhook mit Name und Bild des Users - im Ticket liest es sich wie ein Chat.
+        // Ohne Webhook (oder wenn er weg ist) schickt der Bot die Karte, mit dem Namen darin.
+        const scope = channel.isThread() ? channel.parent : channel;
+        const hook = scope && (scope.type === ChannelType.GuildText || scope.type === ChannelType.GuildForum) ? await this.Webhook(scope) : null;
+        const hooked = hook
+            ? await hook
+                  .send({
+                      ...view(null),
+                      username: SafeHookName(user.displayName, "User"),
+                      avatarURL: user.displayAvatarURL({ extension: "png", size: 256 }),
+                      threadId: channel.isThread() ? channel.id : undefined,
+                      withComponents: true,
+                  })
+                  .then(() => true)
+                  .catch((error) => {
+                      this.hooks.delete(scope!.id);
+                      logger.warn(`🎫 Weiterleiten per Webhook: ${String(error)}`);
+
+                      return false;
+                  })
+            : false;
 
         try {
-            await (channel as TicketChannel).send({
-                content: `**${escapeMarkdown(user.displayName)}:** ${pending.content}${links}`.slice(0, 2000),
-                files,
-                allowedMentions: { parse: [] },
-            });
+            if (!hooked) await channel.send(view(user.displayName));
 
             await original?.react("✅").catch(() => undefined);
             void this.client.tickets.CountMessage(ticket.id).catch(() => undefined);
         } catch {
-            await original?.reply("⚠️ Deine Nachricht kam nicht an – versuch es gleich nochmal.").catch(() => undefined);
+            await this.Answer(original, "⚠️ Deine Nachricht kam nicht an – versuch es gleich nochmal.");
         }
     }
 
@@ -1483,23 +1575,12 @@ export default class TicketService {
             ? AliasOf(message.guild)
             : message.member?.displayName ?? message.author.displayName;
 
-        const { files, links } = this.Files({
-            content: message.content,
-            files: message.attachments.map((attachment) => ({ url: attachment.url, name: attachment.name, size: attachment.size })),
-        });
+        const { files, links } = this.Files(Pending(message));
 
-        try {
-            await opener.send({
-                content: `**${escapeMarkdown(name)}:** ${message.content}${links}`.slice(0, 2000),
-                files,
-                allowedMentions: { parse: [] },
-            });
-
+        if (await this.SendDirect(opener, RelayView("team", name, message.content, files, links))) {
             await message.react("✅").catch(() => undefined);
-        } catch {
-            await message
-                .reply({ content: "⚠️ Kam beim User nicht an – er hat DMs vermutlich geschlossen.", allowedMentions: { parse: [] } })
-                .catch(() => undefined);
+        } else {
+            await this.Answer(message, "⚠️ Kam beim User nicht an – er hat DMs vermutlich geschlossen.");
         }
     }
 
@@ -1516,17 +1597,14 @@ export default class TicketService {
 
         if (!hook) return;
 
-        const { files, links } = this.Files({
-            content: message.content,
-            files: message.attachments.map((attachment) => ({ url: attachment.url, name: attachment.name, size: attachment.size })),
-        });
+        const { files, links } = this.Files(Pending(message));
 
         try {
             await hook.send({
                 username: AliasOf(message.guild),
                 avatarURL: message.guild.iconURL({ extension: "png", size: 256 }) ?? undefined,
-                content: `${message.content}${links}`.slice(0, 2000) || undefined,
-                files,
+                content: [message.content, ...links].filter(Boolean).join("\n").slice(0, 2000) || undefined,
+                files: files.map((file) => ({ attachment: file.attachment, name: file.name })),
                 threadId: channel.isThread() ? channel.id : undefined,
                 allowedMentions: { parse: [] },
             });

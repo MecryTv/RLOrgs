@@ -2,10 +2,7 @@ import { Events, Message, MessageFlags } from "discord.js";
 import { LRUCache } from "lru-cache";
 import BotClient from "../../client/BotClient";
 import Event from "../../structures/Event";
-import ComponentV2Builder from "../../builder/ComponentV2Builder";
-import { OptionPickerView } from "../../builder/TicketPanel";
-import { TicketError } from "../../services/TicketService";
-import { TICKET_PREFIX } from "../../constants/Tickets";
+import { GuildPickerView, InfoView } from "../../builder/TicketPanel";
 
 /**
  * Nachrichten, die das Ticket-System angehen: die DM eines Users bei ModMail,
@@ -44,7 +41,11 @@ export default class TicketMessages extends Event {
         }
     }
 
-    /** Eine DM an den Bot: entweder läuft schon ein Ticket, oder wir bieten eins an. */
+    /**
+     * Eine DM an den Bot: entweder läuft schon ein Ticket, oder der Bot fragt erst
+     * nach dem Server, dann nach dem Thema - auch wenn es nur eins davon gibt.
+     * Was der User bis dahin schreibt, landet danach im Ticket.
+     */
     private async Direct(message: Message): Promise<void> {
         const service = this.client.ticketService;
 
@@ -58,50 +59,25 @@ export default class TicketMessages extends Event {
             this.told.set(message.author.id, true);
 
             await message
-                .reply("Hier läuft kein ModMail. Öffne dein Ticket auf dem Server über das Ticket-Panel.")
+                .reply({
+                    ...InfoView("Hier läuft kein ModMail. Öffne dein Ticket auf dem Server über das Ticket-Panel."),
+                    flags: MessageFlags.IsComponentsV2,
+                    allowedMentions: { repliedUser: false },
+                })
                 .catch(() => undefined);
 
             return;
         }
 
-        if (guilds.length === 1) {
-            const config = await this.client.ticketSettings.Of(guilds[0].id);
-
-            if (config.options.length === 1) {
-                try {
-                    const ticket = await service.Open(guilds[0], message.author, config.options[0].id);
-
-                    await service.FlushPending(message.author, ticket);
-                } catch (error) {
-                    if (!(error instanceof TicketError)) throw error;
-
-                    await message.reply(error.message).catch(() => undefined);
-                }
-
-                return;
-            }
-
-            await message
-                .reply({ ...OptionPickerView(guilds[0], config), flags: MessageFlags.IsComponentsV2 })
-                .catch(() => undefined);
+        // Die Auswahl steht schon weiter oben - die Nachricht ist gemerkt.
+        if (!service.AskServer(message.author.id)) {
+            await message.react("📝").catch(() => undefined);
 
             return;
         }
 
         await message
-            .reply({
-                components: [
-                    new ComponentV2Builder({ accentColor: "#ff1e2d" })
-                        .title("🎫 | Für welchen Server?", "Ich bin auf mehreren Servern, auf denen du schreiben kannst.")
-                        .select({
-                            customId: `${TICKET_PREFIX}:dmguild`,
-                            placeholder: "Server wählen …",
-                            options: guilds.map((guild) => ({ label: guild.name.slice(0, 100), value: guild.id })),
-                        })
-                        .build(),
-                ],
-                flags: MessageFlags.IsComponentsV2,
-            })
+            .reply({ ...GuildPickerView(guilds), flags: MessageFlags.IsComponentsV2, allowedMentions: { repliedUser: false } })
             .catch(() => undefined);
     }
 }

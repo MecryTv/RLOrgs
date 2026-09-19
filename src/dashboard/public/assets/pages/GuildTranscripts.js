@@ -4,6 +4,9 @@
  * Eine Liste, neueste zuerst, mit Suche und "Ältere laden". Angesehen wird ein
  * Transcript auf seiner eigenen Seite (/transcript/<ticket>) - die prüft selbst,
  * wer es sehen darf, und liefert auch die Datei zum Mitnehmen.
+ *
+ * Neu geladen wird still, wenn der Abschnitt wieder aufgeht und wenn der Stream
+ * von Live Tickets ein fertiges Transcript meldet ("live:transcript").
  */
 import { BASE } from "../core/Base.js";
 import { icon, need } from "../core/Dom.js";
@@ -158,14 +161,14 @@ export function renderTranscripts(guildId) {
         count.textContent = entries.length ? `${entries.length}${hasMore ? "+" : ""} Transcript${entries.length === 1 ? "" : "s"}` : "";
         more.hidden = !hasMore;
     }
-    async function load(reset) {
+    async function load(reset, quiet = false) {
         const mine = ++ticket;
         const params = new URLSearchParams();
         if (query)
             params.set("q", query);
         if (!reset && entries.length)
             params.set("before", String(entries[entries.length - 1].id));
-        if (reset)
+        if (reset && !quiet)
             list.replaceChildren(...skeleton());
         more.disabled = true;
         try {
@@ -207,5 +210,16 @@ export function renderTranscripts(guildId) {
         }, 250);
     });
     more.addEventListener("click", () => void load(false));
+    // Ein Ticket ist gerade zu gegangen - sein Transcript steht jetzt oben.
+    document.addEventListener("live:transcript", () => void load(true, true));
+    const section = document.querySelector("#transcriptions");
+    let shown = section ? !section.hidden : false;
+    if (section) {
+        new MutationObserver(() => {
+            if (!section.hidden && !shown)
+                void load(true, true);
+            shown = !section.hidden;
+        }).observe(section, { attributes: true, attributeFilter: ["hidden"] });
+    }
     void load(true);
 }

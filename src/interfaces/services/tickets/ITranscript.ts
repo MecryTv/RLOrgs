@@ -9,6 +9,8 @@ export interface ITranscriptUser {
     bot: boolean;
     /** Farbe der höchsten Rolle, null ohne Farbe. */
     color: string | null;
+    /** Team (true) oder User (false) - fehlt in älteren Transcripts und bei Webhooks. */
+    team?: boolean;
 }
 
 export interface ITranscriptFile {

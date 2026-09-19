@@ -17,7 +17,12 @@ export interface ILiveTicket {
     priority: TicketPriority | null;
     opener: { id: string; name: string; avatar: string | null };
     claimer: { id: string; name: string } | null;
-    members: string[];
+    /** Hinzugefügte User - für "Benutzer entfernen". */
+    members: { id: string; name: string; avatar: string | null }[];
+    /** Wer im anonymen Modus schreibt. */
+    anonymous: string[];
+    slowmode: number;
+    reminderAt: number | null;
     createdAt: number;
     /** Zeitpunkt der letzten Nachricht - aus der ID, ohne Abfrage bei Discord. */
     lastAt: number;
@@ -50,9 +55,28 @@ interface ISubscriber {
     ping(): void;
 }
 
+/** Der Text einer Components-V2-Karte, ohne Kopf- und Fußzeilen (-#). */
+function CardText(nodes: unknown): string {
+    const lines: string[] = [];
+    const walk = (node: unknown): void => {
+        if (Array.isArray(node)) return node.forEach(walk);
+        if (!node || typeof node !== "object") return;
+
+        const entry = node as { type?: number; content?: unknown; components?: unknown };
+
+        if (entry.type === 10 && typeof entry.content === "string") lines.push(...entry.content.split("\n"));
+
+        walk(entry.components);
+    };
+
+    walk(nodes);
+
+    return lines.filter((line) => !line.startsWith("-# ")).join("\n");
+}
+
 /** Eine Zeile für die Liste: Klartext ohne Markdown, Erwähnungen nur angedeutet. */
-function Preview(message: Message): string {
-    const text = message.content
+export function Preview(message: Pick<Message, "content" | "components" | "embeds" | "attachments">): string {
+    const text = (message.content || CardText(message.components.map((component) => component.toJSON())))
         .replace(/<a?:(\w{2,32}):\d{17,20}>/g, ":$1:")
         .replace(/<@&\d{17,20}>/g, "@Rolle")
         .replace(/<@!?\d{17,20}>/g, "@jemand")
@@ -143,6 +167,14 @@ export default class LiveService {
             this.client.users.cache.get(ticket.openerId) ??
             (await this.client.users.fetch(ticket.openerId).catch(() => null));
         const claimer = ticket.claimedBy ? (guild.members.cache.get(ticket.claimedBy) ?? this.client.users.cache.get(ticket.claimedBy)) : null;
+        const members = await Promise.all(
+            ticket.members.map(async (id) => {
+                const person =
+                    guild.members.cache.get(id) ?? this.client.users.cache.get(id) ?? (await this.client.users.fetch(id).catch(() => null));
+
+                return { id, name: person?.displayName ?? id, avatar: person ? person.displayAvatarURL({ extension: "webp", size: 64 }) : null };
+            })
+        );
 
         return {
             id: ticket.id,
@@ -157,7 +189,10 @@ export default class LiveService {
                 avatar: opener ? opener.displayAvatarURL({ extension: "webp", size: 64 }) : null,
             },
             claimer: ticket.claimedBy ? { id: ticket.claimedBy, name: claimer?.displayName ?? "jemand vom Team" } : null,
-            members: ticket.members,
+            members,
+            anonymous: ticket.anonymous,
+            slowmode: ticket.slowmode,
+            reminderAt: ticket.reminderAt,
             createdAt: ticket.createdAt.getTime(),
             lastAt: last ? SnowflakeUtil.timestampFrom(last) : ticket.createdAt.getTime(),
             messages: ticket.messages,
@@ -183,21 +218,25 @@ export default class LiveService {
     private async Render(guild: Guild, ticket: ITicket, messages: Message[]): Promise<ILiveMessage[]> {
         const transcripts = this.client.transcriptService;
         const people = new Map<string, ITranscriptUser>();
+        const team = await transcripts.TeamOf(ticket);
 
         // Die Autoren kennt der Bot meist schon - nur wer fehlt, wird nachgeschlagen.
-        for (const message of messages) {
-            if (message.webhookId || people.has(message.author.id)) continue;
+        // Den Ersteller braucht es immer: weitergeleitete ModMail-Nachrichten zeigen ihn.
+        const wanted = new Set<string>([ticket.openerId]);
 
-            const member = message.member ?? guild.members.cache.get(message.author.id);
+        for (const message of messages) if (!message.webhookId) wanted.add(message.author.id);
 
-            if (member) people.set(member.id, transcripts.Person(member));
+        for (const id of wanted) {
+            const member = messages.find((message) => !message.webhookId && message.author.id === id)?.member ?? guild.members.cache.get(id);
+
+            if (member) people.set(id, transcripts.Person(member, team(member)));
         }
 
-        if (messages.some((message) => !message.webhookId && !people.has(message.author.id))) {
-            for (const [id, person] of await transcripts.People(guild, messages, ticket)) people.set(id, person);
+        if ([...wanted].some((id) => !people.has(id))) {
+            for (const [id, person] of await transcripts.People(guild, messages, ticket)) if (!people.has(id)) people.set(id, person);
         }
 
-        const snapshots = messages.map((message) => transcripts.Snapshot(message, people));
+        const snapshots = messages.map((message) => transcripts.Snapshot(message, people, ticket.openerId));
         const rendered = RenderLive(snapshots, await transcripts.Mentions(guild, messages, people));
 
         return snapshots.map((snapshot, index) => ({
@@ -295,6 +334,15 @@ export default class LiveService {
             await this.Broadcast(ticket, "ticket", await this.Summary(guild, config, ticket), gone);
         } catch (error) {
             logger.warn(`🎫 Live: Ticket ${ticketId} nicht gemeldet - ${String(error)}`);
+        }
+    }
+
+    /** Ein Transcript ist fertig - die Liste unter Transcriptions lädt neu. */
+    async Archived(ticket: ITicket): Promise<void> {
+        try {
+            await this.Broadcast(ticket, "transcript", { id: ticket.id, number: ticket.number });
+        } catch (error) {
+            logger.warn(`📄 Live: Transcript ${ticket.id} nicht gemeldet - ${String(error)}`);
         }
     }
 

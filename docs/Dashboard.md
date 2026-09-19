@@ -204,6 +204,8 @@ Anmelden darf sich **jeder** Discord-Account. Was danach in der Liste steht, hä
 | Weder noch | nein | — |
 | Gruppe `administrator` oder `developer` | zusätzlich **jeder** Server, auf dem der Bot ist | nur mit eigenem Recht auf dem Server |
 
+Die Serverliste holt der Bot je Sitzung höchstens einmal gleichzeitig: Eine Seite fragt mehrere Routen auf einmal ab, und alle warten auf denselben Abruf. Antwortet Discord trotzdem mit 429, wartet er die genannte Zeit (bis 5 Sekunden) und fragt einmal nach (`DashboardService.Guilds()` / `Fetch()`).
+
 Die Support-Rolle kommt nicht aus Discords Serverliste, sondern vom Bot: er schaut, ob das Mitglied die allgemeine Support-Rolle oder die eines Themas trägt. Nur auf Servern mit eingeschaltetem Ticket-Modul, und nur für Server, die sonst nicht in der Liste stünden. Die Übersicht mit Aktivität bleibt für sie zu.
 
 Karten ohne Bearbeitungsrecht tragen die Marke „Nur Ansicht“, die Detailseite blendet dort einen Hinweis ein. Wer Seiten-Admins auch dort schreiben lassen will, setzt in `DashboardService.Guilds()` beim Staff-Zweig `canManage` auf `true` — eine Zeile.

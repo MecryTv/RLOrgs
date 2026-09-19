@@ -6,8 +6,10 @@
  * rendert der Bot - dieselbe Darstellung wie im Transcript. Sie stehen in einem
  * Shadow DOM, damit sich Dashboard und Discord-Look nicht die Stile verbiegen.
  *
- * Geladen wird erst, wenn der Abschnitt das erste Mal offen ist; die
- * Verbindung bleibt danach stehen, damit Zähler und Ton weiterlaufen.
+ * Geladen wird erst, wenn Live Tickets oder Transcriptions das erste Mal offen
+ * sind; die Verbindung bleibt danach stehen, damit Zähler und Ton weiterlaufen.
+ * Ist ein Transcript fertig, sagt der Stream es der Liste unter Transcriptions
+ * (Ereignis "live:transcript" am document).
  */
 import { BASE } from "../core/Base.js";
 import { icon, need } from "../core/Dom.js";
@@ -49,6 +51,13 @@ function ago(ms) {
         return `vor ${hours} Std.`;
     return new Date(ms).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
 }
+const WHEN = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
+// Für <input type="datetime-local">: Ortszeit ohne Sekunden.
+function localInput(ms) {
+    return new Date(ms - new Date(ms).getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+// Die eigenen Knöpfe stehen im Kopf - im Menü nur der Rest.
+const HEAD_ACTIONS = new Set(["claim", "unclaim", "priority", "close"]);
 function bytes(size) {
     return size < 1024 * 1024 ? `${Math.max(1, Math.round(size / 1024))} KB` : `${(size / 1024 / 1024).toFixed(1).replace(".", ",")} MB`;
 }
@@ -130,7 +139,8 @@ export function renderLive(guildId, user) {
     let files = [];
     let pictures = [];
     let sending = false;
-    let closing = false;
+    // Die offene Leiste unter dem Kopf: Schließen, Verschieben, Notiz ...
+    let panel = null;
     function warn(text) {
         note.hidden = text === null;
         note.querySelector("span").textContent = text ?? "";
@@ -151,7 +161,7 @@ export function renderLive(guildId, user) {
     items.setAttribute("role", "list");
     list.setAttribute("aria-label", "Offene Tickets");
     const head = el("header", "ltchat__head");
-    const closeBar = el("div", "ltclose");
+    const actBar = el("div", "ltact");
     const logHost = el("div", "ltlog");
     const shadow = logHost.attachShadow({ mode: "open" });
     const style = document.createElement("style");
@@ -168,7 +178,7 @@ export function renderLive(guildId, user) {
     const tools = el("div", "ltcompose__tools", attach, galleryButton);
     const composer = el("div", "ltcompose", chips, el("div", "ltcompose__row", tools, input, sendButton), el("p", "ltcompose__hint", "Enter sendet, Shift+Enter macht eine neue Zeile. In Discord steht dein Name mit „via Dashboard“.", counter));
     const empty = el("div", "ltempty");
-    const chat = el("section", "lt__chat", empty, head, closeBar, logHost, freshButton, composer);
+    const chat = el("section", "lt__chat", empty, head, actBar, logHost, freshButton, composer);
     moreButton.type = "button";
     moreButton.hidden = true;
     shadow.append(style, moreButton, log);
@@ -190,7 +200,7 @@ export function renderLive(guildId, user) {
     galleryButton.title = "Bild aus der Galerie";
     galleryButton.setAttribute("aria-label", "Bild aus der Galerie");
     sendButton.type = "button";
-    closeBar.hidden = true;
+    actBar.hidden = true;
     composer.append(fileInput);
     chat.setAttribute("aria-label", "Ticket-Chat");
     /* ------------------------------------------------------------
@@ -283,7 +293,7 @@ export function renderLive(guildId, user) {
         logHost.hidden = current === null;
         composer.hidden = current === null;
         freshButton.hidden = current === null || fresh === 0;
-        closeBar.hidden = current === null || !closing;
+        actBar.hidden = current === null || panel === null;
     }
     function action(label, className, run) {
         const button = el("button", className, label);
@@ -313,7 +323,7 @@ export function renderLive(guildId, user) {
         else {
             actions.append(el("span", "ltchip is-claimed", `✅ ${ticket.claimer.name}`));
         }
-        if (data.priority) {
+        if (has("priority")) {
             const priority = el("select", "pick ltprio", el("option", "", "Priorität …"));
             priority.firstElementChild.value = "";
             priority.firstElementChild.disabled = true;
@@ -336,42 +346,291 @@ export function renderLive(guildId, user) {
             discord.setAttribute("aria-label", "In Discord öffnen");
             actions.append(discord);
         }
-        actions.append(action("Schließen", "btn btn--quiet is-danger", () => {
-            closing = !closing;
-            paintClose();
-        }));
+        const extra = data.actions.filter((entry) => !HEAD_ACTIONS.has(entry.value));
+        if (extra.length) {
+            const menu = el("select", "pick ltmenu", el("option", "", "⚙️ Aktion …"));
+            menu.firstElementChild.value = "";
+            for (const entry of extra) {
+                const name = entry.value === "freeze" && ticket.status === "frozen"
+                    ? "Ticket auftauen"
+                    : entry.value === "anonymous_mode"
+                        ? `${entry.name}: ${ticket.anonymous.includes(data.me.id) ? "an" : "aus"}`
+                        : entry.name;
+                const option = el("option", "", `${entry.emoji ? `${entry.emoji} ` : ""}${name}`);
+                option.value = entry.value;
+                option.title = entry.description;
+                menu.append(option);
+            }
+            menu.value = "";
+            menu.setAttribute("aria-label", "Weitere Aktionen");
+            menu.addEventListener("change", () => {
+                const value = menu.value;
+                menu.value = "";
+                void choose(value);
+            });
+            actions.append(menu);
+        }
+        actions.append(action("Schließen", "btn btn--quiet is-danger", () => openPanel("close")));
         head.replaceChildren(back, title, actions);
     }
-    function paintClose() {
-        closeBar.hidden = !closing || current === null;
-        if (closeBar.hidden)
+    function has(value) {
+        return data?.actions.some((entry) => entry.value === value) ?? false;
+    }
+    /** Einfrieren und der anonyme Modus schalten sofort - alles andere fragt erst in der Leiste nach. */
+    async function choose(value) {
+        if (value === "freeze") {
+            await run({ action: "freeze" }, (answer) => (answer.frozen ? "Das Ticket ist eingefroren." : "Das Ticket ist wieder offen."));
+        }
+        else if (value === "anonymous_mode") {
+            await run({ action: "anonymous_mode" }, (answer) => answer.anonymous ? "Anonymer Modus an – du schreibst unter dem Team-Alias." : "Anonymer Modus aus – du schreibst wieder unter deinem Namen.");
+        }
+        else {
+            openPanel(value);
+        }
+    }
+    function openPanel(kind) {
+        panel = kind !== null && panel === kind ? null : kind;
+        paintPanel();
+    }
+    function control(tag, label) {
+        const element = el(tag, tag === "select" ? "pick ltact__grow" : "text ltact__grow");
+        element.setAttribute("aria-label", label);
+        return element;
+    }
+    function personButton(person, pick) {
+        const button = el("button", "ltperson", avatar(person), el("span", "", person.name));
+        button.type = "button";
+        button.addEventListener("click", async () => {
+            button.disabled = true;
+            if (!(await pick()))
+                button.disabled = false;
+        });
+        return button;
+    }
+    /** Die Leiste unter dem Kopf - für jede Aktion, die vorher etwas wissen will. */
+    function paintPanel() {
+        const ticket = current !== null ? tickets.get(current) : undefined;
+        const kind = panel;
+        actBar.hidden = kind === null || !ticket || !data;
+        actBar.classList.toggle("is-danger", kind === "close" || kind === "blacklist");
+        if (kind === null || !ticket || !data) {
+            actBar.replaceChildren();
             return;
-        const reason = el("input", "text ltclose__reason");
-        reason.type = "text";
-        reason.maxLength = 300;
-        reason.placeholder = "Grund (optional) – steht im Ticket und im Transcript";
-        reason.setAttribute("aria-label", "Grund fürs Schließen");
-        const confirm = action("Ticket schließen", "btn btn--quiet is-danger is-sure", async () => {
-            confirm.disabled = true;
-            if (await run({ action: "close", reason: reason.value.trim() }, "Das Ticket wird geschlossen.")) {
-                closing = false;
-                paintClose();
+        }
+        const id = ticket.id;
+        const label = (text) => el("b", "ltact__label", text);
+        const note = (text) => el("span", "ltact__note", text);
+        const cancel = action(kind === "tldr_summary" || kind === "media_vault" ? "Ausblenden" : "Abbrechen", "btn btn--quiet", () => openPanel(null));
+        // Nach dem Erfolg geht die Leiste zu; ein Fehler steht oben im Hinweis.
+        const submit = (text, body, done, danger = false) => {
+            const button = action(text, `btn btn--quiet${danger ? " is-danger is-sure" : ""}`, async () => {
+                const payload = body();
+                if (!payload)
+                    return;
+                button.disabled = true;
+                if (await run(payload, done))
+                    openPanel(null);
+                else
+                    button.disabled = false;
+            });
+            return button;
+        };
+        const keys = (element, confirm) => {
+            element.addEventListener("keydown", (event) => {
+                if (event.key === "Escape")
+                    cancel.click();
+                if (event.key === "Enter" && confirm && !(element instanceof HTMLTextAreaElement))
+                    confirm.click();
+            });
+        };
+        switch (kind) {
+            case "close":
+            case "blacklist": {
+                const closing = kind === "close";
+                const reason = control("input", closing ? "Grund fürs Schließen" : "Grund der Sperre");
+                reason.type = "text";
+                reason.maxLength = 300;
+                reason.placeholder = closing
+                    ? "Grund (optional) – steht im Ticket und im Transcript"
+                    : "Grund (optional) – der User kann hier danach keine Tickets mehr öffnen";
+                const confirm = submit(closing ? "Ticket schließen" : "Sperren und schließen", () => ({ action: kind, reason: reason.value.trim() }), closing ? "Das Ticket wird geschlossen." : "Der User ist gesperrt, das Ticket wird geschlossen.", true);
+                keys(reason, confirm);
+                actBar.replaceChildren(icon("#i-warn"), reason, confirm, cancel);
+                reason.focus();
+                return;
             }
-            else
-                confirm.disabled = false;
-        });
-        const cancel = action("Abbrechen", "btn btn--quiet", () => {
-            closing = false;
-            paintClose();
-        });
-        reason.addEventListener("keydown", (event) => {
-            if (event.key === "Enter")
-                confirm.click();
-            if (event.key === "Escape")
-                cancel.click();
-        });
-        closeBar.replaceChildren(icon("#i-warn"), reason, confirm, cancel);
-        reason.focus();
+            case "transfer": {
+                const target = control("select", "Neues Thema");
+                for (const option of data.options.filter((entry) => entry.id !== ticket.option.id)) {
+                    const entry = el("option", "", `${option.emoji && !option.emoji.startsWith("<") ? `${option.emoji} ` : ""}${option.name}`);
+                    entry.value = option.id;
+                    target.append(entry);
+                }
+                if (target.options.length === 0) {
+                    actBar.replaceChildren(label("Verschieben"), note("Es gibt kein anderes Thema."), cancel);
+                    return;
+                }
+                const confirm = submit("Verschieben", () => ({ action: "transfer", option: target.value }), "Das Ticket ist verschoben.");
+                keys(target, null);
+                actBar.replaceChildren(label("Verschieben nach"), target, confirm, cancel);
+                target.focus();
+                return;
+            }
+            case "slowmode": {
+                const step = control("select", "Slowmode");
+                for (const entry of data.slowmodes) {
+                    const option = el("option", "", entry.label);
+                    option.value = String(entry.value);
+                    step.append(option);
+                }
+                step.value = String(ticket.slowmode);
+                const confirm = submit("Setzen", () => ({ action: "slowmode", seconds: Number(step.value) }), "Der Slowmode ist gesetzt.");
+                keys(step, null);
+                actBar.replaceChildren(label("Slowmode"), step, confirm, cancel);
+                step.focus();
+                return;
+            }
+            case "staff_note": {
+                const text = control("textarea", "Team-Notiz");
+                text.rows = 2;
+                text.maxLength = 1000;
+                text.placeholder = "Nur fürs Team – der User sieht sie nie";
+                const confirm = submit("Notiz speichern", () => (text.value.trim() ? { action: "staff_note", text: text.value.trim() } : null), "Notiz gespeichert – nur das Team sieht sie.");
+                keys(text, confirm);
+                actBar.replaceChildren(label("Notiz"), text, confirm, cancel);
+                text.focus();
+                return;
+            }
+            case "schedule_meeting": {
+                const when = control("input", "Datum und Uhrzeit");
+                const text = control("input", "Worum es geht");
+                when.type = "datetime-local";
+                when.min = localInput(Date.now() + 60_000);
+                when.value = localInput(ticket.reminderAt && ticket.reminderAt > Date.now() ? ticket.reminderAt : (Math.floor(Date.now() / 3_600_000) + 2) * 3_600_000);
+                text.type = "text";
+                text.maxLength = 300;
+                text.placeholder = "Worum es geht (optional)";
+                const confirm = submit("Termin setzen", () => {
+                    const at = new Date(when.value).getTime();
+                    if (Number.isFinite(at))
+                        return { action: "schedule_meeting", at, text: text.value.trim() };
+                    when.focus();
+                    return null;
+                }, "Der Termin steht.");
+                keys(when, confirm);
+                keys(text, confirm);
+                actBar.replaceChildren(label("Termin"), when, text, confirm, cancel);
+                when.focus();
+                return;
+            }
+            case "add_user": {
+                const query = control("input", "User suchen");
+                const results = el("div", "ltact__list");
+                let timer = 0;
+                let asked = 0;
+                query.type = "search";
+                query.placeholder = "Name oder User-ID …";
+                query.addEventListener("input", () => {
+                    window.clearTimeout(timer);
+                    timer = window.setTimeout(async () => {
+                        const mine = ++asked;
+                        const text = query.value.trim();
+                        if (!text) {
+                            results.replaceChildren();
+                            return;
+                        }
+                        const answer = await post(id, { action: "members", query: text });
+                        if (mine !== asked || panel !== "add_user" || current !== id)
+                            return;
+                        const found = answer?.members ?? [];
+                        results.replaceChildren(...(found.length
+                            ? found.map((person) => personButton(person, async () => {
+                                const done = await run({ action: "add_user", user: person.id }, `${person.name} ist jetzt im Ticket.`);
+                                if (done)
+                                    openPanel(null);
+                                return done;
+                            }))
+                            : [note("Niemand gefunden – oder schon im Ticket.")]));
+                    }, 250);
+                });
+                keys(query, null);
+                actBar.replaceChildren(label("Hinzufügen"), query, cancel, results);
+                query.focus();
+                return;
+            }
+            case "remove_user": {
+                const list = el("div", "ltact__list", ...(ticket.members.length
+                    ? ticket.members.map((person) => personButton(person, async () => {
+                        const done = await run({ action: "remove_user", user: person.id }, `${person.name} ist nicht mehr im Ticket.`);
+                        if (done)
+                            openPanel(null);
+                        return done;
+                    }))
+                    : [note("Außer dem Ersteller ist niemand im Ticket.")]));
+                actBar.replaceChildren(label("Entfernen"), cancel, list);
+                return;
+            }
+            case "tldr_summary": {
+                const priority = PRIORITIES.find(([value]) => value === ticket.priority);
+                const slowmode = data.slowmodes.find((entry) => entry.value === ticket.slowmode);
+                const facts = [
+                    ["Ersteller", ticket.opener.name],
+                    ["Offen seit", `${WHEN.format(ticket.createdAt)} (${ago(ticket.createdAt)})`],
+                    ["Priorität", priority ? `${priority[1]} ${priority[2]}` : "keine"],
+                    ["Bearbeiter", ticket.claimer?.name ?? "niemand"],
+                    ["Status", ticket.status === "frozen" ? "❄️ eingefroren" : "offen"],
+                    ["Nachrichten", String(ticket.messages)],
+                    ["Weitere User", ticket.members.map((person) => person.name).join(", ") || "keine"],
+                    ...(ticket.slowmode && slowmode ? [["Slowmode", slowmode.label]] : []),
+                    ...(ticket.reminderAt ? [["Termin", WHEN.format(ticket.reminderAt)]] : []),
+                ];
+                const notes = el("div", "ltnotes", note("Team-Notizen laden …"));
+                actBar.replaceChildren(label(`Zusammenfassung ${ticketNumber(ticket.number)}`), cancel, el("dl", "ltfacts", ...facts.flatMap(([term, value]) => [el("dt", "", term), el("dd", "", value)])), notes);
+                void post(id, { action: "tldr_summary" }).then((answer) => {
+                    if (panel !== "tldr_summary" || current !== id)
+                        return;
+                    const entries = answer?.notes ?? [];
+                    notes.replaceChildren(el("b", "", "📝 Team-Notizen"), ...(entries.length
+                        ? entries.map((entry) => el("p", "", el("time", "", WHEN.format(entry.at)), ` ${entry.by}: ${entry.text}`))
+                        : [note("Noch keine.")]));
+                });
+                return;
+            }
+            case "media_vault": {
+                const grid = el("div", "ltvault", note("Dateien laden …"));
+                actBar.replaceChildren(label("Medien-Tresor"), cancel, grid);
+                void post(id, { action: "media_vault" }).then((answer) => {
+                    if (panel !== "media_vault" || current !== id)
+                        return;
+                    const found = (answer?.items ?? []).filter((entry) => entry.url.startsWith("https://"));
+                    grid.replaceChildren(...(found.length
+                        ? found.map((entry) => {
+                            const link = el("a", `ltvault__item${entry.image ? " is-image" : ""}`);
+                            link.href = entry.url;
+                            link.target = "_blank";
+                            link.rel = "noopener";
+                            link.title = entry.name;
+                            if (entry.image) {
+                                const image = el("img");
+                                image.src = entry.url;
+                                image.alt = entry.name;
+                                image.loading = "lazy";
+                                link.append(image);
+                            }
+                            else {
+                                link.append(icon("#i-download"), el("span", "", entry.name));
+                            }
+                            return link;
+                        })
+                        : [note("In diesem Ticket wurde noch nichts hochgeladen.")]));
+                });
+                return;
+            }
+            default:
+                panel = null;
+                actBar.hidden = true;
+                actBar.replaceChildren();
+        }
     }
     function scrollToBottom() {
         logHost.scrollTop = logHost.scrollHeight;
@@ -432,19 +691,23 @@ export function renderLive(guildId, user) {
             return null;
         }
     }
-    async function run(body, done) {
-        if (current === null)
-            return false;
-        clickSound("primary");
-        const result = await request(`${api}/${current}`, {
+    async function post(id, body) {
+        return request(`${api}/${id}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         });
-        if (result === null)
-            return false;
-        toast("info", "Erledigt", done);
-        return true;
+    }
+    /** Eine Aktion am offenen Ticket, mit Rückmeldung. null: es hat nicht geklappt (der Grund steht oben). */
+    async function run(body, done) {
+        if (current === null)
+            return null;
+        clickSound("primary");
+        const answer = await post(current, body);
+        if (answer === null)
+            return null;
+        toast("info", "Erledigt", typeof done === "string" ? done : done(answer));
+        return answer;
     }
     async function loadHistory(id) {
         log.replaceChildren();
@@ -465,7 +728,7 @@ export function renderLive(guildId, user) {
             drafts.set(current, input.value);
         current = id;
         ended = null;
-        closing = false;
+        panel = null;
         files = [];
         pictures = [];
         input.value = drafts.get(id) ?? "";
@@ -474,6 +737,7 @@ export function renderLive(guildId, user) {
         paintTitle();
         paintList();
         paintHead();
+        paintPanel();
         paintEmpty();
         paintFiles();
         grow();
@@ -652,7 +916,8 @@ export function renderLive(guildId, user) {
             if (current === ticket.id) {
                 ended = tickets.get(ticket.id) ?? null;
                 current = null;
-                closing = false;
+                panel = null;
+                paintPanel();
                 paintEmpty();
             }
             tickets.delete(ticket.id);
@@ -712,11 +977,14 @@ export function renderLive(guildId, user) {
         const source = new EventSource(`${api}/stream`);
         const on = (event, handle) => source.addEventListener(event, (message) => handle(JSON.parse(message.data)));
         on("ready", () => {
-            if (broken)
+            if (broken) {
                 void resync();
+                document.dispatchEvent(new CustomEvent("live:transcript"));
+            }
             broken = false;
             paintStatus();
         });
+        on("transcript", (value) => document.dispatchEvent(new CustomEvent("live:transcript", { detail: value })));
         on("ticket", onTicket);
         on("message", onMessage);
         on("edit", onEdit);
@@ -755,13 +1023,16 @@ export function renderLive(guildId, user) {
         paintTitle();
         paintList();
     });
+    // Auch unter Transcriptions: dann kommen neue Transcripts ohne Neuladen dazu.
+    const sections = [section, document.querySelector("#transcriptions")].filter((entry) => entry !== null);
     let started = false;
     const begin = () => {
-        if (started || section.hidden)
+        if (started || sections.every((entry) => entry.hidden))
             return;
         started = true;
         void start();
     };
-    new MutationObserver(begin).observe(section, { attributes: true, attributeFilter: ["hidden"] });
+    for (const entry of sections)
+        new MutationObserver(begin).observe(entry, { attributes: true, attributeFilter: ["hidden"] });
     begin();
 }

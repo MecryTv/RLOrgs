@@ -1,11 +1,14 @@
 import path from "path";
 import { FastifyReply, FastifyRequest } from "fastify";
+import { GuildMember } from "discord.js";
 import BotClient from "../client/BotClient";
 import Route from "../structures/Route";
 import { IsImageSource } from "../builder/MessageDoc";
 import { DASHBOARD_PATH } from "../constants/Dashboard";
 import { ResolveImagePath } from "../constants/Gallery";
-import { PRIORITIES, TicketPriority } from "../constants/Tickets";
+import { CORE_ACTIONS, MAX_NOTE, MAX_REASON, PRIORITIES, TicketAction, TicketPriority } from "../constants/Tickets";
+import { ITicket } from "../interfaces/services/tickets/ITicket";
+import { ILiveAccess } from "../services/LiveService";
 import { TicketError } from "../services/TicketService";
 import { WantsJSON } from "../utils/admin";
 import { LiveGate, LiveTicket } from "../utils/live";
@@ -16,14 +19,30 @@ interface IBody {
     gallery?: unknown;
     priority?: unknown;
     reason?: unknown;
+    option?: unknown;
+    user?: unknown;
+    seconds?: unknown;
+    text?: unknown;
+    at?: unknown;
+    query?: unknown;
+}
+
+interface IPerson {
+    id: string;
+    name: string;
+    avatar: string | null;
 }
 
 const MAX_GALLERY = 10;
 
+function Text(value: unknown, max: number): string {
+    return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
 /**
  * Ein Ticket in Live Tickets. GET: die letzten Nachrichten, mit ?before=<id>
- * weiter zurück. POST: schreiben (Text, Bilder aus der Galerie), übernehmen,
- * zurückgeben, Priorität, schließen - dieselben Wege wie im Ticket selbst.
+ * weiter zurück. POST: schreiben (Text, Bilder aus der Galerie) und dieselben
+ * Aktionen wie im Menü unter dem Ticket - über dieselben Wege im TicketService.
  */
 export default class DashboardApiLiveTicket extends Route {
     constructor(client: BotClient) {
@@ -50,47 +69,158 @@ export default class DashboardApiLiveTicket extends Route {
 
         if (!ticket) return reply;
 
+        reply.header("Cache-Control", "no-store");
+
         if (!writing) {
             const { before } = request.query as { before?: string };
-            const history = await this.client.liveService.History(access, ticket, before && /^\d{17,20}$/.test(before) ? before : undefined);
 
-            return reply.header("Cache-Control", "no-store").send(history);
+            return reply.send(await this.client.liveService.History(access, ticket, before && /^\d{17,20}$/.test(before) ? before : undefined));
         }
 
-        const body = (request.body ?? {}) as IBody;
-        const service = this.client.ticketService;
-
         try {
-            const context = await service.Context(ticket.id);
-
-            if (body.action === "send") {
-                const content = typeof body.content === "string" ? body.content : "";
-                const files = this.Gallery(access.guild.id, body.gallery);
-
-                await service.SendAsMember(context, access.member, content, files);
-            } else if (body.action === "claim") {
-                await service.Claim(context, access.member);
-            } else if (body.action === "unclaim") {
-                await service.Unclaim(context, access.member);
-            } else if (body.action === "priority") {
-                if (!access.config.actions.includes("priority")) throw new TicketError("Die Priorität ist auf diesem Server nicht zugeschaltet.");
-                if (!PRIORITIES.includes(body.priority as TicketPriority)) throw new TicketError("Diese Stufe gibt es nicht.");
-
-                await service.SetPriority(context, access.member, body.priority as TicketPriority);
-            } else if (body.action === "close") {
-                const reason = typeof body.reason === "string" ? body.reason.slice(0, 300) : "";
-
-                await service.Close(context, access.member, reason ? `${reason} (Dashboard)` : "Im Dashboard geschlossen");
-            } else {
-                throw new TicketError("Unbekannte Aktion.");
-            }
+            return reply.send({ ok: true, ...(await this.Act(access, ticket, (request.body ?? {}) as IBody)) });
         } catch (error) {
             if (error instanceof TicketError) return reply.code(400).send({ error: error.message });
 
             throw error;
         }
+    }
 
-        return reply.header("Cache-Control", "no-store").send({ ok: true });
+    private async Act(access: ILiveAccess, ticket: ITicket, body: IBody): Promise<Record<string, unknown>> {
+        const service = this.client.ticketService;
+        const context = await service.Context(ticket.id);
+        const member = access.member;
+        const action = body.action;
+
+        if (action === "send") {
+            await service.SendAsMember(context, member, Text(body.content, 2000), this.Gallery(access.guild.id, body.gallery));
+
+            return {};
+        }
+
+        // Wie das Menü unter dem Ticket: Schließen, Übernehmen, Zurückgeben, Hinzufügen
+        // und Entfernen gehören fest dazu, der Rest nur, wenn der Server ihn eingeschaltet hat.
+        const allowed = (key: TicketAction): void => {
+            if (!CORE_ACTIONS.includes(key) && !access.config.actions.includes(key)) {
+                throw new TicketError("Diese Aktion ist auf diesem Server nicht eingeschaltet.");
+            }
+        };
+
+        switch (action) {
+            case "claim":
+                await service.Claim(context, member);
+                return {};
+
+            case "unclaim":
+                await service.Unclaim(context, member);
+                return {};
+
+            case "priority":
+                allowed("priority");
+
+                if (!PRIORITIES.includes(body.priority as TicketPriority)) throw new TicketError("Diese Stufe gibt es nicht.");
+
+                await service.SetPriority(context, member, body.priority as TicketPriority);
+                return {};
+
+            case "transfer":
+                allowed("transfer");
+                await service.Transfer(context, member, Text(body.option, 100));
+                return {};
+
+            case "members":
+                // Die Suche für "Benutzer hinzufügen".
+                return { members: await this.Search(access, ticket, Text(body.query, 100)) };
+
+            case "add_user":
+            case "remove_user": {
+                const id = Text(body.user, 20);
+                const user = /^\d{17,20}$/.test(id) ? await this.client.users.fetch(id).catch(() => null) : null;
+
+                if (!user) throw new TicketError("Diesen User finde ich nicht.");
+
+                if (action === "add_user") await service.AddUser(context, member, user);
+                else await service.RemoveUser(context, member, user);
+
+                return {};
+            }
+
+            case "freeze":
+                allowed("freeze");
+                return { frozen: await service.ToggleFreeze(context, member) };
+
+            case "slowmode":
+                allowed("slowmode");
+                await service.SetSlowmode(context, member, Number(body.seconds));
+                return {};
+
+            case "staff_note":
+                allowed("staff_note");
+                await service.AddNote(context, member, Text(body.text, MAX_NOTE));
+                return {};
+
+            case "schedule_meeting": {
+                allowed("schedule_meeting");
+
+                const at = Number(body.at);
+
+                if (!Number.isFinite(at)) throw new TicketError("Wähle Datum und Uhrzeit.");
+
+                await service.Schedule(context, member, at, Text(body.text, 300));
+                return {};
+            }
+
+            case "blacklist":
+                allowed("blacklist");
+                await service.Blacklist(context, member, Text(body.reason, MAX_REASON));
+                return {};
+
+            case "anonymous_mode":
+                allowed("anonymous_mode");
+                return { anonymous: await service.ToggleAnonymous(context, member) };
+
+            case "tldr_summary":
+                allowed("tldr_summary");
+                // Die Eckdaten kennt die Seite schon - dazu kommen die Team-Notizen.
+                return { notes: this.Notes(access, context.ticket) };
+
+            case "media_vault":
+                allowed("media_vault");
+                return { items: await service.Vault(context, member) };
+
+            case "close": {
+                const reason = Text(body.reason, MAX_REASON);
+
+                await service.Close(context, member, reason ? `${reason} (Dashboard)` : "Im Dashboard geschlossen");
+                return {};
+            }
+
+            default:
+                throw new TicketError("Unbekannte Aktion.");
+        }
+    }
+
+    /** Für "Benutzer hinzufügen": Mitglieder nach Name oder ID - ohne Bots und ohne, wer schon im Ticket ist. */
+    private async Search(access: ILiveAccess, ticket: ITicket, query: string): Promise<IPerson[]> {
+        if (!query) return [];
+
+        const found: (GuildMember | null)[] = /^\d{17,20}$/.test(query)
+            ? [await access.guild.members.fetch(query).catch(() => null)]
+            : [...((await access.guild.members.search({ query, limit: 10 }).catch(() => null))?.values() ?? [])];
+        const inside = new Set([ticket.openerId, ...ticket.members]);
+
+        return found
+            .filter((entry): entry is GuildMember => entry !== null && !entry.user.bot && !inside.has(entry.id))
+            .slice(0, 10)
+            .map((entry) => ({ id: entry.id, name: entry.displayName, avatar: entry.displayAvatarURL({ extension: "webp", size: 64 }) }));
+    }
+
+    private Notes(access: ILiveAccess, ticket: ITicket): { by: string; at: number; text: string }[] {
+        return ticket.notes.slice(-20).map((note) => ({
+            by: access.guild.members.cache.get(note.by)?.displayName ?? this.client.users.cache.get(note.by)?.displayName ?? "jemand vom Team",
+            at: note.at,
+            text: note.text,
+        }));
     }
 
     /** Bilder aus der Galerie als Anhänge - nur eigene Alben und Vorlagen, wie im Nachrichten-Editor. */

@@ -13,7 +13,7 @@ import {
 } from "discord.js";
 import BotClient from "../client/BotClient";
 import ComponentV2Builder from "../builder/ComponentV2Builder";
-import { SupportRoleOf } from "../builder/TicketPanel";
+import { OptionOf, RELAY_MARK, SupportRoleOf } from "../builder/TicketPanel";
 import { Duration, RenderTranscript } from "../builder/TranscriptHtml";
 import { DASHBOARD_PATH } from "../constants/Dashboard";
 import { TicketNumber } from "../constants/Tickets";
@@ -39,6 +39,14 @@ const ATTACHMENT_URL = /https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net
 
 /** Wer höchstens so viele Leute nachschlägt, blockiert Discord nicht mit Anfragen. */
 const MAX_LOOKUPS = 50;
+
+/** Vom User per ModMail weitergeleitet: die Karte beginnt mit der User-Marke (RelayView). */
+function RelayedFromUser(message: Message): boolean {
+    const [first] = message.components.map((component) => component.toJSON() as { type?: number; components?: { type?: number; content?: string }[] });
+    const head = first?.type === 17 ? first.components?.[0] : undefined;
+
+    return head?.type === 10 && (head.content ?? "").startsWith(`-# ${RELAY_MARK.user}`);
+}
 
 function Extension(url: string): string {
     const name = new URL(url).pathname.split("/").pop() ?? "";
@@ -94,6 +102,9 @@ export default class TranscriptService {
 
         await this.client.ticketTranscripts.Save(transcript);
 
+        // Wer gerade unter Transcriptions schaut, sieht es sofort.
+        void this.client.liveService.Archived(ticket);
+
         logger.user(
             `📄 Transcript ${TicketNumber(ticket.number)} auf ${ticket.guildId}: ${transcript.messages.length} Nachrichten, ${Object.keys(transcript.media).length} Anhänge gesichert`
         );
@@ -125,7 +136,7 @@ export default class TranscriptService {
         const people = await this.People(guild, messages, ticket);
         const media = await this.SaveMedia(guild.id, ticket.id, messages);
 
-        const list = messages.map((message) => this.Snapshot(message, people));
+        const list = messages.map((message) => this.Snapshot(message, people, ticket.openerId));
 
         const participants = new Map<string, ITranscriptUser>();
 
@@ -164,11 +175,11 @@ export default class TranscriptService {
     }
 
     /** Eine Nachricht, wie sie im Transcript steht - auch für den Chat in Live Tickets. */
-    Snapshot(message: Message, people: Map<string, ITranscriptUser>): ITranscriptMessage {
+    Snapshot(message: Message, people: Map<string, ITranscriptUser>, openerId?: string): ITranscriptMessage {
         return {
             id: message.id,
             type: message.type,
-            author: this.Author(message, people),
+            author: this.Author(message, people, openerId),
             at: message.createdTimestamp,
             edited: message.editedTimestamp,
             content: message.content,
@@ -195,14 +206,23 @@ export default class TranscriptService {
         };
     }
 
-    Person(member: GuildMember): ITranscriptUser {
+    Person(member: GuildMember, team?: boolean): ITranscriptUser {
         return {
             id: member.id,
             name: member.displayName,
             avatar: member.displayAvatarURL({ extension: "webp", size: 128 }),
             bot: member.user.bot,
             color: member.displayHexColor !== "#000000" ? member.displayHexColor : null,
+            team: member.user.bot ? undefined : team,
         };
+    }
+
+    /** Wer im Ticket zum Team zählt - dieselbe Regel wie für das Aktions-Menü. */
+    async TeamOf(ticket: ITicket): Promise<(member: GuildMember) => boolean> {
+        const config = await this.client.ticketSettings.Of(ticket.guildId);
+        const scope = { config, option: OptionOf(config, ticket) };
+
+        return (member) => this.client.ticketService.IsStaff(member, scope);
     }
 
     /**
@@ -219,12 +239,13 @@ export default class TranscriptService {
         for (const message of messages) if (!message.webhookId) ids.add(message.author.id);
 
         const people = new Map<string, ITranscriptUser>();
+        const team = await this.TeamOf(ticket);
 
         for (const id of [...ids].slice(0, MAX_LOOKUPS)) {
             const member = guild.members.cache.get(id) ?? (await guild.members.fetch(id).catch(() => null));
 
             if (member) {
-                people.set(id, this.Person(member));
+                people.set(id, this.Person(member, team(member)));
                 continue;
             }
 
@@ -237,6 +258,8 @@ export default class TranscriptService {
                     avatar: user.displayAvatarURL({ extension: "webp", size: 128 }),
                     bot: user.bot,
                     color: null,
+                    // Nicht mehr auf dem Server: beim Ersteller ist trotzdem klar, auf welcher Seite er steht.
+                    ...(id === ticket.openerId && !user.bot ? { team: false } : {}),
                 });
             }
         }
@@ -244,15 +267,24 @@ export default class TranscriptService {
         return people;
     }
 
-    Author(message: Message, people: Map<string, ITranscriptUser>): ITranscriptUser {
-        // Webhooks (anonymer Modus) tragen Name und Bild je Nachricht selbst.
+    Author(message: Message, people: Map<string, ITranscriptUser>, openerId?: string): ITranscriptUser {
+        // Webhooks tragen Name und Bild je Nachricht selbst. Per ModMail
+        // weitergeleitet schreibt aber der Ersteller - dann steht er da, mit Bild.
         if (message.webhookId) {
+            const opener = openerId && RelayedFromUser(message) ? people.get(openerId) : undefined;
+
+            if (opener) return opener;
+
+            // Aus Live Tickets: ein Teammitglied, kein Bot.
+            const dashboard = message.author.username.endsWith(" · via Dashboard");
+
             return {
                 id: message.author.id,
                 name: message.author.username,
                 avatar: message.author.displayAvatarURL({ extension: "webp", size: 128 }),
-                bot: true,
+                bot: !dashboard,
                 color: null,
+                ...(dashboard ? { team: true } : {}),
             };
         }
 

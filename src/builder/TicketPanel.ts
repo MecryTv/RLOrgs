@@ -181,6 +181,19 @@ export async function PanelView(client: BotClient, guild: Guild, config: ITicket
 }
 
 /** Die Themenwahl in der DM - nach einem Klick aufs ModMail-Panel oder nach der ersten DM. */
+/** Die erste Frage per DM: für welchen Server - auch bei nur einem, damit klar ist, wo das Ticket landet. */
+export function GuildPickerView(guilds: Guild[]): ITicketView {
+    return View(
+        new ComponentV2Builder({ accentColor: "#ff1e2d" })
+            .title("🎫 | Neues Ticket", "Für welchen Server? Danach wählst du dein Thema.")
+            .select({
+                customId: `${TICKET_PREFIX}:dmguild`,
+                placeholder: "Server wählen …",
+                options: guilds.slice(0, 25).map((guild) => ({ label: guild.name.slice(0, 100), value: guild.id })),
+            })
+    );
+}
+
 export function OptionPickerView(guild: Guild, config: ITicketConfig): ITicketView {
     return View(
         new ComponentV2Builder({ accentColor: "#ff1e2d" })
@@ -253,7 +266,7 @@ export async function OpenedView(
     return View(builder, files);
 }
 
-/** Bestätigung per DM bei ModMail - mit einem Knopf zum Schließen. */
+/** Bestätigung per DM bei ModMail. Einen Knopf zum Schließen gibt es nicht - das macht das Team. */
 export async function DirectView(
     client: BotClient,
     guild: Guild,
@@ -265,12 +278,64 @@ export async function DirectView(
         client,
         config.messages.dm,
         TicketValues(guild, config, { user: opener, ticket, mentions: false }),
-        { reserve: 2, fallback: "## Ticket {ticket.id}" }
+        { fallback: "## Ticket {ticket.id}" }
     );
 
-    builder.buttons({ customId: `${TICKET_PREFIX}:dmclose:${ticket.id}`, label: "Ticket schließen", emoji: "🔒", tone: "danger" });
-
     return View(builder, files);
+}
+
+/** Die Kopfzeile weitergeleiteter ModMail-Nachrichten. Transcript und Live Tickets erkennen daran die Seite. */
+export const RELAY_MARK = { team: "🛡️ Team", user: "👤 User" } as const;
+
+export interface IRelayFile {
+    attachment: Buffer | string;
+    name: string;
+    image: boolean;
+}
+
+const IMAGE_NAME = /\.(png|jpe?g|gif|webp|avif)$/i;
+
+export function IsImageFile(name: string, type: string | null = null): boolean {
+    return type ? type.startsWith("image/") : IMAGE_NAME.test(name);
+}
+
+// In attachment:// darf nur stehen, was Discord im Dateinamen auch so lässt.
+function SafeName(name: string): string {
+    return (
+        name
+            .normalize("NFKD")
+            .replace(/\p{M}/gu, "")
+            .replace(/[^\w.-]+/g, "_")
+            .replace(/^[_.]+|_+$/g, "")
+            .slice(-80) || "datei"
+    );
+}
+
+/**
+ * Eine weitergeleitete ModMail-Nachricht als Components V2: oben, wer schreibt
+ * (Team oder User), darunter der Text, Bilder als Galerie, der Rest als Datei.
+ * Anhänge brauchen in Components V2 einen Verweis, sonst zeigt Discord sie nicht.
+ */
+export function RelayView(side: "team" | "user", name: string | null, content: string, files: IRelayFile[], links: string[] = []): ITicketView {
+    const builder = new ComponentV2Builder({ accentColor: side === "team" ? "#00afff" : "#35e07f" });
+
+    builder.subtext(`${RELAY_MARK[side]}${name ? ` · **${escapeMarkdown(name)}**` : ""}`);
+
+    const text = [content.trim(), ...links].filter(Boolean).join("\n");
+
+    if (text) builder.text(text);
+
+    const named = files.slice(0, 10).map((file, index) => ({ ...file, name: `${index}-${SafeName(file.name)}` }));
+    const images = named.filter((file) => file.image);
+
+    if (images.length) builder.gallery(...images.map((file) => `attachment://${file.name}`));
+
+    for (const file of named.filter((entry) => !entry.image)) builder.file(file.name);
+
+    return View(
+        builder,
+        named.map((file) => new AttachmentBuilder(file.attachment, { name: file.name }))
+    );
 }
 
 /** Eine der übrigen Nachrichten (geschlossen, eingefroren, gesperrt). */

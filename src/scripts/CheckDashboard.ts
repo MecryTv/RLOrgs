@@ -143,6 +143,54 @@ async function checkMapping(client: BotClient): Promise<void> {
 }
 
 /**
+ * Eine Seite fragt mehrere Routen auf einmal ab, und jede braucht die Serverliste.
+ * Discord antwortet auf den zweiten gleichzeitigen Abruf mit 429 - also teilen sich
+ * alle einen Abruf, und nach einem 429 wartet der Bot die genannte Zeit ab.
+ */
+async function checkRateLimit(client: BotClient): Promise<void> {
+    console.log("\n  — Serverliste: ein Abruf für alle, 429 abwarten —");
+
+    const original = globalThis.fetch;
+    let calls = 0;
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+        const url = String(input);
+
+        if (!url.includes("/users/@me/guilds")) return new Response("{}", { status: 404 });
+
+        calls++;
+
+        // Der erste Abruf läuft in die Bremse, der zweite klappt.
+        if (calls === 1) return new Response(JSON.stringify({ message: "You are being rate limited.", retry_after: 0.05, global: false }), { status: 429 });
+
+        return new Response(JSON.stringify([{ id: "934857203948572034", name: "Admin Server", icon: null, owner: true, permissions: "8" }]), {
+            headers: { "Content-Type": "application/json" },
+        });
+    }) as typeof fetch;
+
+    const session: IDashboardSession = {
+        id: "check-session-rate",
+        userId: "1059621019947634739",
+        username: "Check",
+        avatar: null,
+        accessToken: "check-token",
+        mfa: true,
+        expiresAt: Date.now() + 60_000,
+    };
+
+    try {
+        const pages = await Promise.all(Array.from({ length: 5 }, () => client.dashboardService.Payload(session)));
+
+        check("Fünf gleichzeitige Anfragen, alle mit Serverliste", pages.every((page) => page.guilds.length === 1), pages.map((page) => page.guilds.length).join(","));
+        check("Discord wurde nur einmal gefragt - plus einmal nach dem 429", calls === 2, `${calls} Abrufe`);
+    } catch (error) {
+        check("Nach einem kurzen 429 klappt es beim zweiten Versuch", false, String(error));
+    } finally {
+        globalThis.fetch = original;
+    }
+}
+
+/**
  * Gruppen kommen jetzt aus der Datenbank - hier laeuft der Check ohne sie. Was
  * ohne Datenbank uebrig bleibt, muss trotzdem stimmen: Developer aus DEV_USER_IDs
  * und sonst Testphase. Die Gruppen mit Datenbank prueft npm run check:db.
@@ -828,6 +876,7 @@ async function main(): Promise<void> {
     check("Bestehende API bleibt tokenpflichtig", health.status === 401, `${health.status}`);
 
     await checkMapping(client);
+    await checkRateLimit(client);
     await checkMfa(client);
 
     await client.server.Stop();

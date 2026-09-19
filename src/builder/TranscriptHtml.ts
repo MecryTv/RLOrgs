@@ -552,9 +552,16 @@ function Avatar(user: ITranscriptUser, className = "av"): string {
 function Name(user: ITranscriptUser): string {
     const color = SafeColor(user.color);
 
-    return `<b class="name"${color ? ` style="color:${color}"` : ""} title="${Escape(user.id)}">${Escape(user.name)}</b>${
-        user.bot ? '<span class="tag">BOT</span>' : ""
-    }`;
+    // Wie Discords BOT-Marke: wer zum Team gehört und wer nicht, auf einen Blick.
+    const tag = user.bot
+        ? '<span class="tag">BOT</span>'
+        : user.team === true
+          ? '<span class="tag tag--team">TEAM</span>'
+          : user.team === false
+            ? '<span class="tag tag--user">USER</span>'
+            : "";
+
+    return `<b class="name"${color ? ` style="color:${color}"` : ""} title="${Escape(user.id)}">${Escape(user.name)}</b>${tag}`;
 }
 
 // Nur Emojis und höchstens 30 davon - dann zeigt Discord sie groß.
@@ -804,6 +811,7 @@ a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
 .msg__top time{font-size:12px;color:var(--muted)}
 .name{color:var(--head);font-weight:600}
 .tag{margin-left:4px;padding:1px 5px;border-radius:4px;background:#5865f2;color:#fff;font-size:10px;font-weight:700;vertical-align:1px}
+.tag--team{background:#00afff;color:#04121a}.tag--user{background:#4e5058}
 .msg__body{min-width:0;overflow-wrap:anywhere}
 .msg--system{margin-top:8px}.system{color:var(--muted);font-size:14px}.system b{color:var(--head)}.system time{font-size:12px;margin-left:4px}
 .reply{grid-column:2;display:flex;align-items:center;gap:6px;margin:4px 0 2px;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden}

@@ -1,8 +1,11 @@
 import { FastifyReply, FastifyRequest } from "fastify";
 import BotClient from "../client/BotClient";
 import Route from "../structures/Route";
+import { ActionEntries } from "../builder/TicketPanel";
 import { LIVE_CSS } from "../builder/TranscriptHtml";
 import { DASHBOARD_PATH } from "../constants/Dashboard";
+import { CORE_ACTIONS, SLOWMODE_STEPS } from "../constants/Tickets";
+import { SlowmodeLabel } from "../services/TicketService";
 import { LiveGate } from "../utils/live";
 
 /**
@@ -26,10 +29,16 @@ export default class DashboardApiLive extends Route {
 
         if (!access) return reply;
 
+        const enabled = new Set<string>([...CORE_ACTIONS, ...access.config.actions]);
+
         return reply.header("Cache-Control", "no-store").send({
             me: { id: access.member.id, manage: access.manage },
-            // Die Priorität steht nur im Menü, wenn der Server sie zugeschaltet hat - hier genauso.
-            priority: access.config.actions.includes("priority"),
+            // Dieselben Aktionen wie im Menü unter dem Ticket - nur, was der Server eingeschaltet hat.
+            actions: ActionEntries(this.client)
+                .filter((entry) => enabled.has(entry.value))
+                .map((entry) => ({ value: entry.value, name: entry.name, emoji: entry.emoji || null, description: entry.description })),
+            options: access.config.options.map((option) => ({ id: option.id, name: option.name, emoji: option.emoji })),
+            slowmodes: SLOWMODE_STEPS.map((seconds) => ({ value: seconds, label: SlowmodeLabel(seconds) })),
             tickets: await this.client.liveService.Tickets(access),
             // Für die Emoji-Auswahl im Chat: die Emojis des Servers als Bild.
             emojis: [...access.guild.emojis.cache.values()].slice(0, 200).map((emoji) => ({

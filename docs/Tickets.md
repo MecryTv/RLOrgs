@@ -90,29 +90,40 @@ Vor jedem Ticket dieselbe Prüfung, in dieser Reihenfolge:
 
 Die Nummer ist fortlaufend je Server (`#0042`); `Tickets.Create()` vergibt sie in einer Transaktion. Scheitert danach etwas (Rechte, DM zu), verschwindet die Zeile samt halb angelegtem Kanal wieder.
 
-**ModMail per DM:** Schreibt ein User dem Bot ohne offenes Ticket, sucht der Bot die Server mit ModMail, auf denen der User Mitglied ist. Einer mit einer Option → sofort öffnen. Sonst fragt er per Auswahlmenü nach Server und Thema. Die erste DM geht danach ins Ticket, der User muss nichts wiederholen.
+**ModMail per DM:** Schreibt ein User dem Bot ohne offenes Ticket, fragt der Bot **immer** erst nach dem Server (`GuildPickerView()`, nur Server mit ModMail, auf denen der User Mitglied ist), dann nach dem Thema (`OptionPickerView()`) — auch wenn es nur einen Server oder nur ein Thema gibt, damit der User weiß, wo er landet und worum es geht. Die Prüfung von oben läuft schon vor der Themenwahl (`TopicPicker()`). Alles, was der User bis dahin schreibt, sammelt der Bot (bis 10 Minuten, bis 10 Dateien) und stellt es danach ins Ticket. Schreibt er weiter, während die Auswahl noch offen ist, kommt keine zweite Auswahl, nur ein 📝 an seiner Nachricht (`AskServer()`, fünf Minuten oder bis ein Ticket aufgeht).
 
-**ModMail über das Panel:** Im Kanal stehen bei ModMail keine Themen, nur der Knopf **„Ticket per DM starten“** (`ticket:dm`). Ein Klick prüft wie oben (Modul, Sperre, Grenze, offenes ModMail-Ticket) und schreibt dem User dann per DM — mit nur einem Thema öffnet er das Ticket gleich, sonst kommt die Themenwahl in die DM (`OptionPickerView()`, dieselbe wie nach der ersten DM). Die Antwort im Server verlinkt in die DM. Sind DMs zu, sagt der Bot, wo man sie erlaubt.
+**ModMail über das Panel:** Im Kanal stehen bei ModMail keine Themen, nur der Knopf **„Ticket per DM starten“** (`ticket:dm`). Der Server steht damit fest: Ein Klick prüft wie oben und schickt die Themenwahl per DM — auch bei nur einem Thema. Die Antwort im Server verlinkt in die DM. Sind DMs zu, sagt der Bot, wo man sie erlaubt.
+
+**Nachrichten hin und her:** Beide Richtungen gehen als Components V2 (`RelayView()`), oben eine Marke, wer schreibt:
+
+| Richtung | Wie | Marke |
+|---|---|---|
+| Team → User (DM) | Karte vom Bot, Akzent blau | `🛡️ Team · Name` — im anonymen Modus der Team-Alias |
+| User → Team (Ticket) | per Webhook mit Name und Bild des Users, Akzent grün; ohne Webhook-Recht die Karte vom Bot mit dem Namen darin | `👤 User` |
+
+Bilder stehen als Galerie in der Karte, andere Dateien als Datei-Baustein — Components V2 zeigt Anhänge nur mit Verweis (`attachment://`, der Name dafür wird bereinigt). Über 10 MB bleibt es ein Link. Auch die kurzen Antworten des Bots in der DM (eingefroren, Slowmode, nicht zustellbar) sind Karten.
+
+**Schließen:** Bei ModMail schließt nur das Team. Die DM hat keinen Knopf mehr dafür; ältere DMs mit Knopf bekommen eine Erklärung statt eines geschlossenen Tickets. Bei Klassisch darf der Ersteller weiter selbst schließen.
 
 ---
 
 ## Die 15 Aktionen
 
-Alle in **einem** Menü unter der Eröffnung. Fest dabei: `close`, `claim`/`unclaim`, `add_user`/`remove_user`. Der Rest wird zugeschaltet. Schließen darf auch der Ersteller, alles andere nur das Team (Support-Rolle der Option bzw. die allgemeine, oder „Server verwalten“).
+Alle in **einem** Menü unter der Eröffnung — und dieselben in [Live Tickets](#live-tickets) im Dashboard. Fest dabei: `close`, `claim`/`unclaim`, `add_user`/`remove_user`. Der Rest wird zugeschaltet. Schließen darf bei Klassisch auch der Ersteller, alles andere nur das Team (Support-Rolle der Option bzw. die allgemeine, oder „Server verwalten“).
 
 | Aktion | Kanal | Forum-Post | Bei ModMail zusätzlich |
 |---|---|---|---|
 | `close` | Grund per Modal, Rechte von Ersteller und Mitgliedern weg, `closed-` vor den Namen, Transcript | Tag *Geschlossen*, gesperrt, archiviert, Transcript | Abschluss-DM |
-| `claim` / `unclaim` | Bearbeiter in der Statuszeile | dazu Tag *Beansprucht* | — |
+| `claim` / `unclaim` | Bearbeiter in der Statuszeile | dazu Tag *Beansprucht* | Hinweis per DM (wer sich kümmert bzw. „wartet wieder auf das Team“) |
 | `add_user` / `remove_user` | Rechte-Overwrite | Thread-Mitglied | wirkt auf die Team-Seite |
-| `transfer` | Kanal in die Kategorie der Ziel-Option, Rolle getauscht | Options-Tag getauscht | — |
-| `priority` | 🟢🟡🔴 vor dem Kanalnamen | Tag je Stufe | — |
+| `transfer` | Kanal in die Kategorie der Ziel-Option, Rolle getauscht | Options-Tag getauscht | Hinweis per DM mit dem neuen Thema |
+| `priority` | 🟢🟡🔴 vor dem Kanalnamen | Tag je Stufe | Hinweis per DM |
 | `anonymous_mode` | Nachrichten des Teammitglieds kommen per Webhook unter „<Server> Team“ | dito, Webhook am Forum | das Relay zeigt den Alias |
 | `media_vault` | die letzten 500 Nachrichten: Bilder als Galerie, der Rest als Liste | dito | beide Seiten, weil das Relay Anhänge mitnimmt |
-| `slowmode` | `setRateLimitPerUser` | dito | der Bot bremst das Weiterleiten |
+| `slowmode` | `setRateLimitPerUser` | dito | der Bot bremst das Weiterleiten, Hinweis per DM |
 | `tldr_summary` | Faktenkarte aus der Datenbank, kein Sprachmodell | dito | — |
 | `staff_note` | Modal → `tickets.notes`, nur über die Zusammenfassung sichtbar | dito | geht nie ins Relay |
-| `freeze` | Ersteller darf nicht schreiben, Nachricht `frozen` | Post gesperrt | Relay stoppt, `frozen` per DM |
+| `freeze` | Ersteller darf nicht schreiben, Nachricht `frozen` | Post gesperrt | Relay stoppt, `frozen` per DM; Auftauen meldet der Bot auch |
 | `blacklist` | Sperre + Ticket schließen | dito | Absage-DM `blacklisted` |
 | `schedule_meeting` | Datum/Uhrzeit (deutsche Zeit) per Modal, Erinnerung pingt Ersteller und Bearbeiter | dito | Termin und Erinnerung auch per DM |
 
@@ -129,7 +140,7 @@ Sieben Stück, jede ein Dokument aus Bausteinen (`src/interfaces/builder/IMessag
 | `panel` | im Server-Kanal bei Klassisch, mit Buttons oder Auswahlmenü darunter |
 | `modmailPanel` | im Server-Kanal bei ModMail: erklärt, dass es per DM weitergeht. Darunter nur der Knopf „Ticket per DM starten“ — die Themen fragt der Bot in der DM ab. Der erste Standardtext versprach noch Themen im Panel; wer ihn nie geändert hat, bekommt beim Lesen den neuen (`LEGACY_MODMAIL_PANEL`) |
 | `opened` | Eröffnung im Ticket; jede Option darf eine eigene haben |
-| `dm` | Bestätigung an den User bei ModMail, mit Knopf zum Schließen |
+| `dm` | Bestätigung an den User bei ModMail. Einen Knopf zum Schließen gibt es nicht — das macht das Team |
 | `closed` | beim Schließen — mit `{closer}` und `{reason}` |
 | `frozen` | beim Einfrieren |
 | `blacklisted` | Absage an Gesperrte |
@@ -186,20 +197,29 @@ Beim Schließen liest der Bot den ganzen Verlauf des Tickets und legt ihn ab —
 
 Im Dashboard unter **Live Tickets**: links alle offenen Tickets des Servers, rechts der Verlauf — so, wie ihn auch das Transcript zeigt (Components V2 inklusive), nur live. Neue Tickets, Nachrichten, Bearbeitungen und Löschungen kommen ohne Neuladen an.
 
-**Wer es sieht:** „Server verwalten“ alle Tickets. Dazu die **Support-Rollen** — sie bekommen den Server in ihrer Liste, obwohl sie ihn nicht verwalten dürfen, sehen dort aber nur **Live Tickets** und **Transcriptions**, und darin nur die Tickets ihrer Rolle. Das ist dieselbe Regel wie im Ticket selbst (`IsStaff()`): die allgemeine Support-Rolle sieht alles außer Themen mit eigener Rolle, eine Themen-Rolle nur ihr Thema. Einstellungen, Panel und Löschen bleiben bei „Server verwalten“.
+**Wer es sieht:** „Server verwalten“ alle Tickets. Im Verlauf steht an jedem Namen **TEAM** oder **USER** (wie Discords BOT-Marke); weitergeleitete ModMail-Nachrichten erscheinen unter dem Ersteller selbst. Transcripts tragen die Marke ab jetzt ebenfalls, ältere bleiben ohne. Dazu die **Support-Rollen** — sie bekommen den Server in ihrer Liste, obwohl sie ihn nicht verwalten dürfen, sehen dort aber nur **Live Tickets** und **Transcriptions**, und darin nur die Tickets ihrer Rolle. Das ist dieselbe Regel wie im Ticket selbst (`IsStaff()`): die allgemeine Support-Rolle sieht alles außer Themen mit eigener Rolle, eine Themen-Rolle nur ihr Thema. Einstellungen, Panel und Löschen bleiben bei „Server verwalten“.
 
 **Schreiben:** Die Nachricht geht über einen Webhook mit Namen und Bild des Teammitglieds und dem Zusatz „· via Dashboard“ — im Discord sieht jeder, woher sie kam. Im anonymen Modus steht dort der Team-Alias mit dem Server-Bild. Ohne Webhook-Recht schreibt der Bot sie selbst, mit dem Namen davor. Bei ModMail geht sie wie jede Team-Antwort per DM an den User; kommt sie dort nicht an (DMs zu), sagt das Dashboard es.
 
-| Aktion | Wirkung |
+Im Kopf stehen Übernehmen/Zurückgeben, Priorität und Schließen, daneben das Menü **„⚙️ Aktion …“** mit allen weiteren Aktionen, die der Server eingeschaltet hat — dieselbe Liste wie in Discord, dieselben Wege im `TicketService`. Was vorher etwas wissen will, fragt in einer Leiste unter dem Kopf nach:
+
+| Aktion | Im Dashboard |
 |---|---|
-| Übernehmen / Zurückgeben | wie im Ticket-Menü, mit derselben Nachricht im Ticket |
-| Priorität | nur, wenn die Aktion unter *Aktionen* eingeschaltet ist |
-| Schließen | mit Grund; im Ticket steht „(Dashboard)“ dahinter, ohne Grund „Im Dashboard geschlossen“. Transcript und Löschfrist wie immer |
+| Schließen / Sperren | Grund; im Ticket steht „(Dashboard)“ dahinter, ohne Grund „Im Dashboard geschlossen“. Transcript und Löschfrist wie immer |
+| Verschieben | Auswahl der übrigen Themen |
+| Benutzer hinzufügen | Suche nach Name oder User-ID (ohne Bots und ohne, wer schon drin ist) |
+| Benutzer entfernen | die hinzugefügten User zum Anklicken |
+| Slowmode · Notiz · Termin | Stufe · Text · Datum und Uhrzeit (in der Zeit des Browsers) |
+| Zusammenfassung | die Eckdaten plus die Team-Notizen |
+| Medien-Tresor | Bilder als Kacheln, der Rest als Links |
+| Einfrieren · Anonymer Modus | schalten sofort; das Menü zeigt den Zustand („Ticket auftauen“, „Anonymer Modus: an“) |
 | Dateien | bis 8 MB je Datei, bis 10 auf einmal — oder Bilder aus der Galerie |
 
 **Hinweise:** Zähler ungelesener Nachrichten je Ticket und im Tab-Titel, ein leiser Ton bei neuen Tickets (abschaltbar, merkt sich der Browser). Entwürfe bleiben je Ticket stehen, solange die Seite offen ist.
 
-**Technik:** Die Seite hält eine Server-Sent-Events-Verbindung (`/live/stream`), höchstens 6 je Person, mit einem Ping alle 25 Sekunden. Reißt sie ab, verbindet der Browser neu und holt die Liste frisch. Der Verlauf lädt 50 Nachrichten, ältere auf Knopfdruck. Gerendert wird mit `RenderLive()` aus `TranscriptHtml.ts` — dieselbe Darstellung wie im Transcript, in einem Shadow DOM, damit das Aussehen des Dashboards und des Verlaufs sich nicht beißen. Discord-Links auf Anhänge sind hier frisch, deshalb gibt es kein „nicht gesichert“.
+**Transcripts ohne Neuladen:** Ist ein Transcript gespeichert, meldet der Stream es (`transcript`), und die Liste unter Transcriptions lädt still neu — auch wenn man gerade dort steht. Sie lädt außerdem neu, sobald der Abschnitt wieder aufgeht.
+
+**Technik:** Die Seite hält eine Server-Sent-Events-Verbindung (`/live/stream`), höchstens 6 je Person, mit einem Ping alle 25 Sekunden. Sie startet, sobald Live Tickets oder Transcriptions das erste Mal offen sind. Reißt sie ab, verbindet der Browser neu und holt die Liste frisch. Der Verlauf lädt 50 Nachrichten, ältere auf Knopfdruck. Gerendert wird mit `RenderLive()` aus `TranscriptHtml.ts` — dieselbe Darstellung wie im Transcript, in einem Shadow DOM, damit das Aussehen des Dashboards und des Verlaufs sich nicht beißen. Discord-Links auf Anhänge sind hier frisch, deshalb gibt es kein „nicht gesichert“.
 
 | Datei | Aufgabe |
 |---|---|
@@ -207,7 +227,7 @@ Im Dashboard unter **Live Tickets**: links alle offenen Tickets des Servers, rec
 | `utils/live.ts` | Anmeldung, Recht und Ticket prüfen — für alle Live-Routen gleich |
 | `routes/DashboardApiLive.ts` | `GET …/live` — Liste, eigene Rechte, Emojis, Aussehen |
 | `routes/DashboardApiLiveStream.ts` | `GET …/live/stream` — die Ereignisse |
-| `routes/DashboardApiLiveTicket.ts` | `GET …/live/:ticket` Verlauf, `POST` die Aktionen (nur JSON) |
+| `routes/DashboardApiLiveTicket.ts` | `GET …/live/:ticket` Verlauf, `POST` schreiben und alle Aktionen, dazu die Suche für „Benutzer hinzufügen“ (nur JSON) |
 | `routes/DashboardApiLiveFile.ts` | `POST …/live/:ticket/file` — eine Datei, roh als `application/octet-stream` |
 | `dashboard/client/pages/GuildLive.ts` | die Seite |
 
@@ -215,7 +235,7 @@ Im Dashboard unter **Live Tickets**: links alle offenen Tickets des Servers, rec
 
 ## Was der Bot braucht
 
-- **Rechte:** Kanäle verwalten, Rollen verwalten (für Overwrites), Nachrichten verwalten, Webhooks verwalten (anonymer Modus), im Forum Threads verwalten.
+- **Rechte:** Kanäle verwalten, Rollen verwalten (für Overwrites), Nachrichten verwalten, Webhooks verwalten (anonymer Modus, ModMail-Nachrichten mit Name und Bild des Users, Antworten aus dem Dashboard), im Forum Threads verwalten.
 - **Intents:** `DirectMessages` plus `Partials.Channel` — sonst sieht er keine DM (`BotClient.ts`).
 - Ein Overwrite erlaubt nie mehr, als der Bot selbst hat (`Allowed()`), sonst lehnt Discord den ganzen Kanal ab.
 

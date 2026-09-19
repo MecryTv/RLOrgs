@@ -29,6 +29,9 @@ import logger from "../utils/logger";
 import { ModuleId } from "../constants/Modules";
 import IDashboardActivity from "../interfaces/services/dashboard/IDashboardActivity";
 
+/** Länger als das wartet eine Seite nicht auf Discord - dann lieber der Fehler. */
+const MAX_RETRY_WAIT = 5_000;
+
 interface IRawGuild {
     id: string;
     name: string;
@@ -95,6 +98,9 @@ export default class DashboardService implements IDashboardService {
     // Die beiden Caches darunter sind reine Abkürzungen für Discord-Abfragen und
     // dürfen jederzeit leer sein.
     private guilds = new LRUCache<string, IDashboardGuild[]>({ max: MAX_SESSIONS, ttl: GUILD_CACHE_TTL });
+    // Eine Seite fragt mehrere Routen auf einmal. Alle warten auf denselben Abruf der
+    // Serverliste - jede für sich hätte Discord ab der zweiten mit 429 beantwortet.
+    private guildsLoading = new Map<string, Promise<IDashboardGuild[]>>();
 
     // Läuft höchstens einmal gleichzeitig - sonst stößt jeder Seitenaufruf eine
     // weitere Mitglieder-Abfrage an.
@@ -468,6 +474,17 @@ export default class DashboardService implements IDashboardService {
         const cached = this.guilds.get(session.id);
         if (cached) return cached;
 
+        const running = this.guildsLoading.get(session.id);
+        if (running) return running;
+
+        const job = this.LoadGuilds(session).finally(() => this.guildsLoading.delete(session.id));
+
+        this.guildsLoading.set(session.id, job);
+
+        return job;
+    }
+
+    private async LoadGuilds(session: IDashboardSession): Promise<IDashboardGuild[]> {
         // Nachziehen, was beim Start gefehlt hat - etwa ein Server, auf den der
         // Bot erst danach eingeladen wurde. Bewusst ohne await: die Zahl steht
         // dann beim nächsten Aufbau der Liste da.
@@ -614,12 +631,26 @@ export default class DashboardService implements IDashboardService {
         }
     }
 
-    private async Fetch<T>(endpoint: string, accessToken: string): Promise<T> {
+    private async Fetch<T>(endpoint: string, accessToken: string, retry = true): Promise<T> {
         const response = await fetch(`${DISCORD_API}${endpoint}`, {
             headers: { Authorization: `Bearer ${accessToken}` },
         });
 
         if (response.status === 401) throw new SessionExpired();
+
+        // Zu viele Anfragen: Discord sagt, wie lange. Kurz warten und einmal nachfassen.
+        if (response.status === 429 && retry) {
+            const body = (await response.json().catch(() => ({}))) as { retry_after?: number };
+            const seconds = Number(body.retry_after ?? response.headers.get("retry-after") ?? 1);
+            const wait = Number.isFinite(seconds) ? Math.max(0, Math.ceil(seconds * 1000)) : 1000;
+
+            if (wait <= MAX_RETRY_WAIT) {
+                await new Promise((resolve) => setTimeout(resolve, wait));
+
+                return this.Fetch<T>(endpoint, accessToken, false);
+            }
+        }
+
         if (!response.ok) throw new Error(`Discord ${endpoint} antwortete mit ${response.status}.`);
 
         return (await response.json()) as T;
