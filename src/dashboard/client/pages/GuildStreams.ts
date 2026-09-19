@@ -29,6 +29,14 @@ interface IConfig {
     messages: Partial<Record<Kind, IMessageDoc>>;
     update: boolean;
     ended: "summary" | "delete" | "keep";
+    /** Der Discord-User hinter dem Kanal - für {streamer.mention} und die Live-Rolle. */
+    userId: string | null;
+}
+
+interface IPerson {
+    id: string;
+    name: string;
+    avatar: string;
 }
 
 interface INotifier {
@@ -39,6 +47,8 @@ interface INotifier {
     avatar: string | null;
     enabled: boolean;
     config: IConfig;
+    /** Wer das ist in Discord - erkannt oder ausgewählt. */
+    user: IPerson | null;
     /** Was je Art gilt - die eigene Nachricht oder die Vorlage. */
     messages: Record<Kind, IMessageDoc>;
     /** Die Vorlagen des Bots - für "Vorlage wiederherstellen". */
@@ -54,7 +64,7 @@ interface IPayload {
     notifiers: INotifier[];
     max: number;
     ready: { twitch: boolean; youtubeLive: boolean; presence: boolean };
-    settings: { liveRoleId: string | null; liveRoleFilter: string | null } | null;
+    settings: { liveRoleId: string | null; liveRoleFilter?: string | null } | null;
     guild: { name: string; icon: string | null; roles: IRole[]; emojis: IServerEmoji[] };
     targets: ILogTargets;
 }
@@ -181,6 +191,7 @@ export function renderStreams(guildId: string, platform: Platform): void {
         }
 
         const latest = notifiers.map((entry) => entry.last).filter((entry): entry is NonNullable<INotifier["last"]> => entry !== null).sort((a, b) => b.at - a.at)[0];
+        const ytRole = data!.guild.roles.find((entry) => entry.id === data!.settings?.liveRoleId);
 
         return el(
             "div",
@@ -188,6 +199,7 @@ export function renderStreams(guildId: string, platform: Platform): void {
             stat("#i-youtube", "Kanäle", `${notifiers.length} / ${data!.max}`),
             stat("#i-play", "Zuletzt gemeldet", latest ? `${KIND_LABEL[latest.kind]} · ${ago(latest.at)}` : "noch nichts"),
             stat("#i-bell", "Livestreams", data!.ready.youtubeLive ? "an" : "braucht API-Schlüssel", data!.ready.youtubeLive ? "is-ok" : ""),
+            stat("#i-badge", "Live-Rolle", ytRole ? `@${ytRole.name}` : "aus", ytRole ? "is-ok" : ""),
             stat("#i-list-checks", "Meldungen", notifiers.some((entry) => entry.enabled && entry.config.channelId) ? "an" : "noch kein Kanal", notifiers.some((entry) => entry.enabled && entry.config.channelId) ? "is-ok" : "is-warn")
         );
     }
@@ -424,7 +436,28 @@ export function renderStreams(guildId: string, platform: Platform): void {
             paintPreview();
         });
 
-        const settings = el("div", "snsettings", row("Kanal", "Textkanal oder Beitrag in einem Forum", target), row("Ping", "Wer bei jeder Meldung benachrichtigt wird", ping));
+        // Wer das in Discord ist: für {streamer.mention} und die Live-Rolle.
+        const personHost = el("div", "snperson");
+        const drawPerson = (person: IPerson | null): void => {
+            personHost.replaceChildren(
+                personPicker(person, (picked) => {
+                    draft.config.userId = picked?.id ?? null;
+                    notifier.user = picked;
+                    touch();
+                    drawPerson(picked);
+                })
+            );
+        };
+
+        drawPerson(notifier.user);
+
+        const settings = el(
+            "div",
+            "snsettings",
+            row("Kanal", "Textkanal oder Beitrag in einem Forum", target),
+            row("Ping", "Wer bei jeder Meldung benachrichtigt wird", ping),
+            row("Discord-User", platform === "twitch" ? "Für {streamer.mention} und die Live-Rolle – erkennt der Bot auch am Streaming-Status" : "Für {channel.mention} und die Live-Rolle bei Livestreams", personHost)
+        );
 
         if (platform === "twitch") {
             settings.append(
@@ -571,7 +604,7 @@ export function renderStreams(guildId: string, platform: Platform): void {
        Twitch: Live-Rolle
        ------------------------------------------------------------ */
     function liveRole(): HTMLElement {
-        const settings = { ...(data!.settings ?? { liveRoleId: null, liveRoleFilter: null }) };
+        const settings: { liveRoleId: string | null; liveRoleFilter?: string | null } = { ...(data!.settings ?? { liveRoleId: null }) };
         const roles = data!.guild.roles;
         const saveButton = button("btn btn--primary", icon("#i-check"), "Speichern");
         const role = select([["", "Keine Live-Rolle"], ...roles.map((entry): [string, string] => [entry.id, `@${entry.name}`])], settings.liveRoleId ?? "", (value) => {
@@ -596,20 +629,87 @@ export function renderStreams(guildId: string, platform: Platform): void {
             }
 
             data!.settings = answer.settings;
-            toast("info", "Gespeichert", settings.liveRoleId ? "Wer auf Twitch live geht, bekommt jetzt die Rolle." : "Keine Live-Rolle mehr.");
+            toast("info", "Gespeichert", settings.liveRoleId ? "Wer live geht, bekommt jetzt die Rolle." : "Keine Live-Rolle mehr.");
             paint();
         });
 
+        // Twitch sieht Discord selbst (Streaming-Status), bei YouTube weiß es nur
+        // der Bot - darum zählt dort, wer am Kanal als Discord-User steht.
+        const missing = platform === "youtube" ? data!.notifiers.filter((entry) => !entry.config.userId).length : 0;
+
         return card(
             "Live-Rolle",
-            "Wer in Discord als „streamt auf Twitch“ angezeigt wird, bekommt diese Rolle – und verliert sie nach dem Stream. Gut für eine eigene Kategorie „Gerade live“.",
-            ...(data!.ready.presence
-                ? []
-                : [el("div", "notice", icon("#i-warn"), el("span", "", "Dafür braucht der Bot das Presence Intent: GUILD_PRESENCE_INTENT=\"true\" in der .env und im Developer Portal. Ohne passiert nichts."))]),
+            platform === "twitch"
+                ? "Wer in Discord als „streamt auf Twitch“ angezeigt wird, bekommt diese Rolle – und verliert sie nach dem Stream. Die Streamer aus der Liste bekommen sie auch, sobald der Bot sie live sieht."
+                : "Wer an einem Kanal als Discord-User steht, bekommt diese Rolle, solange sein Livestream läuft – und verliert sie danach.",
+            ...(platform === "twitch" && !data!.ready.presence
+                ? [el("div", "notice", icon("#i-warn"), el("span", "", "Für den Streaming-Status braucht der Bot das Presence Intent: GUILD_PRESENCE_INTENT=\"true\" in der .env und im Developer Portal. Die Streamer aus der Liste bekommen die Rolle auch ohne."))]
+                : []),
+            ...(platform === "youtube" && !data!.ready.youtubeLive
+                ? [el("div", "notice", icon("#i-warn"), el("span", "", "Livestreams erkennt der Bot nur mit YOUTUBE_API_KEY – ohne den passiert hier nichts."))]
+                : []),
+            ...(missing
+                ? [el("div", "notice", icon("#i-info"), el("span", "", `${missing === 1 ? "Ein Kanal hat" : `${missing} Kanäle haben`} noch keinen Discord-User – ohne den weiß der Bot nicht, wem die Rolle gehört.`))]
+                : []),
             row("Rolle", "Muss unter der höchsten Rolle des Bots stehen", role),
-            row("Für wen", "Etwa nur für eure Streamer-Rolle", filter),
+            ...(platform === "twitch" ? [row("Für wen", "Gilt für den Streaming-Status – etwa nur für eure Streamer-Rolle", filter)] : []),
             el("div", "mcsave", saveButton)
         );
+    }
+
+    /* ------------------------------------------------------------
+       Wer ist das in Discord?
+       ------------------------------------------------------------ */
+    function personPicker(chosen: IPerson | null, onPick: (person: IPerson | null) => void): HTMLElement {
+        if (chosen) {
+            const change = button("btn btn--quiet mcchosen__change", "Ändern");
+
+            change.addEventListener("click", () => onPick(null));
+
+            return el("div", "mcchosen", face(chosen, "mcchosen__face"), el("div", "mcchosen__name", el("b", "", chosen.name), el("code", "mcid", chosen.id)), change);
+        }
+
+        const input = el("input", "text");
+        const results = el("div", "mcpeople");
+        let asked = 0;
+        let timer = 0;
+
+        input.type = "search";
+        input.placeholder = "Mitglied suchen: Name oder ID …";
+        input.setAttribute("aria-label", "Discord-User suchen");
+        input.addEventListener("input", () => {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(async () => {
+                const text = input.value.trim();
+
+                if (!text) {
+                    results.replaceChildren();
+
+                    return;
+                }
+
+                const mine = ++asked;
+                const answer = await call<{ members?: IPerson[] }>("", { action: "members", query: text });
+
+                if (mine !== asked) return;
+
+                const found = answer?.members ?? [];
+
+                results.replaceChildren(
+                    ...(found.length
+                        ? found.map((person) => {
+                              const pick = button("ltperson", face(person), el("span", "", person.name));
+
+                              pick.addEventListener("click", () => onPick(person));
+
+                              return pick;
+                          })
+                        : [el("span", "tkempty", "Niemand gefunden.")])
+                );
+            }, 250);
+        });
+
+        return el("div", "mcpick", input, results);
     }
 
     /* ------------------------------------------------------------
@@ -634,7 +734,7 @@ export function renderStreams(guildId: string, platform: Platform): void {
                   ])
         );
 
-        host.replaceChildren(...notices(), head(), addBar(), list, ...(platform === "twitch" ? [liveRole()] : []));
+        host.replaceChildren(...notices(), head(), addBar(), list, liveRole());
     }
 
     host.replaceChildren(el("div", "tkhead", ...Array.from({ length: 4 }, () => el("div", "sb snskel"))));

@@ -40,6 +40,7 @@ import ModSettings from "../models/ModSettings";
 import ModCases from "../models/ModCases";
 import ModuleSettings from "../models/ModuleSettings";
 import StreamNotifiers from "../models/StreamNotifiers";
+import UserConnections from "../models/UserConnections";
 import Polls from "../models/Polls";
 import Giveaways from "../models/Giveaways";
 
@@ -88,6 +89,7 @@ export default class BotClient extends Client implements IBotClient {
     modCases: ModCases;
     moduleSettings: ModuleSettings;
     streamNotifiers: StreamNotifiers;
+    userConnections: UserConnections;
     polls: Polls;
     giveaways: Giveaways;
 
@@ -163,6 +165,7 @@ export default class BotClient extends Client implements IBotClient {
         this.modCases = new ModCases(this);
         this.moduleSettings = new ModuleSettings(this);
         this.streamNotifiers = new StreamNotifiers(this);
+        this.userConnections = new UserConnections(this);
         this.polls = new Polls(this);
         this.giveaways = new Giveaways(this);
     }

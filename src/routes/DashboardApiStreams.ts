@@ -6,6 +6,7 @@ import { DefaultMessage, MAX_NOTIFIERS, STREAM_KINDS } from "../constants/Stream
 import { IStreamNotifier, StreamKind, StreamPlatform } from "../interfaces/services/community/ICommunity";
 import { StreamError, TWITCH_MODULE, YOUTUBE_MODULE } from "../services/StreamService";
 import { WantsJSON } from "../utils/admin";
+import { PersonOf, SearchMembers } from "../utils/dashboard";
 import logger from "../utils/logger";
 import { CreateLogThread, LogTargetError, LogTargets } from "../utils/logtarget";
 import { GuildResources, IManageAccess, ManageGate } from "../utils/managegate";
@@ -18,6 +19,7 @@ interface IBody {
     kind?: unknown;
     settings?: unknown;
     forumId?: unknown;
+    query?: unknown;
 }
 
 /**
@@ -66,8 +68,11 @@ export default class DashboardApiStreams extends Route {
 
     private Out(notifier: IStreamNotifier) {
         const service = this.client.streamService;
+        const guild = this.client.guilds.cache.get(notifier.guildId);
+        const linked = notifier.config.userId ? guild?.members.cache.get(notifier.config.userId) : null;
 
         return {
+            user: linked ? PersonOf(linked) : notifier.config.userId ? { id: notifier.config.userId, name: "Nicht mehr auf dem Server", avatar: "" } : null,
             id: notifier.id,
             accountId: notifier.accountId,
             name: notifier.accountName,
@@ -100,7 +105,7 @@ export default class DashboardApiStreams extends Route {
                 youtubeLive: Boolean(config.YOUTUBE_API_KEY),
                 presence: config.GUILD_PRESENCE_INTENT,
             },
-            settings: platform === "twitch" ? await this.client.streamService.TwitchSettings(guild.id) : null,
+            settings: platform === "twitch" ? await this.client.streamService.TwitchSettings(guild.id) : await this.client.streamService.YouTubeSettings(guild.id),
             guild: { name: guild.name, icon: guild.iconURL({ extension: "png", size: 128 }), ...GuildResources(guild) },
             targets: await LogTargets(guild, notifiers.map((notifier) => notifier.config.channelId)),
         };
@@ -137,9 +142,16 @@ export default class DashboardApiStreams extends Route {
             }
 
             case "settings":
-                if (platform !== "twitch") throw new StreamError("Das gibt es nur bei Twitch.");
+                return {
+                    ok: true,
+                    settings: platform === "twitch" ? await service.SaveTwitchSettings(guild, body.settings) : await service.SaveYouTubeSettings(guild, body.settings),
+                };
 
-                return { ok: true, settings: await service.SaveTwitchSettings(guild, body.settings) };
+            case "members": {
+                const query = typeof body.query === "string" ? body.query.trim().slice(0, 100) : "";
+
+                return { members: (await SearchMembers(guild, query)).map(PersonOf) };
+            }
 
             case "logthread":
                 return {

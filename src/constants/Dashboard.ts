@@ -60,7 +60,9 @@ export const DISCORD_EPOCH = 1420070400000;
 // Jeder Scope kostet eine Zeile im Zustimmungsdialog: wer die Adresse nicht
 // braucht, streicht "email" hier - die Zeile in den Einstellungen bleibt dann
 // leer, sonst ändert sich nichts.
-export const OAUTH_SCOPES = ["identify", "guilds", "guilds.members.read", "email"];
+// "connections" liest Twitch und YouTube des Nutzers - damit erkennt der Notifier,
+// welcher Discord-Account zu einem Streamer gehoert (docs/Notifiers.md).
+export const OAUTH_SCOPES = ["identify", "guilds", "guilds.members.read", "email", "connections"];
 
 // Rechte, die der Bot beim Einladen anfragt - genau die, die er heute benutzt.
 // Ändern heißt: bereits eingeladene Server müssen neu autorisiert werden.

@@ -50,6 +50,7 @@ function FakeGuild(): Guild {
         name: "Dev Server",
         channels: { cache: new Map([[TEXT, channel(TEXT, ChannelType.GuildText)], [VOICE, channel(VOICE, ChannelType.GuildVoice)]]) },
         roles: { cache: new Map([[ROLE, role(ROLE, "Stammgast")], [TEAM, role(TEAM, "Team")], [GUILD, role(GUILD, "@everyone")]]) },
+        members: { cache: new Map([[USER, { id: USER } as unknown as GuildMember]]) },
     } as unknown as Guild;
 }
 
@@ -218,6 +219,9 @@ function checkStreamConfig(client: BotClient): void {
     check("Twitch kennt nur live", client.streamService.Clean(guild, "twitch", { kinds: ["video", "live"] }, DefaultStreamConfig("twitch")).kinds.join(",") === "live");
     check("Was nicht mitkommt, bleibt wie es war", client.streamService.Clean(guild, "youtube", { ping: "here" }, { ...base, channelId: TEXT, update: false }).channelId === TEXT);
     check("Eine leere Nachricht fällt weg, die Vorlage gilt", Object.keys(client.streamService.Clean(guild, "youtube", { messages: { video: { blocks: [] } } }, base).messages).length === 0);
+    check("Ein Mitglied des Servers wird verknüpft", client.streamService.Clean(guild, "youtube", { userId: USER }, base).userId === USER);
+    check("Wer nicht auf dem Server ist, nicht", client.streamService.Clean(guild, "youtube", { userId: "90071992547409999" }, base).userId === null);
+    check("Ohne Angabe bleibt die Verknüpfung", client.streamService.Clean(guild, "youtube", {}, { ...base, userId: USER }).userId === USER);
 
     const notifier = SampleNotifier({ platform: "youtube", config: { ...base, messages: { video: { blocks: [{ type: "text", body: "Eigene Meldung" }] } } } });
 
@@ -409,6 +413,15 @@ async function checkViews(client: BotClient): Promise<void> {
     check("Nur diese Rolle darf gepingt werden", card.allowedMentions.roles?.join("") === ROLE);
     check("Ohne Ping wird niemand gepingt", (await StreamCard(client, DefaultMessage("youtube", "video"), { channel: "RL Nexus" }, { ping: null, button: { url: "https://youtu.be/x", label: "Ansehen", emoji: "▶️" } })).allowedMentions.parse?.length === 0);
 
+    const mention = await StreamCard(
+        client,
+        { blocks: [{ type: "text", body: "{streamer.mention} ist live!" }] },
+        { "streamer.mention": `<@${USER}>` },
+        { ping: null, button: { url: "https://twitch.tv/x", label: "Zum Stream", emoji: "📺" } }
+    );
+
+    check("Der verknüpfte User lässt sich erwähnen", JSON.stringify(mention.components[0].toJSON()).includes(`<@${USER}>`));
+
     const summary = JSON.stringify(TwitchSummary({ streamer: "MecryTv", title: "Ranked", game: "Rocket League", startedAt: Date.now() - 7_200_000, endedAt: Date.now(), peak: 210, avatar: null, url: "https://twitch.tv/mecrytv", vod: "https://twitch.tv/videos/1" }).components[0].toJSON());
 
     check("Die Zusammenfassung nennt die Dauer", summary.includes("2 Std."), summary.slice(0, 200));
@@ -479,6 +492,19 @@ async function checkDatabase(client: BotClient): Promise<void> {
     check("Umbenennen klappt", (await client.streamNotifiers.Get(notifier.id))?.accountName === "MecryTv Live");
     await client.moduleSettings.Save(GUILD, "twitch", { liveRoleId: ROLE, liveRoleFilter: null });
     check("Twitch-Einstellungen kommen zurück", (await client.moduleSettings.Of(GUILD, "twitch", { liveRoleId: null })).liveRoleId === ROLE);
+
+    await client.userConnections.Replace(USER, [
+        { platform: "twitch", accountId: "12345", name: "mecrytv" },
+        { platform: "youtube", accountId: "UC_x5XG1OV2P6uZZ5FSM9Ttw", name: "RL Nexus" },
+    ]);
+
+    check("Die Verknüpfungen des Users stehen da", (await client.userConnections.Of(USER)).length === 2);
+    check("Wem gehört dieser Twitch-Account?", (await client.userConnections.ByAccount("twitch", "12345"))?.userId === USER);
+    check("Ein fremder Account gehört niemandem", (await client.userConnections.ByAccount("twitch", "999999")) === null);
+
+    await client.userConnections.Replace(USER, [{ platform: "twitch", accountId: "12345", name: "mecrytv" }]);
+
+    check("Entfernte Verknüpfungen verschwinden", (await client.userConnections.Of(USER)).length === 1);
 
     const poll = await client.polls.Create({
         guildId: GUILD,
@@ -552,11 +578,13 @@ async function cleanup(client: BotClient): Promise<void> {
     await db.Write("DELETE FROM giveaways WHERE guild_id = ?", [GUILD]);
     await db.Write("DELETE FROM stream_notifiers WHERE guild_id = ?", [GUILD]);
     await db.Write("DELETE FROM module_settings WHERE guild_id = ?", [GUILD]);
+    await db.Write("DELETE FROM user_connections WHERE user_id = ?", [USER]);
 
     client.polls.Forget();
     client.giveaways.Forget();
     client.streamNotifiers.Forget();
     client.moduleSettings.Forget();
+    client.userConnections.Forget();
 
     check("Aufgeräumt", (await client.polls.OfGuild(GUILD)).length === 0 && (await client.giveaways.OfGuild(GUILD)).length === 0 && (await client.streamNotifiers.OfGuild(GUILD, "twitch")).length === 0);
 }

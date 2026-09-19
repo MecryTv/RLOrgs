@@ -45,6 +45,7 @@ export const TWITCH_PLACEHOLDERS: IPlaceholder[] = [
     { key: "stream.viewers", label: "Zuschauer", sample: "128" },
     { key: "stream.preview", label: "Vorschaubild (Bild)", sample: "" },
     { key: "stream.started", label: "Live seit (Zeitpunkt)", sample: "vor 3 Minuten" },
+    { key: "streamer.mention", label: "Streamer in Discord (Erwähnung)", sample: "@MecryTv" },
     { key: "guild", label: "Servername", sample: "Dein Server" },
 ];
 
@@ -59,6 +60,7 @@ export const YOUTUBE_PLACEHOLDERS: IPlaceholder[] = [
     { key: "video.thumbnail", label: "Vorschaubild (Bild)", sample: "" },
     { key: "video.kind", label: "Art (Video, Short, Livestream)", sample: "Video" },
     { key: "video.published", label: "Veröffentlicht (Zeitpunkt)", sample: "vor 2 Minuten" },
+    { key: "channel.mention", label: "Kanal in Discord (Erwähnung)", sample: "@MecryTv" },
     { key: "guild", label: "Servername", sample: "Dein Server" },
 ];
 

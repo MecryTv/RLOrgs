@@ -21,6 +21,8 @@ export interface IStreamConfig {
     update: boolean;
     /** Twitch: was nach dem Stream aus der Karte wird. */
     ended: "summary" | "delete" | "keep";
+    /** Der Discord-User hinter dem Kanal - für {streamer.mention} und die Live-Rolle. */
+    userId: string | null;
 }
 
 /** Ein laufender Twitch-Stream, wie der Bot ihn sich merkt. */
@@ -48,6 +50,8 @@ export interface IStreamState {
     upcoming?: string[];
     /** YouTube: das zuletzt gemeldete Video. */
     last?: { id: string; title: string; kind: StreamKind; at: number } | null;
+    /** YouTube: der Livestream, der gerade läuft - daran hängt die Live-Rolle. */
+    liveVideo?: string | null;
     /** Ein Hinweis, warum gerade nichts ankommt (Kanal weg, keine Rechte ...). */
     problem?: string | null;
 }
@@ -71,8 +75,13 @@ export interface IStreamNotifier {
 export interface ITwitchSettings {
     /** Diese Rolle bekommt, wer gerade auf Twitch live ist (Presence Intent). */
     liveRoleId: string | null;
-    /** Nur Mitglieder mit dieser Rolle - etwa "Streamer". null: alle. */
+    /** Nur Mitglieder mit dieser Rolle - etwa "Streamer". null: alle. Gilt für den Presence-Weg. */
     liveRoleFilter: string | null;
+}
+
+/** YouTube: die Live-Rolle bekommt der verknüpfte User, solange sein Livestream läuft. */
+export interface IYouTubeSettings {
+    liveRoleId: string | null;
 }
 
 /* ----------------------------------------------------------

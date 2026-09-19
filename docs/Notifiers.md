@@ -30,6 +30,20 @@ Bis **25 je Server und Plattform**. Wer schon drinsteht, kommt kein zweites Mal 
 
 ---
 
+## Wer ist das in Discord?
+
+An jedem Streamer und Kanal kann ein **Discord-User** stehen. Gebraucht wird er für zwei Dinge: den Platzhalter `{streamer.mention}` bzw. `{channel.mention}` in der Nachricht – und die **Live-Rolle**. Drei Wege führen dorthin:
+
+| Weg | |
+|---|---|
+| **Auswählen** | Im Dashboard am Eintrag unter *Discord-User* nach Name oder ID suchen. Geht immer. |
+| **Aus dem Streaming-Status** | Streamt jemand sichtbar unter `twitch.tv/<name>` eines Eintrags, trägt der Bot ihn selbst ein (braucht das Presence Intent). Überschrieben wird nie: was schon dasteht, bleibt. |
+| **Aus der Discord-Verknüpfung** | Wer sich im Dashboard anmeldet, gibt dabei seine Verknüpfungen frei (Scope `connections`). Passt eine davon zu einem neu eingetragenen Kanal, steht der User sofort da. |
+
+Discord gibt einem Bot **keine** fremden Verknüpfungen – nur der Nutzer selbst kann sie freigeben, und das tut er beim Login. Gespeichert werden davon ausschließlich Twitch und YouTube (`user_connections`, Migration 015); beim nächsten Login wird die Liste ersetzt, entfernte Verknüpfungen verschwinden also von selbst. Was davon gespeichert wird, steht auch auf der Datenschutzseite des Dashboards.
+
+---
+
 ## Was gemeldet wird
 
 | Art | Twitch | YouTube |
@@ -58,7 +72,8 @@ Geschrieben wird sie im selben Editor wie die Ticket-Nachrichten (Text, Bild, Ga
 | `{stream.url}` | Link zum Kanal | `{video.kind}` | „Video", „Short", „Livestream" |
 | `{stream.viewers}` | Zuschauer | `{video.published}` | wann („vor 2 Stunden") |
 | `{stream.preview}` | Vorschaubild | `{guild}` | Server-Name |
-| `{stream.started}` | Start („vor 20 Minuten") | | |
+| `{stream.started}` | Start („vor 20 Minuten") | `{channel.mention}` | Kanal in Discord (Erwähnung) |
+| `{streamer.mention}` | Streamer in Discord (Erwähnung) | `{guild}` | Server-Name |
 | `{guild}` | Server-Name | | |
 
 Unter der Karte sitzt immer ein Knopf („Zum Stream", „Ansehen", „Zum Livestream"). **Test senden** schickt dieselbe Karte mit Beispielwerten in den eingestellten Kanal — ohne auf den nächsten Stream zu warten.
@@ -83,12 +98,14 @@ Vorbei ist ein Stream, sobald Twitch ihn nicht mehr meldet — oder eine andere 
 
 ## Live-Rolle
 
-Wer auf Twitch live geht, bekommt eine Rolle — zurück, sobald der Stream endet. Das läuft über die **Presence** (Discord meldet „streamt gerade"), nicht über die Twitch-API: Es braucht `GUILD_PRESENCE_INTENT` in der `.env` **und** im Developer Portal, sonst bleibt die Karte im Dashboard gesperrt.
+Eine Rolle für alle, die gerade live sind — zurück, sobald der Stream endet. Je Plattform eine, beide im Dashboard unter *Live-Rolle*. Sie muss unter der höchsten Rolle des Bots stehen, sonst sagt er das beim Speichern.
 
-- **Rolle:** was der Bot vergibt. Sie muss unter seiner höchsten Rolle stehen, sonst sagt das Dashboard das beim Speichern.
-- **Nur mit Rolle:** etwa „Streamer" — dann bekommt sie nicht jeder, der zufällig streamt.
+**Twitch** auf zwei Wegen:
 
-Die Rolle hängt nicht an der Streamer-Liste: sie gilt für alle Mitglieder (oder alle mit der Filter-Rolle).
+- **Streaming-Status** (Presence): Wer in Discord als „streamt auf Twitch" angezeigt wird, bekommt sie — auch wenn er in keiner Liste steht. Braucht `GUILD_PRESENCE_INTENT` in der `.env` **und** im Developer Portal. Mit **Nur mit Rolle** (etwa „Streamer") bekommt sie nicht jeder, der zufällig streamt.
+- **Aus der Liste**: Meldet der Bot einen Streamer der Liste als live, bekommt sein verknüpfter Discord-User die Rolle ebenfalls — auch ohne Presence Intent, und ohne dass die Filter-Rolle dazwischenkommt.
+
+**YouTube** nur über die Liste: Discord sieht YouTube-Livestreams nicht. Die Rolle bekommt, wer an einem Kanal als **Discord-User** steht, solange dessen Livestream läuft (also nur mit `YOUTUBE_API_KEY`). Steht dort niemand, sagt das Dashboard das über der Karte.
 
 ---
 
@@ -99,7 +116,7 @@ Die Rolle hängt nicht an der Streamer-Liste: sie gilt für alle Mitglieder (ode
 | Route | |
 |---|---|
 | `GET <base>/api/guild/:id/streams/:platform` | Streamer, Einstellungen, Kanäle, Log-Ziele, Rollen, Stand und Hinweise |
-| `POST <base>/api/guild/:id/streams/:platform` | `add`, `save`, `remove`, `test`, `settings` (Live-Rolle), `logthread` — nur JSON |
+| `POST <base>/api/guild/:id/streams/:platform` | `add`, `save`, `remove`, `test`, `settings` (Live-Rolle), `members` (Suche für den Discord-User), `logthread` — nur JSON |
 
 `:platform` ist `twitch` oder `youtube`, alles andere ist 404. Anfang wie überall: `ManageGate()` (`utils/managegate.ts`) — Sitzung, „Server verwalten", Datenbank, Modul an.
 
@@ -111,8 +128,8 @@ Die Rolle hängt nicht an der Streamer-Liste: sie gilt für alle Mitglieder (ode
 |---|---|
 | Tabelle | `stream_notifiers` (Migration 014): Server, Plattform, Konto, `config` und `state` als JSON |
 | `config` | Kanal, Ping, Arten, Nachrichten je Art, Karte aktualisieren, was nach dem Stream passiert |
-| `state` | Twitch: der laufende Stream (Nachricht, Titel, Spiel, Zuschauer, Höchststand), zuletzt live. YouTube: die letzten 60 gesehenen Video-IDs, angekündigte Livestreams, die letzte Meldung. Dazu ein Problem-Hinweis (Kanal weg, keine Rechte) |
-| Einstellungen | Live-Rolle in `module_settings` (`twitch`) |
+| `state` | Twitch: der laufende Stream (Nachricht, Titel, Spiel, Zuschauer, Höchststand), zuletzt live. YouTube: die letzten 60 gesehenen Video-IDs, angekündigte Livestreams, der laufende Livestream, die letzte Meldung. Dazu ein Problem-Hinweis (Kanal weg, keine Rechte) |
+| Einstellungen | Live-Rolle in `module_settings` (`twitch-notifier`, `youtube-notifier`) |
 | Lauf | `CommunityTimers` jede Minute (`RunDue()`); YouTube nur alle fünf Minuten. Ein Lauf, der noch arbeitet, wird nicht doppelt gestartet |
 
 Geht eine Meldung nicht raus, steht der Grund am Streamer und im Dashboard — gelöscht wird nichts.

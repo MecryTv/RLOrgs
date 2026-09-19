@@ -261,7 +261,26 @@ export default class DashboardService implements IDashboardService {
 
         logger.user(`🔐 Dashboard-Login: ${session.username} (${session.userId})`);
 
+        await this.SaveConnections(session).catch(() => undefined);
+
         return session;
+    }
+
+    /**
+     * Twitch- und YouTube-Verknüpfungen des Nutzers merken (Scope "connections").
+     * Damit erkennt der Notifier, welcher Discord-Account zu einem Streamer
+     * gehört. Nur bestätigte Verknüpfungen, und nur diese beiden Dienste -
+     * alles andere geht den Bot nichts an.
+     */
+    private async SaveConnections(session: IDashboardSession): Promise<void> {
+        if (!this.client.databaseService.Ready) return;
+
+        const raw = await this.Fetch<{ type: string; id: string; name: string; verified?: boolean }[]>("/users/@me/connections", session.accessToken);
+        const wanted = raw
+            .filter((entry) => entry.verified !== false && (entry.type === "twitch" || entry.type === "youtube"))
+            .map((entry) => ({ platform: entry.type as "twitch" | "youtube", accountId: entry.id, name: entry.name }));
+
+        await this.client.userConnections.Replace(session.userId, wanted);
     }
 
     Sign(session: IDashboardSession): string {

@@ -3335,6 +3335,9 @@ body.no-motion .hero__field .run{display:none}
 @keyframes snpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
 
 .snsettings{display:grid;padding-top:8px}
+.snperson{width:min(340px,100%)}
+.snperson .mcchosen{margin:0}
+.snperson .mcpeople{max-height:180px;overflow-y:auto}
 .snkinds{display:flex;flex-wrap:wrap;gap:10px}
 .snkind{display:inline-flex;align-items:center;gap:8px;min-height:36px;font-size:13px;color:var(--text-2);cursor:pointer}
 .snkind.is-locked{opacity:.5;cursor:not-allowed}

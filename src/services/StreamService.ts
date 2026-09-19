@@ -14,7 +14,7 @@ import {
     YOUTUBE_EVERY,
 } from "../constants/Streams";
 import { IMessageDoc } from "../interfaces/builder/IMessageDoc";
-import { IStreamConfig, IStreamNotifier, IStreamState, ITwitchSettings, StreamKind, StreamPlatform } from "../interfaces/services/community/ICommunity";
+import { IStreamConfig, IStreamNotifier, IStreamState, ITwitchSettings, IYouTubeSettings, StreamKind, StreamPlatform } from "../interfaces/services/community/ICommunity";
 import logger from "../utils/logger";
 import { IsLogTarget, SendLog, WarmLogTarget } from "../utils/logtarget";
 import TwitchApi, { ITwitchStream, Preview, TwitchError } from "../utils/twitch";
@@ -76,6 +76,13 @@ export default class StreamService {
         }
 
         const state: IStreamState = {};
+        const config = DefaultStreamConfig(platform);
+
+        // Hat jemand diesen Kanal in Discord verknüpft und ist er hier Mitglied,
+        // steht er gleich am Eintrag - sonst wählt ihn jemand im Dashboard.
+        const linked = await this.client.userConnections.ByAccount(platform, account.id).catch(() => null);
+
+        if (linked && guild.members.cache.has(linked.userId)) config.userId = linked.userId;
 
         // YouTube: was jetzt schon im Feed steht, ist nicht neu - sonst käme eine Flut alter Videos.
         if (platform === "youtube") state.seen = (await Feed(account.id))?.entries.map((entry) => entry.id) ?? [];
@@ -87,7 +94,7 @@ export default class StreamService {
             accountName: account.name,
             accountLogin: account.login,
             avatar: account.avatar,
-            config: DefaultStreamConfig(platform),
+            config,
             state,
             createdBy: userId,
         });
@@ -151,6 +158,12 @@ export default class StreamService {
                         ? ping
                         : null,
             kinds: Array.isArray(input.kinds) ? allowed.filter((kind) => (input.kinds as unknown[]).includes(kind)) : previous.kinds,
+            userId:
+                input.userId === undefined
+                    ? previous.userId
+                    : typeof input.userId === "string" && guild.members.cache.has(input.userId)
+                      ? input.userId
+                      : null,
             messages,
             update: typeof input.update === "boolean" ? input.update : previous.update,
             ended: input.ended === "summary" || input.ended === "delete" || input.ended === "keep" ? input.ended : previous.ended,
@@ -234,6 +247,7 @@ export default class StreamService {
             "stream.viewers": String(stream.viewers),
             "stream.preview": stream.preview ?? "",
             "stream.started": `<t:${Math.floor(stream.startedAt / 1000)}:R>`,
+            "streamer.mention": notifier.config.userId ? `<@${notifier.config.userId}>` : "",
             guild: guild.name,
         };
     }
@@ -247,6 +261,7 @@ export default class StreamService {
             "video.thumbnail": entry.thumbnail,
             "video.kind": KIND_LABELS[kind],
             "video.published": `<t:${Math.floor((entry.published || Date.now()) / 1000)}:R>`,
+            "channel.mention": notifier.config.userId ? `<@${notifier.config.userId}>` : "",
             guild: guild.name,
         };
     }
@@ -323,6 +338,8 @@ export default class StreamService {
             await this.TwitchEnded(guild, notifier, state.live);
             state.lastLiveAt = now;
             state.live = null;
+
+            if (!stream) await this.LinkedRole(guild, notifier, false);
         }
 
         if (stream && !state.live) {
@@ -337,6 +354,8 @@ export default class StreamService {
             const message = notifier.config.channelId && notifier.config.kinds.includes("live")
                 ? await SendLog(guild, notifier.config.channelId, { ...(await this.Card(notifier, "live", values)), flags: MessageFlags.IsComponentsV2 })
                 : null;
+
+            await this.LinkedRole(guild, notifier, true);
 
             state.problem = notifier.config.channelId && !message ? "Die Live-Karte ging nicht raus – darf der Bot in den Kanal schreiben?" : null;
             state.live = {
@@ -433,7 +452,7 @@ export default class StreamService {
             // Neu ist, was ein Eintrag noch nicht kennt - jünger als zwei Tage, alte tauchen sonst nach Löschungen wieder auf.
             const fresh = feed.entries.filter((entry) => Date.now() - entry.published < 2 * 86_400_000);
             const unknown = fresh.filter((entry) => list.some((notifier) => !(notifier.state.seen ?? []).includes(entry.id)));
-            const waiting = [...new Set(list.flatMap((notifier) => notifier.state.upcoming ?? []))];
+            const waiting = [...new Set(list.flatMap((notifier) => [...(notifier.state.upcoming ?? []), ...(notifier.state.liveVideo ? [notifier.state.liveVideo] : [])]))];
             const states = this.YouTubeLive && (unknown.length || waiting.length)
                 ? await LiveStates([...new Set([...unknown.map((entry) => entry.id), ...waiting])], this.client.config.YOUTUBE_API_KEY)
                 : new Map<string, "live" | "upcoming" | "none">();
@@ -451,8 +470,17 @@ export default class StreamService {
         const seen = new Set(notifier.state.seen ?? []);
         const upcoming = new Set(notifier.state.upcoming ?? []);
         let last = notifier.state.last ?? null;
+        let liveVideo = notifier.state.liveVideo ?? null;
         let problem: string | null = null;
         let changed = false;
+
+        // Der gemeldete Livestream ist vorbei: die Live-Rolle geht zurück.
+        if (liveVideo && states.get(liveVideo) !== "live") {
+            liveVideo = null;
+            changed = true;
+
+            await this.LinkedRole(guild, notifier, false);
+        }
 
         // Älteste zuerst - so stehen sie in Discord in der richtigen Reihenfolge.
         for (const entry of [...entries].reverse()) {
@@ -481,6 +509,12 @@ export default class StreamService {
 
             if (sent) last = { id: entry.id, title: entry.title, kind, at: Date.now() };
             else problem = "Die Meldung ging nicht raus – darf der Bot in den Kanal schreiben?";
+
+            if (kind === "live") {
+                liveVideo = entry.id;
+
+                await this.LinkedRole(guild, notifier, true);
+            }
         }
 
         if (!changed) return;
@@ -490,6 +524,7 @@ export default class StreamService {
             seen: [...seen].slice(-SEEN_MAX),
             upcoming: [...upcoming].slice(-20),
             last,
+            liveVideo,
             problem,
         });
     }
@@ -501,24 +536,61 @@ export default class StreamService {
         return this.client.moduleSettings.Of<ITwitchSettings>(guildId, TWITCH_MODULE, { liveRoleId: null, liveRoleFilter: null });
     }
 
+    YouTubeSettings(guildId: string): Promise<IYouTubeSettings> {
+        return this.client.moduleSettings.Of<IYouTubeSettings>(guildId, YOUTUBE_MODULE, { liveRoleId: null });
+    }
+
     async SaveTwitchSettings(guild: Guild, input: unknown): Promise<ITwitchSettings> {
         const raw = IsRecord(input) ? input : {};
         const role = (value: unknown): string | null => (typeof value === "string" && guild.roles.cache.has(value) && value !== guild.id ? value : null);
         const settings: ITwitchSettings = { liveRoleId: role(raw.liveRoleId), liveRoleFilter: role(raw.liveRoleFilter) };
 
-        if (settings.liveRoleId) {
-            const target = guild.roles.cache.get(settings.liveRoleId)!;
-            const me = guild.members.me;
-
-            if (target.managed) throw new StreamError("Diese Rolle verwaltet eine Integration – der Bot kann sie nicht vergeben.");
-            if (!me?.permissions.has(PermissionFlagsBits.ManageRoles) || target.comparePositionTo(me.roles.highest) >= 0) {
-                throw new StreamError(`Die Live-Rolle @${target.name} muss unter der höchsten Rolle des Bots stehen, und er braucht „Rollen verwalten“.`);
-            }
-        }
-
+        this.CheckLiveRole(guild, settings.liveRoleId);
         await this.client.moduleSettings.Save(guild.id, TWITCH_MODULE, settings);
 
         return settings;
+    }
+
+    async SaveYouTubeSettings(guild: Guild, input: unknown): Promise<IYouTubeSettings> {
+        const raw = IsRecord(input) ? input : {};
+        const id = typeof raw.liveRoleId === "string" && guild.roles.cache.has(raw.liveRoleId) && raw.liveRoleId !== guild.id ? raw.liveRoleId : null;
+
+        this.CheckLiveRole(guild, id);
+        await this.client.moduleSettings.Save(guild.id, YOUTUBE_MODULE, { liveRoleId: id });
+
+        return { liveRoleId: id };
+    }
+
+    /** Kann der Bot diese Rolle überhaupt vergeben? Sonst sagt das Dashboard, woran es liegt. */
+    private CheckLiveRole(guild: Guild, roleId: string | null): void {
+        if (!roleId) return;
+
+        const target = guild.roles.cache.get(roleId)!;
+        const me = guild.members.me;
+
+        if (target.managed) throw new StreamError("Diese Rolle verwaltet eine Integration – der Bot kann sie nicht vergeben.");
+        if (!me?.permissions.has(PermissionFlagsBits.ManageRoles) || target.comparePositionTo(me.roles.highest) >= 0) {
+            throw new StreamError(`Die Live-Rolle @${target.name} muss unter der höchsten Rolle des Bots stehen, und er braucht „Rollen verwalten“.`);
+        }
+    }
+
+    /**
+     * Die Live-Rolle für den verknüpften User eines Eintrags - unabhängig von
+     * der Presence: bei YouTube gibt es keine, und bei Twitch streamt nicht
+     * jeder mit sichtbarem Status.
+     */
+    private async LinkedRole(guild: Guild, notifier: IStreamNotifier, live: boolean): Promise<void> {
+        const userId = notifier.config.userId;
+
+        if (!userId) return;
+
+        const roleId = notifier.platform === "twitch" ? (await this.TwitchSettings(guild.id)).liveRoleId : (await this.YouTubeSettings(guild.id)).liveRoleId;
+
+        if (!roleId) return;
+
+        const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+
+        if (member) await this.LiveRole(member, roleId, live);
     }
 
     /** Streamt jemand auf Twitch (Discords Streaming-Status), bekommt er die Live-Rolle - und verliert sie danach. */
@@ -528,14 +600,35 @@ export default class StreamService {
         if (!member || !presence.guild || !this.client.databaseService.Ready) return;
         if (!(await this.client.settings.Of(presence.guild.id)).modules.includes(TWITCH_MODULE)) return;
 
+        const streaming = presence.activities.find((activity) => activity.type === ActivityType.Streaming && /twitch\.tv/i.test(activity.url ?? ""));
+
+        if (streaming?.url) await this.LearnLink(presence.guild, member, streaming.url).catch(() => undefined);
+
         const { liveRoleId, liveRoleFilter } = await this.TwitchSettings(presence.guild.id);
 
         if (!liveRoleId) return;
 
-        const streaming = presence.activities.some((activity) => activity.type === ActivityType.Streaming && /twitch\.tv/i.test(activity.url ?? ""));
-        const wanted = streaming && (!liveRoleFilter || member.roles.cache.has(liveRoleFilter));
+        const wanted = Boolean(streaming) && (!liveRoleFilter || member.roles.cache.has(liveRoleFilter));
 
         await this.LiveRole(member, liveRoleId, wanted);
+    }
+
+    /**
+     * Streamt jemand sichtbar unter dem Namen eines Eintrags, gehört der Eintrag
+     * ihm - dann steht der Discord-User da, ohne dass ihn jemand auswählt.
+     * Einmal gesetzt, bleibt er: überschrieben wird nie.
+     */
+    private async LearnLink(guild: Guild, member: GuildMember, url: string): Promise<void> {
+        const login = TwitchLogin(url);
+
+        if (!login) return;
+
+        for (const notifier of await this.client.streamNotifiers.OfGuild(guild.id, "twitch")) {
+            if (notifier.config.userId || notifier.accountLogin?.toLowerCase() !== login) continue;
+
+            await this.client.streamNotifiers.SaveConfig(notifier.id, { ...notifier.config, userId: member.id }, notifier.enabled);
+            logger.user(`📡 Twitch ${notifier.accountName} auf ${guild.id} gehört ${member.id} (aus dem Streaming-Status)`);
+        }
     }
 
     private async LiveRole(member: GuildMember, roleId: string, wanted: boolean): Promise<void> {

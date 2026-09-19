@@ -38,6 +38,7 @@ export const TWITCH_PLACEHOLDER_KEYS = [
     "stream.viewers",
     "stream.preview",
     "stream.started",
+    "streamer.mention",
     "guild",
 ] as const;
 
@@ -49,6 +50,7 @@ export const YOUTUBE_PLACEHOLDER_KEYS = [
     "video.thumbnail",
     "video.kind",
     "video.published",
+    "channel.mention",
     "guild",
 ] as const;
 
@@ -85,6 +87,7 @@ export function DefaultStreamConfig(platform: StreamPlatform): IStreamConfig {
         messages: {},
         update: true,
         ended: "summary",
+        userId: null,
     };
 }
 

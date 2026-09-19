@@ -84,7 +84,7 @@ https://discord.com/oauth2/authorize
   ?client_id=<CLIENT_ID>
   &redirect_uri=<SERVER_PUBLIC_URL>/callback
   &response_type=code
-  &scope=identify%20guilds%20guilds.members.read
+  &scope=identify%20guilds%20guilds.members.read%20email%20connections
   &state=<einmaliger Wert>
 ```
 
@@ -96,8 +96,9 @@ Nötige Scopes — sie stehen als `OAUTH_SCOPES` in `src/constants/Dashboard.ts`
 | `guilds` | Die Serverliste samt Rechten und Mitgliederzahl |
 | `guilds.members.read` | Auf der Detailseite: Beitrittsdatum, Nickname und Rollenzahl des Angemeldeten auf genau diesem Server. **Plural** — `guilds.member.read` weist Discord mit `Invalid scope` ab, obwohl der Endpunkt darunter `/member` heißt |
 | `email` | Die Adresse im Konto-Bereich der Einstellungen |
+| `connections` | Twitch und YouTube des Angemeldeten. Nur diese beiden werden gespeichert (`user_connections`) — daran erkennt der Notifier, wem ein Kanal gehört, siehe [Notifiers.md](Notifiers.md#wer-ist-das-in-discord) |
 
-Jeder Scope kostet eine Zeile mehr im Zustimmungsdialog — wer `guilds.members.read` nicht braucht, streicht ihn aus `OAUTH_SCOPES` und die Detailseite lässt den Block einfach weg. Dasselbe gilt für `email`: ohne den Scope bleibt die Zeile in den Einstellungen leer, sonst ändert sich nichts.
+Jeder Scope kostet eine Zeile mehr im Zustimmungsdialog — wer `guilds.members.read` nicht braucht, streicht ihn aus `OAUTH_SCOPES` und die Detailseite lässt den Block einfach weg. Dasselbe gilt für `email` und `connections`: ohne sie bleibt die Zeile in den Einstellungen leer bzw. wird der Discord-User eines Streamers von Hand gewählt, sonst ändert sich nichts.
 
 > **`email` kam später dazu.** Sitzungen, die davor ausgestellt wurden, tragen weder die Adresse noch den `@`-Namen. Sie bleiben gültig — das Dashboard schreibt dort „Nach dem nächsten Anmelden sichtbar“, statt den Nutzer auszusperren. `IDashboardSession.handle` und `.email` sind genau deshalb optional.
 
