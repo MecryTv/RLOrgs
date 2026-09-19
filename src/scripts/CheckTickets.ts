@@ -30,6 +30,7 @@ import {
     LEGACY_MODMAIL_PANEL,
     MESSAGE_KEYS,
     TicketNumber,
+    AssignCodes,
 } from "../constants/Tickets";
 import { AttachmentKey } from "../constants/Transcripts";
 import { ITicket, ITicketConfig } from "../interfaces/services/tickets/ITicket";
@@ -76,8 +77,10 @@ function FakeTicket(patch: Partial<ITicket> = {}): ITicket {
         id: 1,
         guildId: GUILD,
         number: 42,
+        code: "SUP",
         optionId: "support",
         openerId: USER,
+        openerCode: "7K3F",
         contact: "direct",
         channelId: "1",
         messageId: "2",
@@ -130,7 +133,16 @@ function checkConfig(client: BotClient): void {
         "Die festen Aktionen stehen ebenfalls darin",
         CORE_ACTIONS.every((action) => values.includes(action))
     );
-    check("Die Nummer wird vierstellig geschrieben", TicketNumber(42) === "#0042", TicketNumber(42));
+    check("Die Ticket-ID: Kürzel und Nummer", TicketNumber(42, "SUP") === "SUP-42", TicketNumber(42, "SUP"));
+    check("Ältere Tickets ohne Kürzel: #42", TicketNumber(42) === "#42" && TicketNumber(42, null) === "#42");
+
+    const codes = AssignCodes([{ name: "Support" }, { name: "Supporter" }, { name: "Übersicht" }, { name: "VIP", code: "vip1" }, { name: "X", code: "?!" }]);
+
+    check("Kürzel aus dem Namen: SUP", codes[0].code === "SUP", codes[0].code);
+    check("Ein zweites SUP wird SUP2", codes[1].code === "SUP2", codes[1].code);
+    check("Umlaute ohne Punkte: UBE", codes[2].code === "UBE", codes[2].code);
+    check("Eingetragene Kürzel bleiben, groß geschrieben", codes[3].code === "VIP1", codes[3].code);
+    check("Ungültiges Kürzel: aus dem Namen, aufgefüllt", codes[4].code === "XTK", codes[4].code);
     check("Slowmode-Beschriftung", SlowmodeLabel(0) === "Aus" && SlowmodeLabel(30) === "30 Sekunden" && SlowmodeLabel(300) === "5 Minuten");
 }
 
@@ -249,11 +261,14 @@ function checkClean(client: BotClient): void {
     check("Transcripts: ohne Angabe bleibt alles, wie es war", client.ticketService.Clean(guild, {}, archived).transcripts.channelId === TEXT);
 
     // Moderatoren: echte IDs, doppelte nur einmal, Rollen nur, wenn es sie gibt.
-    const mods = client.ticketService.Clean(guild, { moderators: { users: [STAFF, STAFF, "abc", 42], roles: [ROLE, "90071992547400001", GUILD] } }, config);
+    const mods = client.ticketService.CleanModerators(guild, { users: [STAFF, STAFF, "abc", 42], roles: [ROLE, "90071992547400001", GUILD] });
 
-    check("Moderatoren: User-IDs, doppelte nur einmal", JSON.stringify(mods.moderators.users) === JSON.stringify([STAFF]), JSON.stringify(mods.moderators.users));
-    check("Moderatoren: nur Rollen, die es gibt - @everyone nicht", JSON.stringify(mods.moderators.roles) === JSON.stringify([ROLE]), JSON.stringify(mods.moderators.roles));
-    check("Moderatoren: ohne Angabe bleibt die Liste", client.ticketService.Clean(guild, {}, mods).moderators.users[0] === STAFF);
+    check("Moderatoren: User-IDs, doppelte nur einmal", JSON.stringify(mods.users) === JSON.stringify([STAFF]), JSON.stringify(mods.users));
+    check("Moderatoren: nur Rollen, die es gibt - @everyone nicht", JSON.stringify(mods.roles) === JSON.stringify([ROLE]), JSON.stringify(mods.roles));
+    check(
+        "Moderatoren gehören dem Server - die Ticket-Einstellungen ändern sie nicht",
+        client.ticketService.Clean(guild, { moderators: { users: [USER] } }, { ...config, moderators: mods }).moderators.users[0] === STAFF
+    );
     check("Moderatoren: ältere Einstellungen haben leere Listen", DefaultConfig().moderators.users.length === 0 && DefaultConfig().moderators.roles.length === 0);
 }
 
@@ -499,7 +514,7 @@ async function checkTranscripts(client: BotClient): Promise<void> {
         AttachmentKey("https://example.com/attachments/1/2/a.png") === null && AttachmentKey("http://cdn.discordapp.com/attachments/1/2/a.png") === null
     );
 
-    const entry = { ticketId: 1, guildId: GUILD, number: 42, meta: transcript.meta };
+    const entry = { ticketId: 1, guildId: GUILD, number: 42, code: "SUP", meta: transcript.meta };
     const modmail = { ...entry, meta: { ...transcript.meta, contact: "modmail" as const } };
 
     check("Klassisch: der Ersteller darf sein Transcript öffnen", await client.transcriptService.CanRead(USER, entry));
@@ -538,6 +553,7 @@ async function checkLive(client: BotClient): Promise<void> {
     config.options.push({
         id: "bewerbung",
         name: "Bewerbung",
+        code: "BEW",
         description: "",
         emoji: null,
         categoryId: null,
@@ -688,8 +704,8 @@ async function checkDatabase(client: BotClient): Promise<void> {
 
     // Zwei Tickets im selben Augenblick: die Nummern müssen verschieden sein.
     const [first, second] = await Promise.all([
-        tickets.Create(GUILD, "support", USER, "direct"),
-        tickets.Create(GUILD, "support", STAFF, "direct"),
+        tickets.Create(GUILD, "support", "SUP", USER, "7K3F", "direct"),
+        tickets.Create(GUILD, "support", "SUP", STAFF, null, "direct"),
     ]);
 
     check("Zwei gleichzeitige Tickets bekommen verschiedene Nummern", first.number !== second.number, `${first.number} / ${second.number}`);

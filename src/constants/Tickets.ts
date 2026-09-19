@@ -173,6 +173,7 @@ export function DefaultConfig(): ITicketConfig {
             {
                 id: "support",
                 name: "Support",
+                code: "SUP",
                 description: "Fragen und Probleme rund um den Server",
                 emoji: "🎫",
                 categoryId: null,
@@ -190,6 +191,42 @@ export function DefaultConfig(): ITicketConfig {
 }
 
 /** "#0042" - die Nummer, wie sie überall steht. */
-export function TicketNumber(number: number): string {
-    return `#${String(number).padStart(4, "0")}`;
+/** Die Ticket-ID: Kürzel des Themas und Nummer (SUP-5). Ohne Kürzel - ältere Tickets - #5. */
+export function TicketNumber(number: number, code?: string | null): string {
+    return code ? `${code}-${number}` : `#${number}`;
+}
+
+/** Ein Kürzel, wie es jemand eingetragen hat: 2 bis 6 Großbuchstaben oder Ziffern - sonst null. */
+export function CleanCode(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+
+    const code = value.trim().toUpperCase();
+
+    return /^[A-Z0-9]{2,6}$/.test(code) ? code : null;
+}
+
+// Aus dem Namen: die ersten drei Buchstaben, Umlaute ohne Punkte (Übersicht -> UBE).
+function CodeFrom(name: string): string {
+    const letters = name.normalize("NFKD").replace(/\p{M}/gu, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+    return `${letters}TKT`.slice(0, 3);
+}
+
+/**
+ * Die Kürzel aller Themen: eingetragene bleiben, fehlende kommen aus dem Namen.
+ * Jedes Kürzel steht nur einmal - ein zweites SUP wird SUP2.
+ */
+export function AssignCodes<T extends { name: string; code?: string | null }>(options: T[]): (T & { code: string })[] {
+    const used = new Set<string>();
+
+    return options.map((option) => {
+        const base = CleanCode(option.code) ?? CodeFrom(option.name);
+        let code = base;
+
+        for (let suffix = 2; used.has(code); suffix++) code = `${base.slice(0, 6 - String(suffix).length)}${suffix}`;
+
+        used.add(code);
+
+        return { ...option, code };
+    });
 }

@@ -11,6 +11,12 @@ import logger from "../utils/logger";
 export interface ILiveTicket {
     id: number;
     number: number;
+    /** Das Kürzel des Themas (SUP) - fehlt bei Tickets von vor den Kürzeln. */
+    code: string | null;
+    /** Die feste ID des Erstellers ohne "U-". */
+    userCode: string | null;
+    /** Wie viele Tickets der Ersteller auf diesem Server schon hatte, dieses mitgezählt. */
+    openerTickets: number;
     option: { id: string; name: string; emoji: string | null };
     contact: TicketContact;
     status: TicketStatus;
@@ -154,11 +160,16 @@ export default class LiveService {
     async Tickets(access: ILiveAccess): Promise<ILiveTicket[]> {
         const open = await this.client.tickets.OpenOfGuild(access.guild.id);
         const visible = open.filter((ticket) => this.CanSee(access, ticket));
+        // Eine Abfrage für alle statt einer je Ticket.
+        const counts = await this.client.tickets.CountsByOpener(
+            access.guild.id,
+            visible.map((ticket) => ticket.openerId)
+        );
 
-        return Promise.all(visible.map((ticket) => this.Summary(access.guild, access.config, ticket)));
+        return Promise.all(visible.map((ticket) => this.Summary(access.guild, access.config, ticket, counts)));
     }
 
-    async Summary(guild: Guild, config: ITicketConfig, ticket: ITicket): Promise<ILiveTicket> {
+    async Summary(guild: Guild, config: ITicketConfig, ticket: ITicket, counts?: Map<string, number>): Promise<ILiveTicket> {
         const option = OptionOf(config, ticket);
         const channel = ticket.channelId ? this.client.channels.cache.get(ticket.channelId) : null;
         const last = channel && "lastMessageId" in channel ? channel.lastMessageId : null;
@@ -176,9 +187,15 @@ export default class LiveService {
             })
         );
 
+        const total = counts ?? (await this.client.tickets.CountsByOpener(guild.id, [ticket.openerId]));
+
         return {
             id: ticket.id,
             number: ticket.number,
+            code: ticket.code,
+            // Ältere Tickets kennen die ID noch nicht - sie kommt dann aus user_codes.
+            userCode: ticket.openerCode ?? (await this.client.userCodes.Of(ticket.openerId).catch(() => null)),
+            openerTickets: total.get(ticket.openerId) ?? 1,
             option: { id: ticket.optionId, name: option?.name ?? ticket.optionId, emoji: option?.emoji ?? null },
             contact: ticket.contact,
             status: ticket.status,

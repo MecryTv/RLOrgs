@@ -48,6 +48,8 @@ export interface ITranscriptMeta {
     optionId: string;
     option: string;
     contact: TicketContact;
+    /** Die feste User-ID des Erstellers (ohne "U-") - fehlt in älteren Transcripts. */
+    openerCode?: string | null;
     opener: ITranscriptUser;
     claimer: ITranscriptUser | null;
     closer: ITranscriptUser | null;
@@ -66,6 +68,8 @@ export interface ITranscript {
     version: 1;
     ticketId: number;
     number: number;
+    /** Das Kürzel des Tickets (SUP) - fehlt in älteren Transcripts. */
+    code?: string | null;
     guild: { id: string; name: string; icon: string | null };
     channel: { id: string; name: string };
     meta: ITranscriptMeta;

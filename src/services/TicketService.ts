@@ -47,6 +47,7 @@ import {
     DELETE_NOW,
     DELETE_NOW_DELAY,
     HOUR_MS,
+    AssignCodes,
     MAX_LIMIT,
     MAX_MODERATORS,
     MAX_NOTE,
@@ -64,9 +65,10 @@ import {
     TicketPriority,
 } from "../constants/Tickets";
 import { SNOWFLAKE } from "../constants/Discord";
-import { ITicket, ITicketConfig, ITicketOption } from "../interfaces/services/tickets/ITicket";
+import { ITicket, ITicketConfig, ITicketModerators, ITicketOption } from "../interfaces/services/tickets/ITicket";
 import { TicketPatch } from "../models/Tickets";
 import logger from "../utils/logger";
+import { IsLogTarget, WarmLogTarget } from "../utils/logtarget";
 
 /** Ein Grund, den der Nutzer lesen soll - kein Programmfehler. */
 export class TicketError extends Error {
@@ -308,6 +310,7 @@ export default class TicketService {
                 options.push({
                     id,
                     name,
+                    code: typeof raw.code === "string" ? raw.code : "",
                     description: typeof raw.description === "string" ? raw.description.trim().slice(0, 100) : "",
                     emoji: this.CleanEmoji(raw.emoji),
                     categoryId: channelOf(raw.categoryId, ChannelType.GuildCategory),
@@ -317,6 +320,9 @@ export default class TicketService {
                 });
             }
         }
+
+        // Kürzel: eingetragen oder aus dem Namen, jedes nur einmal (SUP, BEW ...).
+        options = AssignCodes(options);
 
         const messages = { ...previous.messages };
 
@@ -342,29 +348,14 @@ export default class TicketService {
         const limit = Number(input.limit);
         const deleteAfter = Number(input.deleteAfter);
 
-        const textChannel = (value: unknown): string | null => {
-            const type = typeof value === "string" ? guild.channels.cache.get(value)?.type : undefined;
-
-            return type === ChannelType.GuildText || type === ChannelType.GuildAnnouncement ? (value as string) : null;
-        };
-
-        // Moderatoren: nur echte IDs, Rollen nur, wenn es sie auf dem Server gibt.
-        const mods = IsRecord(input.moderators) ? input.moderators : null;
-        const ids = (value: unknown, keep: (id: string) => boolean): string[] =>
-            Array.isArray(value)
-                ? [...new Set(value.filter((id): id is string => typeof id === "string" && SNOWFLAKE.test(id) && keep(id)))].slice(0, MAX_MODERATORS)
-                : [];
-        const moderators = mods
-            ? {
-                  users: ids(mods.users, (id) => id !== this.client.user?.id),
-                  roles: ids(mods.roles, (id) => role(id) !== null),
-              }
-            : previous.moderators;
+        // Textkanal oder Thread - etwa ein Beitrag in einem Forum (siehe utils/logtarget.ts).
+        const logTarget = (value: unknown): string | null =>
+            typeof value === "string" && IsLogTarget(guild.channels.cache.get(value)) ? value : null;
 
         const wanted = IsRecord(input.transcripts) ? input.transcripts : {};
         const transcripts = {
             enabled: typeof wanted.enabled === "boolean" ? wanted.enabled : previous.transcripts.enabled,
-            channelId: wanted.channelId === undefined ? previous.transcripts.channelId : textChannel(wanted.channelId),
+            channelId: wanted.channelId === undefined ? previous.transcripts.channelId : logTarget(wanted.channelId),
             dm: typeof wanted.dm === "boolean" ? wanted.dm : previous.transcripts.dm,
         };
 
@@ -382,7 +373,22 @@ export default class TicketService {
             tags: previous.tags,
             panel: previous.panel,
             transcripts,
-            moderators,
+            // Die Moderatoren stellt der Server ein (CleanModerators), nicht die Tickets.
+            moderators: previous.moderators,
+        };
+    }
+
+    /** Moderatoren aus dem Dashboard: nur echte IDs, Rollen nur, wenn es sie auf dem Server gibt. */
+    CleanModerators(guild: Guild, input: unknown): ITicketModerators {
+        const raw = IsRecord(input) ? input : {};
+        const ids = (value: unknown, keep: (id: string) => boolean): string[] =>
+            Array.isArray(value)
+                ? [...new Set(value.filter((id): id is string => typeof id === "string" && SNOWFLAKE.test(id) && keep(id)))].slice(0, MAX_MODERATORS)
+                : [];
+
+        return {
+            users: ids(raw.users, (id) => id !== this.client.user?.id),
+            roles: ids(raw.roles, (id) => id !== guild.id && guild.roles.cache.has(id)),
         };
     }
 
@@ -402,6 +408,10 @@ export default class TicketService {
 
     async Save(guild: Guild, input: unknown): Promise<ITicketConfig> {
         const previous = await this.client.ticketSettings.Of(guild.id);
+
+        // Ein archivierter Forum-Beitrag steht nicht im Cache - Clean() sucht nur dort.
+        if (IsRecord(input) && IsRecord(input.transcripts)) await WarmLogTarget(guild, input.transcripts.channelId);
+
         const config = this.Clean(guild, input, previous);
 
         if (config.surface === "forum" && config.forumId) await this.SyncTags(guild, config);
@@ -411,7 +421,6 @@ export default class TicketService {
         // Ein schon gesendetes Panel zeigt sofort den neuen Stand - etwa den
         // DM-Hinweis, sobald ModMail an ist. Die Antwort wartet nicht darauf.
         void this.RefreshPanel(guild, config);
-        void this.SyncModerators(guild, previous, config);
 
         return config;
     }
@@ -420,11 +429,11 @@ export default class TicketService {
      * Neue Moderatoren sehen auch die schon offenen Ticket-Kanäle, entfernte nicht
      * mehr. Forum-Posts erben die Rechte des Forums - dort gibt es nichts zu tun.
      */
-    private async SyncModerators(guild: Guild, before: ITicketConfig, after: ITicketConfig): Promise<void> {
-        const kind = (config: ITicketConfig) =>
+    async SyncModerators(guild: Guild, before: ITicketModerators, after: ITicketModerators): Promise<void> {
+        const kind = (moderators: ITicketModerators) =>
             new Map<string, OverwriteType>([
-                ...config.moderators.users.map((id): [string, OverwriteType] => [id, OverwriteType.Member]),
-                ...config.moderators.roles.map((id): [string, OverwriteType] => [id, OverwriteType.Role]),
+                ...moderators.users.map((id): [string, OverwriteType] => [id, OverwriteType.Member]),
+                ...moderators.roles.map((id): [string, OverwriteType] => [id, OverwriteType.Role]),
             ]);
         const was = kind(before);
         const now = kind(after);
@@ -434,6 +443,7 @@ export default class TicketService {
         if (added.length === 0 && removed.length === 0) return;
 
         const allow = Grant(Allowed(guild, MEMBER_ALLOW));
+        const config = await this.client.ticketSettings.Of(guild.id);
 
         for (const ticket of await this.client.tickets.OpenOfGuild(guild.id)) {
             const channel = ticket.channelId ? guild.channels.cache.get(ticket.channelId) : null;
@@ -441,7 +451,7 @@ export default class TicketService {
             if (channel?.type !== ChannelType.GuildText) continue;
 
             // Wer das Ticket aus anderem Grund sieht, behält es.
-            const keep = new Set([SupportRoleOf(after, OptionOf(after, ticket)), ticket.openerId, ...ticket.members]);
+            const keep = new Set([SupportRoleOf(config, OptionOf(config, ticket)), ticket.openerId, ...ticket.members]);
 
             for (const [id, type] of added) {
                 await channel.permissionOverwrites.edit(id, allow, { type }).catch((error) => logger.warn(`🎫 Moderator ${id}: ${String(error)}`));
@@ -766,7 +776,9 @@ export default class TicketService {
             throw new TicketError("Das Ticket-System ist noch nicht fertig eingerichtet: Es ist kein Forum gewählt.");
         }
 
-        let ticket = await this.client.tickets.Create(guild.id, option.id, user.id, config.contact);
+        // Die feste User-ID steht gleich am Ticket - ohne Datenbank-Hänger bleibt sie leer.
+        const openerCode = await this.client.userCodes.Of(user.id).catch(() => null);
+        let ticket = await this.client.tickets.Create(guild.id, option.id, option.code, user.id, openerCode, config.contact);
         let channel: TicketChannel | null = null;
         let sentDirect = false;
 
@@ -785,7 +797,7 @@ export default class TicketService {
                 channel = await (forum as ForumChannel).threads.create({
                     name: this.ThreadName(ticket, option, user),
                     message: {
-                        content: `🎫 **${TicketNumber(ticket.number)}** · ${escapeMarkdown(option.name)} · <@${user.id}>`,
+                        content: `🎫 **${TicketNumber(ticket.number, ticket.code)}** · ${escapeMarkdown(option.name)} · <@${user.id}>`,
                         allowedMentions: { parse: [] },
                     },
                     appliedTags: option.tagId ? [option.tagId] : [],
@@ -816,7 +828,7 @@ export default class TicketService {
 
             void this.client.liveService.Changed(ticket.id);
 
-            logger.user(`🎫 Ticket ${TicketNumber(ticket.number)} auf ${guild.id} geöffnet (${option.id}, von ${user.id})`);
+            logger.user(`🎫 Ticket ${TicketNumber(ticket.number, ticket.code)} auf ${guild.id} geöffnet (${option.id}, von ${user.id})`);
 
             return ticket;
         } catch (error) {
@@ -850,7 +862,8 @@ export default class TicketService {
     }
 
     private ChannelName(ticket: ITicket, option: ITicketOption | null): string {
-        const base = `${option?.id ?? ticket.optionId}-${String(ticket.number).padStart(4, "0")}`;
+        // sup-5: das Kürzel steht am Ticket und bleibt, auch wenn es umzieht.
+        const base = `${(ticket.code ?? option?.code ?? "ticket").toLowerCase()}-${ticket.number}`;
 
         if (ticket.status === "closed") return `closed-${base}`;
 
@@ -858,7 +871,7 @@ export default class TicketService {
     }
 
     private ThreadName(ticket: ITicket, option: ITicketOption, user: User): string {
-        return `${TicketNumber(ticket.number)} · ${option.name} · ${user.username}`.slice(0, 100);
+        return `${TicketNumber(ticket.number, ticket.code)} · ${option.name} · ${user.username}`.slice(0, 100);
     }
 
     /* ----------------------------------------------------------
@@ -986,7 +999,7 @@ export default class TicketService {
         await this.Say(context, `✅ ${member} übernimmt das Ticket.`, "#35e07f");
         await this.Notify(
             context,
-            `✅ **${escapeMarkdown(this.ShownName(context, member))}** kümmert sich jetzt um dein Ticket ${TicketNumber(context.ticket.number)}.`,
+            `✅ **${escapeMarkdown(this.ShownName(context, member))}** kümmert sich jetzt um dein Ticket ${TicketNumber(context.ticket.number, context.ticket.code)}.`,
             "#35e07f"
         );
 
@@ -1008,7 +1021,7 @@ export default class TicketService {
 
         await this.Update(context, { claimedBy: null });
         await this.Say(context, `↩️ ${member} gibt das Ticket zurück – es wartet wieder auf das Team.`);
-        await this.Notify(context, `↩️ Dein Ticket ${TicketNumber(context.ticket.number)} wartet wieder auf das Team.`);
+        await this.Notify(context, `↩️ Dein Ticket ${TicketNumber(context.ticket.number, context.ticket.code)} wartet wieder auf das Team.`);
 
         void this.SyncThread(context);
         await this.Refresh(context);
@@ -1090,7 +1103,7 @@ export default class TicketService {
         context.option = target;
 
         await this.Say(context, `🔁 ${member} hat das Ticket nach **${escapeMarkdown(target.name)}** verschoben.`);
-        await this.Notify(context, `🔁 Dein Ticket ${TicketNumber(context.ticket.number)} liegt jetzt bei **${escapeMarkdown(target.name)}**.`);
+        await this.Notify(context, `🔁 Dein Ticket ${TicketNumber(context.ticket.number, context.ticket.code)} liegt jetzt bei **${escapeMarkdown(target.name)}**.`);
 
         void this.SyncThread(context);
         this.Rename(context);
@@ -1105,7 +1118,7 @@ export default class TicketService {
 
         await this.Update(context, { priority });
         await this.Say(context, `⚡ ${member} setzt die Priorität auf ${label.emoji} **${label.name}**.`);
-        await this.Notify(context, `⚡ Priorität deines Tickets ${TicketNumber(context.ticket.number)}: ${label.emoji} **${label.name}**.`);
+        await this.Notify(context, `⚡ Priorität deines Tickets ${TicketNumber(context.ticket.number, context.ticket.code)}: ${label.emoji} **${label.name}**.`);
 
         void this.SyncThread(context);
         this.Rename(context);
@@ -1245,7 +1258,7 @@ export default class TicketService {
                 else await this.SendDirect(opener, view);
             }
         } else {
-            await this.Notify(context, `🔓 Dein Ticket ${TicketNumber(context.ticket.number)} ist wieder offen – du kannst weiterschreiben.`, "#35e07f");
+            await this.Notify(context, `🔓 Dein Ticket ${TicketNumber(context.ticket.number, context.ticket.code)} ist wieder offen – du kannst weiterschreiben.`, "#35e07f");
         }
 
         await this.Say(context, frozen ? `🥶 ${member} hat das Ticket eingefroren.` : `🔓 ${member} hat das Ticket wieder freigegeben.`);
@@ -1298,7 +1311,7 @@ export default class TicketService {
             if (opener) {
                 await this.SendDirect(
                     opener,
-                    InfoView(`📅 Termin zu deinem Ticket ${TicketNumber(context.ticket.number)} auf **${escapeMarkdown(context.guild.name)}**: ${stamp}${extra}`, "#ffc53d")
+                    InfoView(`📅 Termin zu deinem Ticket ${TicketNumber(context.ticket.number, context.ticket.code)} auf **${escapeMarkdown(context.guild.name)}**: ${stamp}${extra}`, "#ffc53d")
                 );
             }
         }
@@ -1447,7 +1460,7 @@ export default class TicketService {
             }, DELETE_NOW_DELAY);
         }
 
-        logger.user(`🔒 Ticket ${TicketNumber(ticket.number)} auf ${guild.id} geschlossen (von ${actor.id})`);
+        logger.user(`🔒 Ticket ${TicketNumber(ticket.number, ticket.code)} auf ${guild.id} geschlossen (von ${actor.id})`);
     }
 
     /**
@@ -1713,7 +1726,7 @@ export default class TicketService {
             if (!context) continue;
 
             const pings = [due.openerId, due.claimedBy].filter((id): id is string => Boolean(id));
-            const text = `⏰ Erinnerung: Der Termin zu Ticket ${TicketNumber(due.number)} ist jetzt. ${pings.map((id) => `<@${id}>`).join(" ")}`;
+            const text = `⏰ Erinnerung: Der Termin zu Ticket ${TicketNumber(due.number, due.code)} ist jetzt. ${pings.map((id) => `<@${id}>`).join(" ")}`;
 
             await context.channel
                 ?.send({ ...InfoView(text, "#ffc53d"), flags: MessageFlags.IsComponentsV2, allowedMentions: { users: pings } })
@@ -1725,7 +1738,7 @@ export default class TicketService {
                 if (opener) {
                     await this.SendDirect(
                         opener,
-                        InfoView(`⏰ Dein Termin zu Ticket ${TicketNumber(due.number)} auf **${escapeMarkdown(context.guild.name)}** ist jetzt.`, "#ffc53d")
+                        InfoView(`⏰ Dein Termin zu Ticket ${TicketNumber(due.number, due.code)} auf **${escapeMarkdown(context.guild.name)}** ist jetzt.`, "#ffc53d")
                     );
                 }
             }

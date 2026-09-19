@@ -9,15 +9,16 @@ import { ClearCookie, DASHBOARD_PATH, SESSION_COOKIE } from "../constants/Dashbo
 import { SNOWFLAKE } from "../constants/Discord";
 import { CORE_ACTIONS } from "../constants/Tickets";
 import { WantsJSON } from "../utils/admin";
-import { PersonOf, SearchMembers, SessionOf } from "../utils/dashboard";
+import { SessionOf } from "../utils/dashboard";
 import logger from "../utils/logger";
+import { CreateLogThread, LogTargetError, LogTargets } from "../utils/logtarget";
 
 interface IBody {
     action?: unknown;
     config?: unknown;
     channelId?: unknown;
     userId?: unknown;
-    query?: unknown;
+    forumId?: unknown;
 }
 
 /** Was die Seite zum Einstellen braucht: Rollen, Kanäle, Kategorien, Emojis. */
@@ -109,7 +110,7 @@ export default class DashboardApiTickets extends Route {
         } catch (error) {
             // Was der Dienst ablehnt, ist eine Angabe des Nutzers - alles andere
             // geht als 500 ins Log (RouteManager.Dispatch).
-            if (error instanceof TicketError) return reply.code(400).send({ error: error.message });
+            if (error instanceof TicketError || error instanceof LogTargetError) return reply.code(400).send({ error: error.message });
 
             throw error;
         }
@@ -119,21 +120,12 @@ export default class DashboardApiTickets extends Route {
         const config = await this.client.ticketSettings.Of(guild.id);
         const blacklist = await this.client.ticketBlacklist.Of(guild.id);
 
-        // Die eingetragenen Moderatoren mit Namen und Bild. Wer den Server verlassen hat, steht mit ID da.
-        const moderators = await Promise.all(
-            config.moderators.users.map(async (id) => {
-                const member = guild.members.cache.get(id) ?? (await guild.members.fetch(id).catch(() => null));
-
-                return member ? { ...PersonOf(member), gone: false } : { id, name: this.client.users.cache.get(id)?.displayName ?? id, avatar: null, gone: true };
-            })
-        );
-
         return {
             config,
-            moderators,
             // Wo das Panel wirklich steht - null, wenn die Nachricht weg ist.
             panel: await this.client.ticketService.PanelStatus(guild, config),
-            guild: Resources(guild),
+            // Dazu die Forum-Beiträge: der Log-Kanal darf auch einer davon sein.
+            guild: { ...Resources(guild), threads: (await LogTargets(guild, [config.transcripts.channelId])).threads },
             actions: ActionEntries(this.client).map((entry) => ({
                 value: entry.value,
                 name: entry.name,
@@ -180,10 +172,18 @@ export default class DashboardApiTickets extends Route {
             return { ok: true, removed };
         }
 
-        if (body.action === "members") {
-            const query = typeof body.query === "string" ? body.query.trim().slice(0, 100) : "";
+        // Ein neuer Beitrag in einem Forum - als Log-Kanal für Transcripts.
+        if (body.action === "logthread") {
+            const thread = await CreateLogThread(
+                guild,
+                body.forumId,
+                "Ticket-Logs",
+                "📄 Hier landen die Transcripts geschlossener Tickets – eingestellt im Dashboard von RL Nexus."
+            );
 
-            return { ok: true, members: (await SearchMembers(guild, query)).map(PersonOf) };
+            logger.user(`🎫 Log-Beitrag ${thread.id} in ${thread.parentId} auf ${guild.id} angelegt (von ${userId})`);
+
+            return { ok: true, thread };
         }
 
         if (body.action === "unblock") {

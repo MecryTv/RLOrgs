@@ -178,6 +178,9 @@ npm run dev
 | `GET <base>/api/guild/:id` | JSON: Serverzahlen aus dem Bot-Cache, die eigenen Mitgliedsdaten und die eingeschalteten Module |
 | `POST <base>/api/guild/:id/modules` | Schaltet ein Modul an oder aus. Nur wer den Server verwalten darf, nur JSON |
 | `GET <base>/api/guild/:id/activity` | JSON: Aktivität für die Übersicht — Stunden, Kanäle, Mitglieder, Ränge. `503` ohne Datenbank, siehe [Activity.md](Activity.md) |
+| `GET,POST <base>/api/guild/:id/moderators` | Die Moderatoren des Servers lesen, speichern, Mitglieder suchen. Nur wer den Server verwalten darf, POST nur JSON |
+| `GET,POST <base>/api/guild/:id/moderation` | Fälle, Aktionen, Notizen, Einstellungen der Moderation — siehe [Moderation.md](Moderation.md#dashboard) |
+| `GET,POST <base>/api/guild/:id/moderation/evidence/…` | Beweisbilder hochladen (roh als `image/*`) und ausliefern |
 | `GET <base>/admins` | Admin-Dashboard. Ohne Sitzung `302` auf den Login |
 | `GET <base>/api/admin` | JSON: Kennzahlen und vergebene Gruppen. Nur Staff, sonst `403` |
 | `POST <base>/api/admin/group` | Vergibt oder entzieht eine Gruppe. Nur Staff, nur JSON |
@@ -211,13 +214,13 @@ Anmelden darf sich **jeder** Discord-Account. Was danach in der Liste steht, hä
 |---|---|---|
 | Owner des Servers | ja | ja |
 | `MANAGE_GUILD` oder `ADMINISTRATOR` | ja | ja |
-| Moderator im Ticket-System (selbst, per Rolle oder mit Support-Rolle) | ja, Marke „Moderator“, eigener Abschnitt und Filter „Moderation“ | nein — nur **Live Tickets** und **Transcriptions**, siehe [Tickets.md](Tickets.md#moderatoren) |
+| Moderator (Moderatoren-Liste des Servers, selbst oder per Rolle, oder eine Support-Rolle der Tickets) | ja, Marke „Moderator“, eigener Abschnitt und Filter „Moderation“ | nein — nur **Live Tickets**, **Transcriptions** und, von der Moderatoren-Liste, die **Moderation**; siehe [Tickets.md](Tickets.md#moderatoren) und [Moderation.md](Moderation.md) |
 | Weder noch | nein | — |
 | Gruppe `administrator` oder `developer` | zusätzlich **jeder** Server, auf dem der Bot ist | nur mit eigenem Recht auf dem Server |
 
 Die Serverliste holt der Bot je Sitzung höchstens einmal gleichzeitig: Eine Seite fragt mehrere Routen auf einmal ab, und alle warten auf denselben Abruf. Antwortet Discord trotzdem mit 429, wartet er die genannte Zeit (bis 5 Sekunden) und fragt einmal nach (`DashboardService.Guilds()` / `Fetch()`).
 
-Moderatoren kommen nicht aus Discords Serverliste, sondern vom Bot: er schaut, ob das Mitglied als Moderator eingetragen ist, eine Moderatoren-Rolle oder eine Support-Rolle (allgemein oder eines Themas) trägt. Nur auf Servern mit eingeschaltetem Ticket-Modul, und nur für Server, die sonst nicht in der Liste stünden. Die Übersicht mit Aktivität bleibt für sie zu.
+Moderatoren kommen nicht aus Discords Serverliste, sondern vom Bot: er schaut, ob das Mitglied als Moderator eingetragen ist, eine Moderatoren-Rolle oder eine Support-Rolle (allgemein oder eines Themas) trägt. Nur auf Servern mit eingeschaltetem Ticket- oder Moderations-Modul, und nur für Server, die sonst nicht in der Liste stünden. Die Moderation (`canModerate`) gibt es nur über die Moderatoren-Liste, nicht über eine Support-Rolle. Die Übersicht mit Aktivität bleibt für sie zu.
 
 Karten ohne Bearbeitungsrecht tragen die Marke „Nur Ansicht“, die Detailseite blendet dort einen Hinweis ein. Wer Seiten-Admins auch dort schreiben lassen will, setzt in `DashboardService.Guilds()` beim Staff-Zweig `canManage` auf `true` — eine Zeile.
 
@@ -235,7 +238,10 @@ Eine Gruppe ist eine reine **Anzeige** — sie vergibt keine Rechte auf einem Di
 | Developer | `DEV_USER_IDs` in der `.env` | ja |
 | Partner | Tabelle `dashboard_groups` | nein |
 | Premium | Tabelle `dashboard_groups` | nein |
+| Guardian | — (wer keine andere Gruppe hat, aber auf mindestens einem Server Moderator ist) | nein |
 | Testphase | — (wer nirgends steht) | nein |
+
+**Guardian** wird nicht gespeichert: `DashboardService.Payload()` macht aus „Testphase" Guardian, sobald ein Server mit der Rolle „Moderator" in der Liste steht. Grünes Schild, dieselbe Marke wie überall.
 
 **Vergeben wird das unter [`/dashboard/admins`](#admin-dashboard), nicht in einer Datei.** Ein Nutzer hat höchstens einen Eintrag in der Tabelle; steht er zusätzlich in `DEV_USER_IDs`, gewinnt Administrator, sonst Developer.
 
@@ -474,7 +480,7 @@ Jedes Modul trägt einen Satz, worum es geht — auf seiner Kachel unter dem Nam
 
 Was zusammengehört, hängt am Modul selbst: **Teile** (`parts`) kommen mit ihrem Modul. Das Ticket System bringt **Live Tickets** und **Transcriptions** mit; sie haben keinen eigenen Schalter, stehen eingerückt unter ihm in der Leiste und haben eine eigene Karte. In `guild_settings.modules` steht dafür nur `tickets` — die IDs der Teile nie, und der Bot kennt sie auch nicht.
 
-In der Seitenleiste steht ein Modul erst, wenn es eingeschaltet ist. Ein frischer Server beginnt links also mit genau zwei Einträgen, Übersicht und Module — statt mit zwei Dutzend auf einmal. Programmiert ist noch keins: ein eingeschaltetes Modul zeigt bis dahin seinen Namen, seinen Satz und „Dieses Modul kommt noch“.
+In der Seitenleiste steht ein Modul erst, wenn es eingeschaltet ist. Ein frischer Server beginnt links also mit Übersicht, Module und **Moderatoren** (die Liste für Tickets und Moderation, nur für wer verwaltet) — statt mit zwei Dutzend auf einmal. Gebaut sind Ticket System, Gallery System und [Moderation](Moderation.md); jedes andere eingeschaltete Modul zeigt bis dahin seinen Namen, seinen Satz und „Dieses Modul kommt noch“.
 
 Eine gespeicherte ID, deren Modul es nicht mehr gibt, zählt als aus — auf der Serverseite und in der Anzahl auf den Karten. So verschwinden `rl-tracking` (entfernt) und `embed-builder` (heute Custom Message, `custom-message`) ohne Migration.
 

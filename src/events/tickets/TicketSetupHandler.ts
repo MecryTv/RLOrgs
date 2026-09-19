@@ -309,6 +309,8 @@ export default class TicketSetupHandler extends Event {
                 : {
                       id: "",
                       name,
+                      // Leer heißt: Clean() leitet das Kürzel aus dem Namen ab.
+                      code: "",
                       description,
                       emoji: emoji || null,
                       categoryId: null,

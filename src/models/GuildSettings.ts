@@ -1,6 +1,7 @@
 import Model from "../structures/Model";
 import { OrNull, TABLES, TableName, Unpack } from "../constants/Database";
 import { ModuleId, PERMANENT_MODULES } from "../constants/Modules";
+import { ITicketModerators } from "../interfaces/services/tickets/ITicket";
 
 /** Eine Zeile aus guild_settings, so wie MariaDB sie liefert. */
 export interface IGuildSettingsRow {
@@ -9,6 +10,7 @@ export interface IGuildSettingsRow {
     rank_roles: Record<string, string> | string;
     match_channel: string | null;
     queue_channel: string | null;
+    moderators: ITicketModerators | string | null;
     created_at: Date;
     updated_at: Date;
 }
@@ -20,6 +22,8 @@ export interface IGuildSettings {
     rankRoles: Record<string, string>;
     matchChannel: string | null;
     queueChannel: string | null;
+    /** Moderatoren für den ganzen Server - Tickets und Moderation. */
+    moderators: ITicketModerators;
 }
 
 export const DEFAULT_SETTINGS: Omit<IGuildSettings, "guildId"> = {
@@ -27,6 +31,7 @@ export const DEFAULT_SETTINGS: Omit<IGuildSettings, "guildId"> = {
     rankRoles: {},
     matchChannel: null,
     queueChannel: null,
+    moderators: { users: [], roles: [] },
 };
 
 // Feste Module stehen in jeder Liste, egal was in der Spalte steht: so muss
@@ -47,7 +52,7 @@ export default class GuildSettings extends Model<IGuildSettingsRow> {
     async Of(guildId: string): Promise<IGuildSettings> {
         const row = await this.Find(guildId);
 
-        if (!row) return { guildId, ...DEFAULT_SETTINGS, modules: WithPermanent([]) };
+        if (!row) return { guildId, ...DEFAULT_SETTINGS, modules: WithPermanent([]), moderators: { users: [], roles: [] } };
 
         return {
             guildId: row.guild_id,
@@ -55,6 +60,7 @@ export default class GuildSettings extends Model<IGuildSettingsRow> {
             rankRoles: Unpack<Record<string, string>>(row.rank_roles, {}),
             matchChannel: row.match_channel,
             queueChannel: row.queue_channel,
+            moderators: { users: [], roles: [], ...Unpack<Partial<ITicketModerators>>(row.moderators, {}) },
         };
     }
 
@@ -67,9 +73,15 @@ export default class GuildSettings extends Model<IGuildSettingsRow> {
                 rank_roles: JSON.stringify(settings.rankRoles),
                 match_channel: OrNull(settings.matchChannel),
                 queue_channel: OrNull(settings.queueChannel),
+                moderators: JSON.stringify(settings.moderators),
             },
-            ["modules", "rank_roles", "match_channel", "queue_channel"]
+            ["modules", "rank_roles", "match_channel", "queue_channel", "moderators"]
         );
+    }
+
+    /** Nur die Moderatoren - ohne den Rest der Zeile anzufassen. */
+    async SaveModerators(guildId: string, moderators: ITicketModerators): Promise<void> {
+        await this.Upsert({ guild_id: guildId, modules: "[]", rank_roles: "{}", moderators: JSON.stringify(moderators) }, ["moderators"]);
     }
 
     /** Ein Modul an- oder abschalten, ohne den Rest anzufassen. */

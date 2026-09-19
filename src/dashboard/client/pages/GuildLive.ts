@@ -29,6 +29,12 @@ interface IPerson {
 interface ILiveTicket {
     id: number;
     number: number;
+    /** Kürzel des Themas (SUP) - fehlt bei Tickets von vor den Kürzeln. */
+    code: string | null;
+    /** Die feste ID des Erstellers ohne "U-". */
+    userCode: string | null;
+    /** Tickets des Erstellers auf diesem Server, dieses mitgezählt. */
+    openerTickets: number;
     option: { id: string; name: string; emoji: string | null };
     contact: "direct" | "modmail";
     status: "open" | "frozen" | "closed";
@@ -111,8 +117,19 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", ...ch
     return element;
 }
 
-function ticketNumber(value: number): string {
-    return `#${String(value).padStart(4, "0")}`;
+// Wie TicketNumber() im Bot: SUP-5, ältere Tickets ohne Kürzel #5.
+function ticketNumber(ticket: { number: number; code: string | null }): string {
+    return ticket.code ? `${ticket.code}-${ticket.number}` : `#${ticket.number}`;
+}
+
+/** "MecryTv · U-7K3F · 3 Tickets" - wer das Ticket aufgemacht hat, auf einen Blick. */
+function openerLine(ticket: ILiveTicket): string {
+    const parts = [ticket.opener.name];
+
+    if (ticket.userCode) parts.push(`U-${ticket.userCode}`);
+    if (ticket.openerTickets > 1) parts.push(`${ticket.openerTickets} Tickets`);
+
+    return parts.join(" · ");
 }
 
 function ago(ms: number): string {
@@ -254,7 +271,7 @@ export function renderLive(guildId: string, user: ILiveUser): void {
 
     soundButton.type = "button";
     search.type = "search";
-    search.placeholder = "Nummer, Name, Thema";
+    search.placeholder = "Ticket-ID, User-ID, Name, Thema";
     search.setAttribute("aria-label", "Offene Tickets durchsuchen");
     items.setAttribute("role", "list");
     list.setAttribute("aria-label", "Offene Tickets");
@@ -323,6 +340,8 @@ export function renderLive(guildId: string, user: ILiveUser): void {
 
     function visible(): ILiveTicket[] {
         const text = query.toLowerCase().replace("#", "");
+        // "SUP-5", "sup5" und "U-7K3F" - Groß, klein und Bindestrich egal.
+        const loose = text.replace(/-/g, "");
 
         return [...tickets.values()]
             .filter((ticket) =>
@@ -332,6 +351,8 @@ export function renderLive(guildId: string, user: ILiveUser): void {
                 (ticket) =>
                     !text ||
                     String(ticket.number).includes(text.replace(/^0+/, "") || "0") ||
+                    ticketNumber(ticket).toLowerCase().replace(/[-#]/g, "").startsWith(loose) ||
+                    (ticket.userCode !== null && `u${ticket.userCode.toLowerCase()}`.startsWith(loose)) ||
                     ticket.opener.name.toLowerCase().includes(text) ||
                     ticket.opener.id === text ||
                     ticket.option.name.toLowerCase().includes(text)
@@ -399,7 +420,7 @@ export function renderLive(guildId: string, user: ILiveUser): void {
                 el(
                     "span",
                     "ltitem__top",
-                    el("b", "", ticketNumber(ticket.number)),
+                    el("b", "", ticketNumber(ticket)),
                     el(
                         "span",
                         "ltitem__option",
@@ -407,7 +428,7 @@ export function renderLive(guildId: string, user: ILiveUser): void {
                         ticket.option.name
                     )
                 ),
-                el("span", "ltitem__who", ticket.opener.name),
+                el("span", "ltitem__who", openerLine(ticket)),
                 ...(preview ? [el("span", "ltitem__preview", preview)] : []),
                 chipsRow
             ),
@@ -415,7 +436,7 @@ export function renderLive(guildId: string, user: ILiveUser): void {
         );
         button.setAttribute(
             "aria-label",
-            `${ticketNumber(ticket.number)} ${ticket.option.name}, ${ticket.opener.name}${count ? `, ${count} neue Nachrichten` : ""}`
+            `${ticketNumber(ticket)} ${ticket.option.name}, ${openerLine(ticket)}${count ? `, ${count} neue Nachrichten` : ""}`
         );
         button.addEventListener("click", () => void select(ticket.id));
 
@@ -454,7 +475,7 @@ export function renderLive(guildId: string, user: ILiveUser): void {
     function paintEmpty(): void {
         empty.replaceChildren(
             icon(ended ? "#i-archive" : "#i-message"),
-            el("b", "", ended ? `Ticket ${ticketNumber(ended.number)} ist geschlossen.` : "Wähl links ein Ticket."),
+            el("b", "", ended ? `Ticket ${ticketNumber(ended)} ist geschlossen.` : "Wähl links ein Ticket."),
             el(
                 "span",
                 "",
@@ -500,11 +521,11 @@ export function renderLive(guildId: string, user: ILiveUser): void {
         const title = el(
             "div",
             "ltchat__title",
-            el("b", "", `${ticketNumber(ticket.number)} · ${ticket.option.name}`),
+            el("b", "", `${ticketNumber(ticket)} · ${ticket.option.name}`),
             el(
                 "span",
                 "",
-                `${ticket.opener.name} · ${ticket.contact === "modmail" ? "ModMail" : "im Server"} · offen ${ago(ticket.createdAt)}${ticket.status === "frozen" ? " · ❄️ eingefroren" : ""}`
+                `${openerLine(ticket)} · ${ticket.contact === "modmail" ? "ModMail" : "im Server"} · offen ${ago(ticket.createdAt)}${ticket.status === "frozen" ? " · ❄️ eingefroren" : ""}`
             )
         );
 
@@ -868,7 +889,7 @@ export function renderLive(guildId: string, user: ILiveUser): void {
                 const priority = PRIORITIES.find(([value]) => value === ticket.priority);
                 const slowmode = data.slowmodes.find((entry) => entry.value === ticket.slowmode);
                 const facts: [string, string][] = [
-                    ["Ersteller", ticket.opener.name],
+                    ["Ersteller", openerLine(ticket)],
                     ["Offen seit", `${WHEN.format(ticket.createdAt)} (${ago(ticket.createdAt)})`],
                     ["Priorität", priority ? `${priority[1]} ${priority[2]}` : "keine"],
                     ["Bearbeiter", ticket.claimer?.name ?? "niemand"],
@@ -881,7 +902,7 @@ export function renderLive(guildId: string, user: ILiveUser): void {
                 const notes = el("div", "ltnotes", note("Team-Notizen laden …"));
 
                 actBar.replaceChildren(
-                    label(`Zusammenfassung ${ticketNumber(ticket.number)}`),
+                    label(`Zusammenfassung ${ticketNumber(ticket)}`),
                     cancel,
                     el("dl", "ltfacts", ...facts.flatMap(([term, value]) => [el("dt", "", term), el("dd", "", value)])),
                     notes

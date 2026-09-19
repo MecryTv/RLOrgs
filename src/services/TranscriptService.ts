@@ -2,7 +2,6 @@ import path from "path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import {
     AttachmentBuilder,
-    ChannelType,
     escapeMarkdown,
     Guild,
     GuildMember,
@@ -33,6 +32,7 @@ import { ITranscript, ITranscriptMessage, ITranscriptUser } from "../interfaces/
 import { ITranscriptEntry } from "../models/TicketTranscripts";
 import { ITicketContext } from "./TicketService";
 import logger from "../utils/logger";
+import { SendLog } from "../utils/logtarget";
 
 // Anhänge in Texten von Components V2 und Embeds: Discord löst attachment:// dort zur CDN-Adresse auf.
 const ATTACHMENT_URL = /https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\/(?:ephemeral-)?attachments\/[^"\s\\]+/g;
@@ -106,7 +106,7 @@ export default class TranscriptService {
         void this.client.liveService.Archived(ticket);
 
         logger.user(
-            `📄 Transcript ${TicketNumber(ticket.number)} auf ${ticket.guildId}: ${transcript.messages.length} Nachrichten, ${Object.keys(transcript.media).length} Anhänge gesichert`
+            `📄 Transcript ${TicketNumber(ticket.number, ticket.code)} auf ${ticket.guildId}: ${transcript.messages.length} Nachrichten, ${Object.keys(transcript.media).length} Anhänge gesichert`
         );
 
         await this.Deliver(context, transcript);
@@ -150,12 +150,14 @@ export default class TranscriptService {
             version: 1,
             ticketId: ticket.id,
             number: ticket.number,
+            code: ticket.code,
             guild: { id: guild.id, name: guild.name, icon: guild.iconURL({ extension: "png", size: 128 }) },
             channel: { id: channel.id, name: channel.name },
             meta: {
                 optionId: ticket.optionId,
                 option: context.option?.name ?? ticket.optionId,
                 contact: ticket.contact,
+                openerCode: ticket.openerCode,
                 opener: known(ticket.openerId) ?? { id: ticket.openerId, name: ticket.openerId, avatar: null, bot: false, color: null },
                 claimer: known(ticket.claimedBy),
                 closer: known(ticket.closedBy),
@@ -439,14 +441,9 @@ export default class TranscriptService {
 
         const file = await this.File(transcript);
 
-        if (channelId) {
-            const channel = guild.channels.cache.get(channelId);
-
-            if (channel?.type === ChannelType.GuildText || channel?.type === ChannelType.GuildAnnouncement) {
-                await channel
-                    .send(this.Card(transcript, file, true))
-                    .catch((error) => logger.warn(`📄 Transcript nicht in ${channelId} gepostet: ${String(error)}`));
-            }
+        // Textkanal oder Forum-Beitrag - ein archivierter Beitrag wacht dabei auf.
+        if (channelId && !(await SendLog(guild, channelId, this.Card(transcript, file, true)))) {
+            logger.warn(`📄 Transcript ${ticket.id} nicht in ${channelId} gepostet`);
         }
 
         if (direct) {
@@ -458,12 +455,13 @@ export default class TranscriptService {
 
     private Card(transcript: ITranscript, file: Buffer | null, mentions: boolean) {
         const { meta } = transcript;
-        const name = `ticket-${String(transcript.number).padStart(4, "0")}.html`;
+        // Wie die Ticket-ID: sup-5.html, ältere Tickets ticket-5.html.
+        const name = `${(transcript.code ?? "ticket").toLowerCase()}-${transcript.number}.html`;
         const who = (user: ITranscriptUser | null, fallback: string): string =>
             user ? (mentions ? `<@${user.id}>` : escapeMarkdown(user.name)) : fallback;
 
         const builder = new ComponentV2Builder({ accentColor: "#ff1e2d" })
-            .title(`📄 | Transcript ${TicketNumber(transcript.number)}`, `${escapeMarkdown(meta.option)} · ${escapeMarkdown(transcript.guild.name)}`)
+            .title(`📄 | Transcript ${TicketNumber(transcript.number, transcript.code)}`, `${escapeMarkdown(meta.option)} · ${escapeMarkdown(transcript.guild.name)}`)
             .separator()
             .list([
                 `**Ersteller:** ${who(meta.opener, "–")}`,
@@ -515,7 +513,7 @@ export default class TranscriptService {
         await this.client.ticketTranscripts.Delete(entry.ticketId);
         await rm(this.Directory(entry.guildId, entry.ticketId), { recursive: true, force: true });
 
-        logger.user(`📄 Transcript ${TicketNumber(entry.number)} auf ${entry.guildId} gelöscht`);
+        logger.user(`📄 Transcript ${TicketNumber(entry.number, entry.code)} auf ${entry.guildId} gelöscht`);
     }
 
     /** Wo ein gesicherter Anhang liegt - null für jeden Namen, den der Bot nicht selbst vergibt. */
@@ -555,8 +553,8 @@ export default class TranscriptService {
         return limit === null || html.length <= limit ? html : null;
     }
 
-    /** Die Online-Ansicht: Anhänge über die eigene Route, oben der Weg zurück. */
-    async Page(entry: ITranscriptEntry): Promise<string | null> {
+    /** Die Online-Ansicht: Anhänge über die eigene Route, oben der Weg zurück - eingebettet ohne. */
+    async Page(entry: ITranscriptEntry, embed = false): Promise<string | null> {
         const transcript = await this.client.ticketTranscripts.Read(entry.ticketId);
 
         if (!transcript) return null;
@@ -566,6 +564,7 @@ export default class TranscriptService {
         return RenderTranscript(transcript, {
             file: (stored) => `${base}/${stored}`,
             bar: { back: `${DASHBOARD_PATH}/guild/${entry.guildId}/transcriptions`, download: `${base}?download=1` },
+            embed,
         });
     }
 

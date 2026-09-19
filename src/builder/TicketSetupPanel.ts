@@ -239,8 +239,9 @@ function Transcripts(builder: ComponentV2Builder, config: ITicketConfig): void {
         )
         .channelSelect({
             customId: `${SETUP_PREFIX}:trchan`,
-            channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
-            placeholder: "Log-Kanal für Transcripts wählen …",
+            // Auch Threads: ein Beitrag in einem Forum taugt genauso als Log.
+            channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.PublicThread, ChannelType.AnnouncementThread],
+            placeholder: "Log-Kanal oder Forum-Beitrag für Transcripts wählen …",
             disabled: !enabled,
         });
 }

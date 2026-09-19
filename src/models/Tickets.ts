@@ -7,8 +7,10 @@ export interface ITicketRow {
     id: number;
     guild_id: string;
     number: number;
+    code: string | null;
     option_id: string;
     opener_id: string;
+    opener_code: string | null;
     contact: TicketContact;
     channel_id: string | null;
     message_id: string | null;
@@ -73,8 +75,10 @@ function ToTicket(row: ITicketRow): ITicket {
         id: row.id,
         guildId: row.guild_id,
         number: row.number,
+        code: row.code ?? null,
         optionId: row.option_id,
         openerId: row.opener_id,
+        openerCode: row.opener_code ?? null,
         contact: row.contact,
         channelId: row.channel_id,
         messageId: row.message_id,
@@ -105,7 +109,14 @@ export default class Tickets extends Model<ITicketRow> {
      * noch keine Zeile zum Sperren - dann kann ein zweites gleichzeitiges an der
      * UNIQUE-Spalte scheitern oder in einen Deadlock laufen und versucht es neu.
      */
-    async Create(guildId: string, optionId: string, openerId: string, contact: TicketContact): Promise<ITicket> {
+    async Create(
+        guildId: string,
+        optionId: string,
+        code: string | null,
+        openerId: string,
+        openerCode: string | null,
+        contact: TicketContact
+    ): Promise<ITicket> {
         for (let attempt = 1; ; attempt++) {
             try {
                 const id = await this.db.Transaction(async (query) => {
@@ -115,9 +126,9 @@ export default class Tickets extends Model<ITicketRow> {
                     )) as { next: number }[];
 
                     const result = (await query(
-                        `INSERT INTO \`${this.Table}\` (guild_id, number, option_id, opener_id, contact, members, notes, anonymous)` +
-                            ` VALUES (?, ?, ?, ?, ?, '[]', '[]', '[]')`,
-                        [guildId, Number(rows[0]?.next ?? 1), optionId, openerId, contact]
+                        `INSERT INTO \`${this.Table}\` (guild_id, number, code, option_id, opener_id, opener_code, contact, members, notes, anonymous)` +
+                            ` VALUES (?, ?, ?, ?, ?, ?, ?, '[]', '[]', '[]')`,
+                        [guildId, Number(rows[0]?.next ?? 1), code, optionId, openerId, openerCode, contact]
                     )) as { insertId: number };
 
                     return Number(result.insertId);
@@ -166,6 +177,21 @@ export default class Tickets extends Model<ITicketRow> {
         );
 
         return rows.map(ToTicket);
+    }
+
+    /** Wie viele Tickets die User auf einem Server schon hatten - offen und geschlossen. */
+    async CountsByOpener(guildId: string, openerIds: string[]): Promise<Map<string, number>> {
+        const unique = [...new Set(openerIds)];
+
+        if (unique.length === 0) return new Map();
+
+        const rows = await this.db.Query<{ opener_id: string; total: number }>(
+            `SELECT opener_id, COUNT(*) AS total FROM \`${this.Table}\` WHERE guild_id = ? AND opener_id IN (${unique.map(() => "?").join(", ")})` +
+                ` GROUP BY opener_id`,
+            [guildId, ...unique]
+        );
+
+        return new Map(rows.map((row) => [row.opener_id, Number(row.total)]));
     }
 
     /** Das offene ModMail-Ticket eines Users - server-übergreifend höchstens eins. */

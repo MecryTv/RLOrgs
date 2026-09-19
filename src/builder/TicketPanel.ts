@@ -71,8 +71,10 @@ export function TicketValues(
     }
 
     if (ticket) {
-        values["ticket.id"] = TicketNumber(ticket.number);
+        values["ticket.id"] = TicketNumber(ticket.number, ticket.code);
         values["ticket.option"] = option?.name ?? ticket.optionId;
+
+        if (ticket.openerCode) values["user.code"] = `U-${ticket.openerCode}`;
         values["ticket.priority"] = ticket.priority ? PRIORITY_LABELS[ticket.priority].name : "Keine";
         values["ticket.opened"] = `<t:${Math.floor(ticket.createdAt.getTime() / 1000)}:R>`;
         values["ticket.claimer"] = ticket.claimedBy
@@ -120,7 +122,10 @@ export function MenuOptions(client: BotClient, config: ITicketConfig, ticket: IT
 
 function StatusLine(config: ITicketConfig, ticket: ITicket): string {
     const option = OptionOf(config, ticket);
-    const parts = [`🎫 ${TicketNumber(ticket.number)}`, option?.name ?? ticket.optionId];
+    const parts = [`🎫 ${TicketNumber(ticket.number, ticket.code)}`, option?.name ?? ticket.optionId];
+
+    // Die feste ID des Users - so sieht das Team, wer schon öfter da war.
+    if (ticket.openerCode) parts.push(`👤 U-${ticket.openerCode}`);
 
     if (ticket.priority) parts.push(`${PRIORITY_LABELS[ticket.priority].emoji} ${PRIORITY_LABELS[ticket.priority].name}`);
 
@@ -283,8 +288,11 @@ export async function DirectView(
         client,
         config.messages.dm,
         TicketValues(guild, config, { user: opener, ticket, mentions: false }),
-        { fallback: "## Ticket {ticket.id}" }
+        { reserve: 1, fallback: "## Ticket {ticket.id}" }
     );
+
+    // Unter jeder Bestätigung: Ticket-ID und die feste ID des Users - zum Nennen, wenn er sich später meldet.
+    if (ticket.openerCode) builder.subtext(`Ticket ${TicketNumber(ticket.number, ticket.code)} · deine ID: U-${ticket.openerCode}`);
 
     return View(builder, files);
 }
@@ -371,7 +379,7 @@ export function SummaryView(config: ITicketConfig, ticket: ITicket): ITicketView
     const since = Math.floor(ticket.createdAt.getTime() / 1000);
 
     const builder = new ComponentV2Builder({ accentColor: "#00afff" })
-        .title(`📖 | Ticket ${TicketNumber(ticket.number)}`, option?.name ?? ticket.optionId)
+        .title(`📖 | Ticket ${TicketNumber(ticket.number, ticket.code)}`, option?.name ?? ticket.optionId)
         .separator()
         .list([
             `**Ersteller:** <@${ticket.openerId}>`,
@@ -403,7 +411,7 @@ export interface IVaultItem {
 /** Medien-Tresor: Bilder als Galerie, alles andere als Liste. */
 export function VaultView(ticket: ITicket, items: IVaultItem[]): ITicketView {
     const builder = new ComponentV2Builder({ accentColor: "#8a4dff" }).title(
-        `🖼️ | Medien-Tresor ${TicketNumber(ticket.number)}`,
+        `🖼️ | Medien-Tresor ${TicketNumber(ticket.number, ticket.code)}`,
         items.length === 0 ? "In diesem Ticket wurde noch nichts hochgeladen." : `${items.length} Datei(en)`
     );
 

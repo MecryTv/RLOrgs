@@ -18,6 +18,8 @@ export interface ITranscriptRenderOptions {
     file: (stored: string) => string | null;
     /** Nur online: Rückweg ins Dashboard und der Download der Datei. */
     bar?: { back: string; download: string };
+    /** In der großen Ansicht im Dashboard: ohne Leiste und Kopf - die stehen dort schon. */
+    embed?: boolean;
     /** Live Tickets: die Discord-Links sind frisch - nichts ist "nicht gesichert". */
     live?: boolean;
 }
@@ -718,7 +720,7 @@ export function RenderLive(
 export function RenderTranscript(transcript: ITranscript, options: ITranscriptRenderOptions): string {
     const context: IContext = { transcript, options, message: null };
     const { meta, guild } = transcript;
-    const number = TicketNumber(transcript.number);
+    const number = TicketNumber(transcript.number, transcript.code);
     const icon = SafeUrl(guild.icon);
 
     const messages: string[] = [];
@@ -750,12 +752,12 @@ export function RenderTranscript(transcript: ITranscript, options: ITranscriptRe
 <style>${CSS}</style>
 </head>
 <body>
-${bar}
-<header class="head">
+${options.embed ? "" : bar}
+${options.embed ? "" : `<header class="head">
 <div class="head__in">
 <div class="guild"><span class="guild__icon"${icon ? ` style="background-image:url('${CssUrl(icon)}')"` : ""}>${icon ? "" : Initials(guild.name)}</span><div><h1>Ticket ${number} · ${Escape(meta.option)}</h1><p>${Escape(guild.name)} · #${Escape(transcript.channel.name)} · ${meta.contact === "modmail" ? "ModMail" : "Klassisch"}</p></div></div>
 <div class="facts">
-${Fact("Ersteller", Person(meta.opener, "–"))}
+${Fact("Ersteller", `${Person(meta.opener, "–")}${meta.openerCode ? ` · U-${Escape(meta.openerCode)}` : ""}`)}
 ${Fact("Bearbeiter", Person(meta.claimer, "niemand"))}
 ${Fact("Geschlossen von", Person(meta.closer, "unbekannt"))}
 ${Fact("Grund", meta.reason ? Escape(meta.reason) : "–")}
@@ -766,7 +768,7 @@ ${Fact("Nachrichten", `${meta.messages} · ${meta.files} ${meta.files === 1 ? "A
 </div>
 ${participants ? `<div class="people"><b>Beteiligt</b><span>${participants}</span></div>` : ""}
 </div>
-</header>
+</header>`}
 <main class="log">
 ${transcript.truncated ? `<p class="note">Das Ticket hatte mehr Nachrichten, als ein Transcript fasst – die ältesten fehlen.</p>` : ""}
 ${messages.join("\n")}

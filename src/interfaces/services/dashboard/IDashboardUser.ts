@@ -1,7 +1,9 @@
 // Anzeigegruppen des Dashboards, von oben nach unten - die erste Liste, in der
 // eine ID steht, gewinnt. "administrator" und "developer" sehen zusätzlich jeden
 // Server, auf dem der Bot sitzt (siehe DashboardService.IsStaff).
-export const DASHBOARD_GROUPS = ["administrator", "developer", "partner", "premium", "testphase"] as const;
+// "guardian" wird wie "developer" und "testphase" nicht gespeichert: wer keine
+// andere Gruppe hat, aber irgendwo Moderator ist, ist Guardian (DashboardService.Payload).
+export const DASHBOARD_GROUPS = ["administrator", "developer", "partner", "premium", "guardian", "testphase"] as const;
 
 export type DashboardGroup = (typeof DASHBOARD_GROUPS)[number];
 

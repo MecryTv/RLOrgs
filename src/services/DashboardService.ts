@@ -305,8 +305,12 @@ export default class DashboardService implements IDashboardService {
 
     async Payload(session: IDashboardSession): Promise<IDashboardPayload> {
         const guilds = await this.GuildsOf(session);
+        const user = await this.User(session);
 
-        return { user: await this.User(session), guilds, inviteURL: this.InviteURL() };
+        // Kein Abo, aber irgendwo Moderator: Guardian statt Testphase.
+        if (user.group === "testphase" && guilds.some((guild) => guild.role === "Moderator")) user.group = "guardian";
+
+        return { user, guilds, inviteURL: this.InviteURL() };
     }
 
     // Wirft SessionExpired weiter nach oben. Seit die Sitzung im Cookie steckt,
@@ -398,6 +402,13 @@ export default class DashboardService implements IDashboardService {
         const guild = (await this.GuildsOf(session)).find((entry) => entry.id === guildId);
 
         return Boolean(guild?.canSupport);
+    }
+
+    /** Moderation: wer verwaltet und wer auf der Moderatoren-Liste steht. Wirft SessionExpired. */
+    async CanModerate(session: IDashboardSession, guildId: string): Promise<boolean> {
+        const guild = (await this.GuildsOf(session)).find((entry) => entry.id === guildId);
+
+        return Boolean(guild?.canModerate);
     }
 
     // Frisch aus der Datenbank statt aus der zwischengespeicherten Serverliste,
@@ -495,7 +506,7 @@ export default class DashboardService implements IDashboardService {
         // Erst sammeln, welche Server überhaupt in die Liste gehören - danach
         // stehen die IDs fest und Teams und Module kommen in zwei Abfragen für
         // alle auf einmal statt in einer je Karte.
-        const picked = new Map<string, { raw: IRawGuild; role: DashboardRole; canManage: boolean }>();
+        const picked = new Map<string, { raw: IRawGuild; role: DashboardRole; canManage: boolean; canModerate: boolean }>();
 
         for (const guild of raw) {
             const permissions = this.Permissions(guild.permissions);
@@ -503,12 +514,12 @@ export default class DashboardService implements IDashboardService {
 
             if (!guild.owner && !admin) continue;
 
-            picked.set(guild.id, { raw: guild, role: guild.owner ? "Owner" : "Admin", canManage: true });
+            picked.set(guild.id, { raw: guild, role: guild.owner ? "Owner" : "Admin", canManage: true, canModerate: true });
         }
 
-        // Moderatoren: kein Verwalten, aber im Ticket-System eingetragen oder mit Support-Rolle.
-        for (const guild of await this.Supported(session.userId, raw.filter((entry) => !picked.has(entry.id)))) {
-            picked.set(guild.id, { raw: guild, role: "Moderator", canManage: false });
+        // Moderatoren: kein Verwalten, aber auf der Moderatoren-Liste oder mit Support-Rolle.
+        for (const { raw: guild, moderate } of await this.Supported(session.userId, raw.filter((entry) => !picked.has(entry.id)))) {
+            picked.set(guild.id, { raw: guild, role: "Moderator", canManage: false, canModerate: moderate });
         }
 
         // Entwickler und Seiten-Admins sehen zusätzlich jeden Server, auf dem der Bot
@@ -521,6 +532,7 @@ export default class DashboardService implements IDashboardService {
                     raw: { id: guild.id, name: guild.name, icon: guild.icon, permissions: "0" },
                     role: "Staff",
                     canManage: false,
+                    canModerate: false,
                 });
             }
         }
@@ -528,7 +540,7 @@ export default class DashboardService implements IDashboardService {
         const facts = await this.Facts([...picked.keys()]);
 
         const list = [...picked.values()]
-            .map((entry) => this.Card(entry.raw, entry.role, entry.canManage, facts))
+            .map((entry) => this.Card(entry.raw, entry.role, entry.canManage, entry.canModerate, facts))
             .sort(
             (a, b) => Number(b.active) - Number(a.active) || b.members - a.members || a.name.localeCompare(b.name)
         );
@@ -563,32 +575,43 @@ export default class DashboardService implements IDashboardService {
      * Die Server, auf denen der User Moderator ist: selbst eingetragen, über eine
      * Moderatoren-Rolle oder eine Support-Rolle (die allgemeine oder die eines
      * Themas). Nur wo der Bot sitzt und das Modul an ist; die Rollen kennt der
-     * Bot, Discords Liste nennt sie nicht.
+     * Bot, Discords Liste nennt sie nicht. moderate: auch die Moderation - die
+     * gibt es nur über die Moderatoren-Liste, nicht über eine Support-Rolle.
      */
-    private async Supported(userId: string, candidates: IRawGuild[]): Promise<IRawGuild[]> {
+    private async Supported(userId: string, candidates: IRawGuild[]): Promise<{ raw: IRawGuild; moderate: boolean }[]> {
         const present = candidates.filter((guild) => this.client.guilds.cache.has(guild.id));
 
         if (present.length === 0 || !this.client.databaseService.Ready) return [];
 
         try {
             const modules = await this.client.settings.ModulesOf(present.map((guild) => guild.id));
-            const found: IRawGuild[] = [];
+            const found: { raw: IRawGuild; moderate: boolean }[] = [];
 
             for (const raw of present) {
-                if (!modules.get(raw.id)?.includes("tickets")) continue;
+                const on = modules.get(raw.id) ?? [];
+                const tickets = on.includes("tickets");
 
-                const config = await this.client.ticketSettings.Of(raw.id);
-                const roles = [config.supportRoleId, ...config.options.map((option) => option.supportRoleId), ...config.moderators.roles].filter(
-                    (role): role is string => Boolean(role)
-                );
+                // Moderatoren brauchen etwas, das sie betreuen: Tickets oder Moderation.
+                if (!tickets && !on.includes("moderation")) continue;
 
-                if (roles.length === 0 && !config.moderators.users.includes(userId)) continue;
+                const { moderators } = await this.client.settings.Of(raw.id);
+                const config = tickets ? await this.client.ticketSettings.Of(raw.id) : null;
+                const roles = [
+                    ...moderators.roles,
+                    ...(config ? [config.supportRoleId, ...config.options.map((option) => option.supportRoleId)] : []),
+                ].filter((role): role is string => Boolean(role));
+
+                if (roles.length === 0 && !moderators.users.includes(userId)) continue;
 
                 const guild = this.client.guilds.cache.get(raw.id)!;
                 const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
 
+                if (!member) continue;
+
                 // Moderator: einzeln eingetragen oder über eine Rolle; dazu die Support-Rollen.
-                if (member && (config.moderators.users.includes(userId) || roles.some((role) => member.roles.cache.has(role)))) found.push(raw);
+                const listed = moderators.users.includes(userId) || moderators.roles.some((role) => member.roles.cache.has(role));
+
+                if (listed || roles.some((role) => member.roles.cache.has(role))) found.push({ raw, moderate: listed && on.includes("moderation") });
             }
 
             return found;
@@ -599,7 +622,7 @@ export default class DashboardService implements IDashboardService {
         }
     }
 
-    private Card(guild: IRawGuild, role: DashboardRole, canManage: boolean, facts: IGuildFacts): IDashboardGuild {
+    private Card(guild: IRawGuild, role: DashboardRole, canManage: boolean, canModerate: boolean, facts: IGuildFacts): IDashboardGuild {
         const known = this.client.guilds.cache.get(guild.id);
 
         // Nur zählen, wenn die Liste vollständig ist. Ein halb gefüllter Cache
@@ -618,6 +641,7 @@ export default class DashboardService implements IDashboardService {
             role,
             canManage,
             canSupport: canManage || role === "Moderator",
+            canModerate,
             created: CreatedAt(guild.id).toISOString(),
             joined: known ? new Date(known.joinedTimestamp).toISOString() : null,
             teams: facts.teams.get(guild.id) ?? 0,

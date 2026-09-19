@@ -1,6 +1,6 @@
-// Moderator: weder Owner noch Admin, aber im Ticket-System als Moderator eingetragen
-// (selbst oder per Rolle) oder mit einer Support-Rolle - sieht nur Live Tickets und
-// Transcriptions (siehe docs/Tickets.md).
+// Moderator: weder Owner noch Admin, aber auf der Moderatoren-Liste des Servers
+// (selbst oder per Rolle) oder mit einer Support-Rolle - sieht nur Live Tickets,
+// Transcriptions und, von der Liste, die Moderation (docs/Tickets.md, docs/Moderation.md).
 export type DashboardRole = "Owner" | "Admin" | "Staff" | "Moderator";
 
 // Eine Karte im Dashboard. "teams" ist ein Platzhalter, solange der Bot keine
@@ -21,6 +21,8 @@ export default interface IDashboardGuild {
     canManage: boolean;
     // Darf Live Tickets und Transcriptions nutzen: wer verwaltet, Moderatoren und die Support-Rollen.
     canSupport: boolean;
+    // Darf die Moderation nutzen: wer verwaltet und wer auf der Moderatoren-Liste steht (Modul an).
+    canModerate: boolean;
     created: string;
     // Seit wann RL Nexus auf dem Server ist (ISO) - null, wenn der Bot fehlt.
     joined: string | null;

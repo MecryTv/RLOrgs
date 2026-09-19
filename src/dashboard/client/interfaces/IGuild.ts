@@ -14,6 +14,8 @@ export interface IGuild {
     canManage: boolean;
     /** Live Tickets und Transcriptions - wer verwaltet, Moderatoren und die Support-Rollen. */
     canSupport: boolean;
+    /** Moderation - wer verwaltet und wer auf der Moderatoren-Liste steht. */
+    canModerate: boolean;
     created: string;
     /** Seit wann RL Nexus dabei ist - null ohne Bot. */
     joined: string | null;

@@ -88,7 +88,9 @@ Vor jedem Ticket dieselbe Prüfung, in dieser Reihenfolge:
 4. Grenze offener Tickets je User erreicht? (`limit`, 0 = ohne)
 5. Bei ModMail: schon ein offenes ModMail-Ticket — auch auf einem anderen Server? Die DM ist ein einziger Kanal, deshalb höchstens eins.
 
-Die Nummer ist fortlaufend je Server (`#0042`); `Tickets.Create()` vergibt sie in einer Transaktion. Scheitert danach etwas (Rechte, DM zu), verschwindet die Zeile samt halb angelegtem Kanal wieder.
+**Ticket-ID:** Kürzel des Themas und Nummer — `SUP-5`. Die Nummer ist fortlaufend je Server; `Tickets.Create()` vergibt sie in einer Transaktion. Scheitert danach etwas (Rechte, DM zu), verschwindet die Zeile samt halb angelegtem Kanal wieder. Das Kürzel stellt man je Thema ein (Dashboard › *Themen*, Feld „ID", 2–6 Buchstaben oder Ziffern); leer nimmt der Bot die ersten drei Buchstaben des Namens (Übersicht → UBE), ein doppeltes wird `SUP2` (`AssignCodes()`). Es steht am Ticket selbst (`tickets.code`): `SUP-5` bleibt `SUP-5`, auch wenn das Thema später anders heißt oder das Ticket umzieht. Der Kanal heißt `sup-5`. Tickets von vor den Kürzeln heißen weiter `#42`.
+
+**User-ID:** Jeder User bekommt beim ersten Ticket eine feste, kurze ID — `U-7K3F` (Tabelle `user_codes`, vier Zeichen Crockford-Base32 ohne I, L, O, U; `UserCodes.Of()`). Sie ist dieselbe in all seinen Tickets auf jedem Server und steht im Ticket (Statuszeile, Platzhalter `{user.code}`), in seiner DM („Ticket SUP-5 · deine ID: U-7K3F"), in Live Tickets und Transcriptions — dort mit der Zahl seiner Tickets auf dem Server. Die Suche nach `U-7K3F` findet alle seine Transcripts.
 
 **ModMail per DM:** Schreibt ein User dem Bot ohne offenes Ticket, fragt der Bot **immer** erst nach dem Server (`GuildPickerView()`, nur Server mit ModMail, auf denen der User Mitglied ist), dann nach dem Thema (`OptionPickerView()`) — auch wenn es nur einen Server oder nur ein Thema gibt, damit der User weiß, wo er landet und worum es geht. Die Prüfung von oben läuft schon vor der Themenwahl (`TopicPicker()`). Alles, was der User bis dahin schreibt, sammelt der Bot (bis 10 Minuten, bis 10 Dateien) und stellt es danach ins Ticket. Schreibt er weiter, während die Auswahl noch offen ist, kommt keine zweite Auswahl, nur ein 📝 an seiner Nachricht (`AskServer()`, fünf Minuten oder bis ein Ticket aufgeht).
 
@@ -166,12 +168,12 @@ Unbekannte bleiben stehen, damit ein Tippfehler auffällt. In DMs stehen Namen s
 
 ## Transcripts
 
-Beim Schließen liest der Bot den ganzen Verlauf des Tickets und legt ihn ab — im Dashboard unter **Transcriptions** (Liste mit Suche nach Nummer, Name oder User-ID). Eingestellt wird es unter *Einrichtung › Nach dem Schließen* bzw. im Assistenten auf der Seite *Transcripts*:
+Beim Schließen liest der Bot den ganzen Verlauf des Tickets und legt ihn ab — im Dashboard unter **Transcriptions** (Liste mit Suche nach Ticket-ID `SUP-42`, User-ID `U-7K3F`, Name oder Discord-ID). Ein Klick auf eine Zeile öffnet das Transcript **groß im Dashboard**: oben die Eckdaten, darunter die Seite selbst eingebettet (`/transcript/<ticket>?embed=1`, ohne ihren eigenen Kopf), daneben „neuer Tab", Download und Löschen. Eingestellt wird es unter *Einrichtung › Nach dem Schließen* bzw. im Assistenten auf der Seite *Transcripts*:
 
 | Schalter | Wirkung |
 |---|---|
 | Transcript speichern | Aus: kein Transcript, weder im Dashboard noch im Log-Kanal |
-| Log-Kanal | Karte (Nummer, Ersteller, Bearbeiter, Grund, Dauer, Zahlen) mit Knopf „Online ansehen“ und der HTML-Datei |
+| Log-Kanal | Karte (Ticket-ID, Ersteller, Bearbeiter, Grund, Dauer, Zahlen) mit Knopf „Online ansehen“ und der HTML-Datei (`sup-42.html`). Ein **Textkanal oder ein Beitrag in einem Forum**: das Dashboard listet je Forum die aktiven und die zuletzt archivierten Beiträge und bietet „+ Neuer Beitrag in #forum" an — der Bot legt „Ticket-Logs" sofort an. Ein archivierter Beitrag wacht beim nächsten Transcript von selbst auf (`utils/logtarget.ts`). Im Assistenten stehen Threads ebenfalls zur Wahl |
 | Kopie an den Ersteller | Dieselbe Karte per DM. **Nur bei Klassisch:** bei ModMail steht das Gespräch schon in seinen DMs, und die Team-Seite mit ihren internen Zeilen gehört nicht zu ihm |
 
 **Was drinsteht:** jede Nachricht mit Autor (Name, Bild, Rollenfarbe), Markdown, Erwähnungen, Server-Emojis, Zeitstempeln, Antworten, Reaktionen, Stickern, Embeds, Anhängen — und **Components V2**: Container mit Akzentfarbe, Text, Abschnitte mit Vorschaubild oder Knopf, Galerien, Trenner, Dateien, Knöpfe und Auswahlmenüs (aufklappbar, damit man sieht, was zur Wahl stand). Oben stehen die Eckdaten des Tickets.
@@ -235,15 +237,15 @@ Im Kopf stehen Übernehmen/Zurückgeben, Priorität und Schließen, daneben das 
 
 ## Moderatoren
 
-Unter *Einrichtung › Moderatoren* trägt man **Rollen** und **einzelne User** ein (je bis 25). Sie zählen für **jedes** Thema zum Team (`IsModerator()` in `TicketPanel.ts`, geprüft in `IsStaff()`):
+Die Moderatoren gelten für den **ganzen Server** — Tickets und [Moderation](Moderation.md). Eingetragen werden sie im Dashboard unter **Moderatoren** (eigener Eintrag in der Leiste, nur für wer den Server verwaltet): **Rollen** und **einzelne User**, je bis 25, jede Änderung gilt sofort. Gespeichert in `guild_settings.moderators`; Migration 013 hat die alte Liste aus den Ticket-Einstellungen übernommen. `TicketSettings.Of()` hängt sie an die Ticket-Einstellungen, `Save()` schreibt sie dort nie hin. Für Tickets zählen sie bei **jedem** Thema zum Team (`IsModerator()` in `TicketPanel.ts`, geprüft in `IsStaff()`):
 
 | Wo | Wirkung |
 |---|---|
 | Discord | Neue Ticket-Kanäle bekommen für sie dieselben Rechte wie die Support-Rolle. Beim Speichern zieht der Bot die schon **offenen** Kanäle nach — neue Moderatoren sehen sie, entfernte nicht mehr (außer sie sehen das Ticket aus anderem Grund). Forum-Posts erben die Rechte des Forums, dort tut der Bot nichts |
 | Aktions-Menü | alle Aktionen, wie das Team |
-| Dashboard | Startseite mit Marke „Moderator“, Live Tickets und Transcriptions mit **allen** Tickets. Keine Einstellungen, kein Transcript-Löschen |
+| Dashboard | Startseite mit Marke „Moderator“, Live Tickets und Transcriptions mit **allen** Tickets, dazu die Moderation. Keine Einstellungen, kein Transcript-Löschen. Wer keine eigene Gruppe hat, trägt oben die Gruppe **Guardian** |
 
-User sucht die Karte per Name oder User-ID (`POST …/tickets` mit `action: "members"`); wer den Server verlassen hat, steht mit Hinweis in der Liste, bis man ihn entfernt. `Clean()` nimmt nur echte IDs und nur Rollen, die es auf dem Server gibt.
+User sucht die Seite per Name oder User-ID (`POST …/moderators` mit `action: "members"`); wer den Server verlassen hat, steht mit Hinweis in der Liste, bis man ihn entfernt. `CleanModerators()` nimmt nur echte IDs und nur Rollen, die es auf dem Server gibt; `SyncModerators()` zieht danach die offenen Ticket-Kanäle nach.
 
 ---
 
@@ -272,6 +274,7 @@ User sucht die Karte per Name oder User-ID (`POST …/tickets` mit `action: "mem
 ```bash
 npm run check:tickets     # Aktionsliste, Platzhalter, Einstellungen, Moderatoren, Menü, Panel, ModMail-Karten, Transcript- und Live-Darstellung, wer was sieht, Datenbank
 npm run check:dashboard   # Platzhalter-Spiegel, Rechte und CSRF der Ticket-, Transcript- und Live-Routen
+npm run check:moderation  # Log-Ziele (Textkanal, Forum-Beitrag) - dieselben wie hier
 ```
 
 Was nur mit echter Discord-Verbindung geht — Kanäle anlegen, Tags, Relay, Webhooks, Anhänge herunterladen, Live-Ereignisse — prüft erst ein Lauf auf einem Testserver.

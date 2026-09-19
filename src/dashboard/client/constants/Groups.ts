@@ -28,6 +28,12 @@ export const GROUPS: Record<DashboardGroup, { label: string; icon: string; color
         color: "#ffd166",
         grants: "Kennzeichnung für Premium-Zugang. Freigeschaltet ist daran heute noch nichts.",
     },
+    guardian: {
+        label: "Guardian",
+        icon: "#i-shield-check",
+        color: "var(--live)",
+        grants: "Moderiert mindestens einen Server mit RL Nexus – ohne eigenes Abo. Dort stehen Live Tickets, Transcriptions und Moderation offen.",
+    },
     testphase: {
         label: "Testphase",
         icon: "#i-flask",
@@ -38,7 +44,7 @@ export const GROUPS: Record<DashboardGroup, { label: string; icon: string; color
 
 // Rangfolge wie in DashboardService.GroupOf() - die Übersicht in den
 // Einstellungen zeigt sie genau so von oben nach unten.
-export const GROUP_ORDER: DashboardGroup[] = ["administrator", "developer", "partner", "premium", "testphase"];
+export const GROUP_ORDER: DashboardGroup[] = ["administrator", "developer", "partner", "premium", "guardian", "testphase"];
 
 // Nur diese beiden sehen zusätzlich Server, die ihnen nicht gehören - dieselbe
 // Grenze zieht DashboardService.IsStaff() auf der Serverseite.

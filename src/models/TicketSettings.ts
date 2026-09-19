@@ -1,6 +1,6 @@
 import Model from "../structures/Model";
 import { TABLES, TableName, Unpack } from "../constants/Database";
-import { DefaultConfig, LEGACY_MODMAIL_PANEL } from "../constants/Tickets";
+import { AssignCodes, DefaultConfig, LEGACY_MODMAIL_PANEL } from "../constants/Tickets";
 import { ITicketConfig } from "../interfaces/services/tickets/ITicket";
 
 export interface ITicketSettingsRow {
@@ -38,16 +38,24 @@ export default class TicketSettings extends Model<ITicketSettingsRow> {
         return {
             ...base,
             ...stored,
+            // Ältere Themen haben noch kein Kürzel - dann kommt es aus dem Namen.
+            options: AssignCodes(stored.options ?? base.options),
             messages,
             tags: { ...base.tags, ...stored.tags },
             panel: { ...base.panel, ...stored.panel },
             transcripts: { ...base.transcripts, ...stored.transcripts },
-            moderators: { ...base.moderators, ...stored.moderators },
+            // Moderatoren gelten für den ganzen Server und stehen in guild_settings.
+            moderators: (await this.client.settings.Of(guildId)).moderators,
         };
     }
 
     async Save(guildId: string, config: ITicketConfig): Promise<void> {
-        await this.Upsert({ guild_id: guildId, config: JSON.stringify(config) }, ["config"]);
+        // Die Moderatoren gehören dem Server (GuildSettings.SaveModerators), nicht den Tickets.
+        const stored: Partial<ITicketConfig> = { ...config };
+
+        delete stored.moderators;
+
+        await this.Upsert({ guild_id: guildId, config: JSON.stringify(stored) }, ["config"]);
     }
 
     /** Die Server, auf denen ModMail an ist - für eine DM ohne offenes Ticket. */

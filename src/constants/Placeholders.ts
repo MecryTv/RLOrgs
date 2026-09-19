@@ -8,6 +8,7 @@ export const PLACEHOLDER_KEYS = [
     "user.name",
     "user.id",
     "user.avatar",
+    "user.code",
     "guild",
     "guild.id",
     "guild.icon",

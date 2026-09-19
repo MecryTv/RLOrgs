@@ -192,6 +192,7 @@ async function checkSettings(client: BotClient): Promise<void> {
         guildId: GUILD,
         modules: ["queues"],
         rankRoles: { gc: "123" },
+        moderators: { users: [], roles: [] },
         matchChannel: "456",
         queueChannel: null,
     });

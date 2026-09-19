@@ -88,7 +88,8 @@ export default class DashboardTranscript extends Route {
                 .send(createReadStream(target));
         }
 
-        const download = (request.query as { download?: string }).download === "1";
+        const { download: wanted, embed } = request.query as { download?: string; embed?: string };
+        const download = wanted === "1";
 
         if (download) {
             const transcript = await this.client.ticketTranscripts.Read(entry.ticketId);
@@ -98,13 +99,13 @@ export default class DashboardTranscript extends Route {
 
             return reply
                 .header("Content-Type", "text/html; charset=utf-8")
-                .header("Content-Disposition", `attachment; filename="ticket-${String(entry.number).padStart(4, "0")}.html"`)
+                .header("Content-Disposition", `attachment; filename="${(entry.code ?? "ticket").toLowerCase()}-${entry.number}.html"`)
                 .header("X-Content-Type-Options", "nosniff")
                 .header("Cache-Control", "no-store")
                 .send(html);
         }
 
-        const page = await service.Page(entry);
+        const page = await service.Page(entry, embed === "1");
 
         if (!page) return Missing(reply, 404, "Dieses Transcript gibt es nicht mehr.");
 

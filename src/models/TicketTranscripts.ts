@@ -7,6 +7,7 @@ export interface ITicketTranscriptRow {
     ticket_id: number;
     guild_id: string;
     number: number;
+    code: string | null;
     opener_id: string;
     opener_name: string;
     meta: ITranscriptMeta | string;
@@ -20,6 +21,7 @@ export interface ITranscriptEntry {
     ticketId: number;
     guildId: string;
     number: number;
+    code: string | null;
     meta: ITranscriptMeta;
 }
 
@@ -37,6 +39,7 @@ export default class TicketTranscripts extends Model<ITicketTranscriptRow> {
                 ticket_id: transcript.ticketId,
                 guild_id: transcript.guild.id,
                 number: transcript.number,
+                code: transcript.code ?? null,
                 opener_id: transcript.meta.opener.id,
                 opener_name: transcript.meta.opener.name.slice(0, 100),
                 meta: JSON.stringify(transcript.meta),
@@ -54,7 +57,7 @@ export default class TicketTranscripts extends Model<ITicketTranscriptRow> {
     /** Kopf und Zahlen eines Transcripts - für die Rechteprüfung, ohne den Verlauf auszupacken. */
     async Entry(ticketId: number): Promise<ITranscriptEntry | null> {
         const row = await this.db.One<Omit<ITicketTranscriptRow, "data">>(
-            `SELECT ticket_id, guild_id, number, meta FROM \`${this.Table}\` WHERE ticket_id = ? LIMIT 1`,
+            `SELECT ticket_id, guild_id, number, code, meta FROM \`${this.Table}\` WHERE ticket_id = ? LIMIT 1`,
             [ticketId]
         );
 
@@ -103,9 +106,18 @@ export default class TicketTranscripts extends Model<ITicketTranscriptRow> {
             values.push(before);
         }
 
-        if (/^#?\d{1,7}$/.test(text)) {
+        // Die Ticket-ID mit Kürzel (SUP-42) oder nur die Nummer (#42, 42).
+        // Transcripts von vor den Kürzeln passen zu jedem Kürzel.
+        const id = /^(?:#|([A-Z0-9]{2,6})-)?(\d{1,7})$/i.exec(text);
+
+        if (id) {
             where.push("number = ?");
-            values.push(Number(text.replace("#", "")));
+            values.push(Number(id[2]));
+
+            if (id[1]) {
+                where.push("(code = ? OR code IS NULL)");
+                values.push(id[1].toUpperCase());
+            }
         } else if (/^\d{17,20}$/.test(text)) {
             where.push("opener_id = ?");
             values.push(text);
@@ -115,7 +127,7 @@ export default class TicketTranscripts extends Model<ITicketTranscriptRow> {
         }
 
         const rows = await this.db.Query<Omit<ITicketTranscriptRow, "data">>(
-            `SELECT ticket_id, guild_id, number, meta FROM \`${this.Table}\` WHERE ${where.join(" AND ")}` +
+            `SELECT ticket_id, guild_id, number, code, meta FROM \`${this.Table}\` WHERE ${where.join(" AND ")}` +
                 ` ORDER BY ticket_id DESC LIMIT ?`,
             [...values, limit]
         );
@@ -124,11 +136,12 @@ export default class TicketTranscripts extends Model<ITicketTranscriptRow> {
     }
 }
 
-function ToEntry(row: Pick<ITicketTranscriptRow, "ticket_id" | "guild_id" | "number" | "meta">): ITranscriptEntry {
+function ToEntry(row: Pick<ITicketTranscriptRow, "ticket_id" | "guild_id" | "number" | "code" | "meta">): ITranscriptEntry {
     return {
         ticketId: Number(row.ticket_id),
         guildId: row.guild_id,
         number: Number(row.number),
+        code: row.code ?? null,
         meta: Unpack<ITranscriptMeta>(row.meta, {} as ITranscriptMeta),
     };
 }

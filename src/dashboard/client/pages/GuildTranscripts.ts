@@ -1,9 +1,11 @@
 /**
  * Abschnitt: die Transcripts geschlossener Tickets eines Servers.
  *
- * Eine Liste, neueste zuerst, mit Suche und "Ältere laden". Angesehen wird ein
- * Transcript auf seiner eigenen Seite (/transcript/<ticket>) - die prüft selbst,
- * wer es sehen darf, und liefert auch die Datei zum Mitnehmen.
+ * Eine Liste, neueste zuerst, mit Suche und "Ältere laden". Ein Klick auf eine
+ * Zeile öffnet das Transcript groß im Dashboard: die Seite /transcript/<ticket>
+ * eingebettet, ohne ihren eigenen Kopf - der steht im Dialog. Dieselbe Seite
+ * gibt es im neuen Tab und als Datei zum Mitnehmen; sie prüft selbst, wer sie
+ * sehen darf.
  *
  * Neu geladen wird still, wenn der Abschnitt wieder aufgeht und wenn der Stream
  * von Live Tickets ein fertiges Transcript meldet ("live:transcript").
@@ -23,6 +25,12 @@ interface IPerson {
 interface IEntry {
     id: number;
     number: number;
+    /** Kürzel des Themas (SUP) - fehlt bei Transcripts von vor den Kürzeln. */
+    code: string | null;
+    /** Die feste ID des Erstellers ohne "U-". */
+    userCode: string | null;
+    /** Tickets des Erstellers auf diesem Server. */
+    openerTickets: number;
     option: string;
     contact: "direct" | "modmail";
     opener: IPerson;
@@ -33,6 +41,7 @@ interface IEntry {
     closedAt: number;
     messages: number;
     files: number;
+    participants?: IPerson[];
 }
 
 interface IPayload {
@@ -53,8 +62,14 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", ...ch
     return element;
 }
 
-function ticketNumber(value: number): string {
-    return `#${String(value).padStart(4, "0")}`;
+// Wie TicketNumber() im Bot: SUP-5, ältere Tickets ohne Kürzel #5.
+function ticketId(entry: IEntry): string {
+    return entry.code ? `${entry.code}-${entry.number}` : `#${entry.number}`;
+}
+
+/** Die Ticket-ID als Marke: das Kürzel leise, die Nummer laut. */
+function idChip(entry: IEntry): HTMLElement {
+    return el("span", "tid", el("i", "", entry.code ? `${entry.code}-` : "#"), String(entry.number));
 }
 
 // Dieselbe Rechnung wie Duration() im Bot (src/builder/TranscriptHtml.ts).
@@ -81,59 +96,14 @@ function avatar(person: IPerson): HTMLElement {
     return box;
 }
 
-function row(entry: IEntry, onDelete: ((entry: IEntry) => Promise<boolean>) | null): HTMLElement {
-    const page = `${BASE}/transcript/${entry.id}`;
-
-    const title = el(
-        "div",
-        "trrow__title",
-        el("b", "", entry.option),
-        el("span", `tagline${entry.contact === "modmail" ? " tagline--on" : ""}`, entry.contact === "modmail" ? "ModMail" : "Klassisch")
-    );
-
-    const who = el(
-        "div",
-        "trrow__who",
-        avatar(entry.opener),
-        el("span", "", entry.opener.name),
-        ...(entry.closer ? [el("span", "trrow__by", `geschlossen von ${entry.closer.name}`)] : [])
-    );
-
-    const facts = [
-        WHEN.format(entry.closedAt),
-        duration(entry.closedAt - entry.openedAt),
-        `${entry.messages} Nachricht${entry.messages === 1 ? "" : "en"}`,
-        ...(entry.files ? [`${entry.files} ${entry.files === 1 ? "Anhang" : "Anhänge"}`] : []),
-    ];
-
-    const main = el("div", "trrow__main", title, who, el("div", "trrow__meta", facts.join(" · ")));
-
-    if (entry.reason) main.append(el("div", "trrow__reason", `„${entry.reason}“`));
-
-    const openLink = el("a", "btn btn--quiet", icon("#i-external"), "Öffnen");
-
-    openLink.href = page;
-    openLink.target = "_blank";
-    openLink.rel = "noopener";
-    openLink.setAttribute("aria-label", `Transcript ${ticketNumber(entry.number)} öffnen`);
-
-    const download = el("a", "iconbtn", icon("#i-download"));
-
-    download.href = `${page}?download=1`;
-    download.title = "Als HTML-Datei herunterladen";
-    download.setAttribute("aria-label", `Transcript ${ticketNumber(entry.number)} als HTML-Datei herunterladen`);
-
-    const actions = el("div", "trrow__act", openLink, download);
-
-    if (onDelete) actions.append(removeButton(entry, onDelete));
-
-    return el("article", "trrow", el("span", "trrow__num", ticketNumber(entry.number)), main, actions);
+function tickets(count: number): string {
+    return `${count} Ticket${count === 1 ? "" : "s"}`;
 }
 
 // Zweimal klicken: weg ist weg - auch die gesicherten Anhänge.
 function removeButton(entry: IEntry, onDelete: (entry: IEntry) => Promise<boolean>): HTMLButtonElement {
     const remove = el("button", "iconbtn is-danger", icon("#i-trash"));
-    const label = `Transcript ${ticketNumber(entry.number)} löschen`;
+    const label = `Transcript ${ticketId(entry)} löschen`;
     let sure: ReturnType<typeof setTimeout> | null = null;
 
     remove.type = "button";
@@ -161,11 +131,31 @@ function removeButton(entry: IEntry, onDelete: (entry: IEntry) => Promise<boolea
     return remove;
 }
 
+/** Neuer Tab und Download - in der Zeile wie im Dialog. */
+function links(entry: IEntry): HTMLElement[] {
+    const page = `${BASE}/transcript/${entry.id}`;
+    const tab = el("a", "iconbtn", icon("#i-external"));
+    const download = el("a", "iconbtn", icon("#i-download"));
+
+    tab.href = page;
+    tab.target = "_blank";
+    tab.rel = "noopener";
+    tab.title = "In neuem Tab öffnen";
+    tab.setAttribute("aria-label", `Transcript ${ticketId(entry)} in neuem Tab öffnen`);
+
+    download.href = `${page}?download=1`;
+    download.title = "Als HTML-Datei herunterladen";
+    download.setAttribute("aria-label", `Transcript ${ticketId(entry)} als HTML-Datei herunterladen`);
+
+    return [tab, download];
+}
+
 function skeleton(): HTMLElement[] {
     return Array.from({ length: 4 }, () => el("div", "trrow trrow--skel", el("span", "sb trskel__num"), el("span", "sb trskel__line"), el("span", "sb trskel__btn")));
 }
 
 export function renderTranscripts(guildId: string): void {
+    const section = need<HTMLElement>("#transcriptions");
     const list = need<HTMLElement>("#trList");
     const search = need<HTMLInputElement>("#trSearch");
     const count = need<HTMLElement>("#trCount");
@@ -186,6 +176,189 @@ export function renderTranscripts(guildId: string): void {
         note.querySelector("span")!.textContent = text ?? "";
     }
 
+    /* ------------------------------------------------------------
+       Die große Ansicht
+       ------------------------------------------------------------ */
+    const viewTitle = el("h2", "", "");
+    const viewSub = el("p", "", "");
+    const viewId = el("span", "trview__id");
+    const viewAct = el("div", "trview__act");
+    const viewFacts = el("dl", "trview__facts");
+    const frame = el("iframe", "trview__frame");
+    const stage = el(
+        "div",
+        "trview__stage",
+        el("div", "trview__load", ...Array.from({ length: 6 }, (_, index) => el("span", `sb trview__bar${index % 3 === 0 ? " is-head" : ""}`))),
+        frame
+    );
+    const close = el("button", "iconbtn modal__x", icon("#i-x"));
+    const dialog = el(
+        "dialog",
+        "modal trview",
+        el("div", "modal__head trview__head", viewId, el("div", "trview__title", viewTitle, viewSub), viewAct, close),
+        viewFacts,
+        stage
+    );
+
+    viewTitle.id = "trViewTitle";
+    dialog.setAttribute("aria-labelledby", "trViewTitle");
+    close.type = "button";
+    close.autofocus = true;
+    close.setAttribute("aria-label", "Schließen");
+    // Das Transcript hat keine Skripte (eigene CSP) - same-origin braucht es für die gesicherten Anhänge.
+    frame.setAttribute("sandbox", "allow-same-origin allow-popups allow-popups-to-escape-sandbox");
+    frame.addEventListener("load", () => {
+        if (frame.getAttribute("src") !== "about:blank") stage.classList.add("is-ready");
+    });
+    // Am body, nicht in der Sektion: die kann versteckt werden, während der Dialog offen ist.
+    document.body.append(dialog);
+
+    // Zu ist zu: das Transcript fliegt raus, Videos darin laufen nicht weiter.
+    // Direkt hier und nicht erst im close-Event - das feuert nicht in jedem Browser.
+    function hide(): void {
+        frame.src = "about:blank";
+        stage.classList.remove("is-ready");
+
+        if (dialog.open) dialog.close();
+    }
+
+    close.addEventListener("click", hide);
+    // Ein Klick neben den Dialog schließt ihn wie Escape.
+    dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) hide();
+    });
+    dialog.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+
+        event.preventDefault();
+        hide();
+    });
+    dialog.addEventListener("close", () => {
+        if (frame.getAttribute("src") !== "about:blank") hide();
+    });
+
+    function fact(term: string, value: (Node | string)[], wide = false): HTMLElement {
+        return el("div", wide ? "trfact is-wide" : "trfact", el("dt", "", term), el("dd", "", ...value));
+    }
+
+    function person(entry: IPerson | null, fallback: string): (Node | string)[] {
+        return entry ? [avatar(entry), el("span", "", entry.name)] : [fallback];
+    }
+
+    function view(entry: IEntry): void {
+        const opener: (Node | string)[] = person(entry.opener, "–");
+
+        if (entry.userCode) opener.push(userButton(entry, true));
+
+        viewId.replaceChildren(idChip(entry));
+        viewTitle.textContent = entry.option;
+        viewSub.textContent = `${entry.contact === "modmail" ? "ModMail" : "Klassisch"} · geschlossen ${WHEN.format(entry.closedAt)}`;
+        viewAct.replaceChildren(
+            ...links(entry),
+            ...(canDelete
+                ? [
+                      removeButton(entry, async (target) => {
+                          const done = await destroy(target);
+
+                          if (done) hide();
+
+                          return done;
+                      }),
+                  ]
+                : [])
+        );
+
+        const participants = (entry.participants ?? []).filter((other) => other.id !== entry.opener.id);
+
+        viewFacts.replaceChildren(
+            fact("Ersteller", opener),
+            fact("Bearbeiter", person(entry.claimer, "niemand")),
+            fact("Geschlossen von", person(entry.closer, "unbekannt")),
+            fact("Offen", [`${duration(entry.closedAt - entry.openedAt)} · ab ${WHEN.format(entry.openedAt)}`]),
+            fact("Verlauf", [
+                `${entry.messages} Nachricht${entry.messages === 1 ? "" : "en"} · ${entry.files} ${entry.files === 1 ? "Anhang" : "Anhänge"}`,
+            ]),
+            ...(participants.length ? [fact("Beteiligt", [participants.map((other) => other.name).join(", ")])] : []),
+            ...(entry.reason ? [fact("Grund", [`„${entry.reason}“`], true)] : [])
+        );
+
+        stage.classList.remove("is-ready");
+        frame.title = `Transcript ${ticketId(entry)}`;
+        frame.src = `${BASE}/transcript/${entry.id}?embed=1`;
+        dialog.showModal();
+    }
+
+    /** U-7K3F als Knopf: zeigt alle Transcripts dieses Users. */
+    function userButton(entry: IEntry, inDialog = false): HTMLButtonElement {
+        const code = `U-${entry.userCode}`;
+        const button = el("button", "uid", code);
+
+        button.type = "button";
+        button.title = `Alle Tickets von ${code} zeigen`;
+        button.setAttribute("aria-label", `Alle Tickets von ${entry.opener.name} (${code}) zeigen`);
+        button.addEventListener("click", () => {
+            if (inDialog) hide();
+
+            search.value = code;
+            query = code;
+            void load(true);
+        });
+
+        return button;
+    }
+
+    /* ------------------------------------------------------------
+       Liste
+       ------------------------------------------------------------ */
+    function row(entry: IEntry): HTMLElement {
+        const title = el(
+            "div",
+            "trrow__title",
+            el("b", "", entry.option),
+            el("span", `tagline${entry.contact === "modmail" ? " tagline--on" : ""}`, entry.contact === "modmail" ? "ModMail" : "Klassisch")
+        );
+
+        const who = el(
+            "div",
+            "trrow__who",
+            avatar(entry.opener),
+            el("span", "trrow__name", entry.opener.name),
+            ...(entry.userCode ? [userButton(entry)] : []),
+            el("span", "trrow__count", tickets(entry.openerTickets)),
+            ...(entry.closer ? [el("span", "trrow__by", `geschlossen von ${entry.closer.name}`)] : [])
+        );
+
+        const facts = [
+            WHEN.format(entry.closedAt),
+            duration(entry.closedAt - entry.openedAt),
+            `${entry.messages} Nachricht${entry.messages === 1 ? "" : "en"}`,
+            ...(entry.files ? [`${entry.files} ${entry.files === 1 ? "Anhang" : "Anhänge"}`] : []),
+        ];
+
+        const main = el("div", "trrow__main", title, who, el("div", "trrow__meta", facts.join(" · ")));
+
+        if (entry.reason) main.append(el("div", "trrow__reason", `„${entry.reason}“`));
+
+        const open = el("button", "btn btn--quiet", icon("#i-eye"), "Ansehen");
+
+        open.type = "button";
+        open.setAttribute("aria-label", `Transcript ${ticketId(entry)} ansehen`);
+        open.addEventListener("click", () => view(entry));
+
+        const actions = el("div", "trrow__act", open, ...links(entry));
+
+        if (canDelete) actions.append(removeButton(entry, destroy));
+
+        const article = el("article", "trrow", idChip(entry), main, actions);
+
+        // Die ganze Zeile öffnet - nur ihre eigenen Knöpfe und Links nicht.
+        article.addEventListener("click", (event) => {
+            if (!(event.target as HTMLElement).closest("a, button")) view(entry);
+        });
+
+        return article;
+    }
+
     function empty(): HTMLElement {
         if (query) {
             return el(
@@ -193,7 +366,7 @@ export function renderTranscripts(guildId: string): void {
                 "tkempty tkempty--big",
                 icon("#i-search"),
                 el("b", "", `Nichts gefunden für „${query}“.`),
-                el("span", "", "Such nach der Nummer (#42), dem Namen oder der User-ID des Erstellers.")
+                el("span", "", "Such nach der Ticket-ID (SUP-42), der User-ID (U-7K3F), dem Namen oder der Discord-ID des Erstellers.")
             );
         }
 
@@ -246,13 +419,13 @@ export function renderTranscripts(guildId: string): void {
         warn(null);
         entries = entries.filter((other) => other.id !== entry.id);
         paint();
-        toast("info", "Transcript gelöscht", `${ticketNumber(entry.number)} ist samt Anhängen weg.`);
+        toast("info", "Transcript gelöscht", `${ticketId(entry)} ist samt Anhängen weg.`);
 
         return true;
     }
 
     function paint(): void {
-        list.replaceChildren(...(entries.length ? entries.map((entry) => row(entry, canDelete ? destroy : null)) : [empty()]));
+        list.replaceChildren(...(entries.length ? entries.map(row) : [empty()]));
         count.textContent = entries.length ? `${entries.length}${hasMore ? "+" : ""} Transcript${entries.length === 1 ? "" : "s"}` : "";
         more.hidden = !hasMore;
     }
@@ -314,16 +487,13 @@ export function renderTranscripts(guildId: string): void {
     // Ein Ticket ist gerade zu gegangen - sein Transcript steht jetzt oben.
     document.addEventListener("live:transcript", () => void load(true, true));
 
-    const section = document.querySelector<HTMLElement>("#transcriptions");
-    let shown = section ? !section.hidden : false;
+    let shown = !section.hidden;
 
-    if (section) {
-        new MutationObserver(() => {
-            if (!section.hidden && !shown) void load(true, true);
+    new MutationObserver(() => {
+        if (!section.hidden && !shown) void load(true, true);
 
-            shown = !section.hidden;
-        }).observe(section, { attributes: true, attributeFilter: ["hidden"] });
-    }
+        shown = !section.hidden;
+    }).observe(section, { attributes: true, attributeFilter: ["hidden"] });
 
     void load(true);
 }

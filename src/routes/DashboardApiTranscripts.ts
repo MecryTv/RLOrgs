@@ -11,8 +11,8 @@ const PAGE_SIZE = 25;
 
 /**
  * Die Transcripts eines Servers für die Seite "Transcriptions". GET: neueste
- * zuerst, 25 je Abruf, weiter über ?before=<ticket>, Suche mit ?q= nach Nummer,
- * User-ID oder Name. POST { action: "delete", id }: ein Transcript samt
+ * zuerst, 25 je Abruf, weiter über ?before=<ticket>, Suche mit ?q= nach
+ * Ticket-ID (SUP-42), User-ID (U-7K3F), Discord-ID oder Name. POST { action: "delete", id }: ein Transcript samt
  * Anhängen löschen. Lesen darf auch die Support-Rolle (nur ihre Themen),
  * löschen nur, wer den Server verwalten darf.
  */
@@ -81,7 +81,10 @@ export default class DashboardApiTranscripts extends Route {
 
         const query = request.query as { q?: string; before?: string };
         const before = query.before && /^\d{1,10}$/.test(query.before) ? Number(query.before) : null;
-        const search = typeof query.q === "string" ? query.q.slice(0, 100) : "";
+        let search = typeof query.q === "string" ? query.q.slice(0, 100) : "";
+
+        // U-7K3F: die feste ID wird zur Discord-ID - gibt es sie nicht, bleibt die Liste leer.
+        if (/^\s*U-[0-9A-Z]{4,6}\s*$/i.test(search)) search = (await this.client.userCodes.UserOf(search)) ?? "0".repeat(17);
         // Supporter: nur die Themen ihrer Rolle. Ohne Mitglied gibt es für sie nichts.
         let visible: { include?: string[]; exclude?: string[] } = {};
 
@@ -92,9 +95,23 @@ export default class DashboardApiTranscripts extends Route {
         }
 
         const rows = await this.client.ticketTranscripts.List(id, search, before, PAGE_SIZE + 1, visible);
+        const page = rows.slice(0, PAGE_SIZE);
+        const openers = page.map((row) => row.meta.opener?.id).filter((opener): opener is string => Boolean(opener));
+        // Ältere Transcripts kennen die feste ID nicht - dann steht sie in user_codes (oder fehlt).
+        const [codes, counts] = await Promise.all([
+            this.client.userCodes.Many(openers),
+            this.client.tickets.CountsByOpener(id, openers),
+        ]);
 
         return reply.header("Cache-Control", "no-store").send({
-            transcripts: rows.slice(0, PAGE_SIZE).map((row) => ({ id: row.ticketId, number: row.number, ...row.meta })),
+            transcripts: page.map((row) => ({
+                id: row.ticketId,
+                number: row.number,
+                code: row.code,
+                ...row.meta,
+                userCode: row.meta.openerCode ?? codes.get(row.meta.opener?.id) ?? null,
+                openerTickets: counts.get(row.meta.opener?.id) ?? 1,
+            })),
             more: rows.length > PAGE_SIZE,
             // Damit die leere Liste sagen kann, warum sie leer ist.
             enabled: (await this.client.ticketSettings.Of(id)).transcripts.enabled,

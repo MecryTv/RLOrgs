@@ -12,7 +12,7 @@ import { BASE } from "../core/Base.js";
 import { ActivityResult, fetchActivity, renderOverview } from "./GuildOverview.js";
 
 // Was ein Supporter ohne "Server verwalten" sieht - die Teile des Ticket-Systems.
-const SUPPORT_SECTIONS = new Set(["live-tickets", "transcriptions"]);
+const SUPPORT_SECTIONS = ["live-tickets", "transcriptions"];
 
 /* ----------------------------------------------------------
    Seite: Serverdetail
@@ -170,8 +170,10 @@ export function renderGuild(data: IPayload): void {
     meta.replaceChildren(role, members, bots, created);
     countMembers(meta, guild);
 
-    // Moderatoren: kein Verwalten - sie sehen nur Live Tickets und Transcriptions.
+    // Moderatoren: kein Verwalten - sie sehen nur Live Tickets, Transcriptions
+    // und, wenn sie auf der Moderatoren-Liste stehen, die Moderation.
     const supportOnly = !guild.canManage && guild.role === "Moderator";
+    const only = supportOnly ? new Set([...SUPPORT_SECTIONS, ...(guild.canModerate ? ["moderation"] : [])]) : null;
 
     if (!guild.canManage) {
         const note = need<HTMLElement>("#readonly");
@@ -180,7 +182,7 @@ export function renderGuild(data: IPayload): void {
 
         if (supportOnly) {
             note.querySelector("span")!.textContent =
-                "Du bist hier Moderator: Live Tickets und Transcriptions stehen dir offen. Einstellungen brauchen „Server verwalten“ auf dem Server selbst.";
+                `Du bist hier Moderator: Live Tickets${guild.canModerate ? ", Transcriptions und die Moderation stehen" : " und Transcriptions stehen"} dir offen. Einstellungen brauchen „Server verwalten“ auf dem Server selbst.`;
         }
     }
 
@@ -189,7 +191,7 @@ export function renderGuild(data: IPayload): void {
 
     // Erst die Leiste mit dem Stand aus /api/me, dann die Abschnitte: sonst
     // landete eine Adresse auf einem ausgeschalteten Modul auf dessen Karte.
-    const loadModules = bindModules(guild, supportOnly ? SUPPORT_SECTIONS : null);
+    const loadModules = bindModules(guild, only);
     const show = bindSections(guild.id, supportOnly ? "live-tickets" : "uebersicht");
 
     const user = { id: data.user.id, name: data.user.name, avatar: data.user.avatar };
@@ -200,9 +202,14 @@ export function renderGuild(data: IPayload): void {
         void renderOverview(guild, data.user.id, waiting.activity);
         whenShown(["gallery"], () => void import("./GuildGallery.js").then((module) => module.renderGallery(guild.id, guild.canManage)));
         whenShown(["tickets"], () => void import("./GuildTickets.js").then((module) => module.renderTickets(guild.id, guild.canManage, user)));
+
+        if (guild.canManage) whenShown(["team"], () => void import("./GuildTeam.js").then((module) => module.renderTeam(guild.id)));
     }
 
     whenShown(["transcriptions"], () => void import("./GuildTranscripts.js").then((module) => module.renderTranscripts(guild.id)));
+
+    if (guild.canModerate) whenShown(["moderation"], () => void import("./GuildModeration.js").then((module) => module.renderModeration(guild.id)));
+    else maybe<HTMLElement>("#modNote")?.removeAttribute("hidden");
     // Live Tickets meldet fertige Transcripts - der Stream läuft auch, wenn nur Transcriptions offen ist.
     whenShown(["live-tickets", "transcriptions"], () => void import("./GuildLive.js").then((module) => module.renderLive(guild.id, user)));
 
@@ -284,7 +291,9 @@ function bindSections(guildId: string, fallback: string): (section: string) => v
         // Unbekannt oder ausgeschaltet: dann die Übersicht (für Supporter Live
         // Tickets) - und die Adresse sagt danach auch, was zu sehen ist.
         const open = links().find((link) => !link.hidden && link.dataset.section === wanted);
-        const section = open?.dataset.section ?? fallback;
+        // Ist auch der Rückfall versteckt (Moderator ohne Tickets), dann der erste offene Eintrag.
+        const first = links().find((link) => !link.hidden && link.dataset.section === fallback) ?? links().find((link) => !link.hidden);
+        const section = open?.dataset.section ?? first?.dataset.section ?? fallback;
 
         for (const card of cards) card.hidden = card.id !== section;
 
@@ -467,10 +476,13 @@ function bindModules(guild: IGuild, only: Set<string> | null): (modules: string[
         });
     }
 
-    // Supporter sehen weder Übersicht noch Module - nur, was in only steht.
+    // Moderatoren sehen weder Übersicht noch Module - nur, was in only steht.
     if (only) {
         for (const fixed of nav.querySelectorAll<HTMLElement>('a[data-section="uebersicht"], a[data-section="module"]')) fixed.hidden = true;
     }
+
+    // Die Moderatoren stellt nur ein, wer den Server verwalten darf.
+    nav.querySelector<HTMLElement>('a[data-section="team"]')!.hidden = !guild.canManage || only !== null;
 
     function paint(): void {
         for (const [id, entry] of entries) {

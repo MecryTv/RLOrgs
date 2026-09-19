@@ -152,8 +152,8 @@ export default class TicketHandler extends Event {
                 Edit(
                     InfoView(
                         ticket.contact === "modmail"
-                            ? `📬 Dein Ticket ${TicketNumber(ticket.number)} ist offen – schreib mir einfach hier per DM weiter.`
-                            : `🎫 Dein Ticket ${TicketNumber(ticket.number)} steht bereit: <#${ticket.channelId}>`,
+                            ? `📬 Dein Ticket ${TicketNumber(ticket.number, ticket.code)} ist offen – schreib mir einfach hier per DM weiter.`
+                            : `🎫 Dein Ticket ${TicketNumber(ticket.number, ticket.code)} steht bereit: <#${ticket.channelId}>`,
                         "#35e07f"
                     )
                 )
@@ -588,7 +588,7 @@ export default class TicketHandler extends Event {
             const ticket = await this.client.ticketService.Open(guild, interaction.user, optionId);
 
             await interaction.message.edit(
-                Edit(InfoView(`✅ Ticket ${TicketNumber(ticket.number)} auf **${guild.name}** ist offen.`, "#35e07f"))
+                Edit(InfoView(`✅ Ticket ${TicketNumber(ticket.number, ticket.code)} auf **${guild.name}** ist offen.`, "#35e07f"))
             );
 
             await this.client.ticketService.FlushPending(interaction.user, ticket);

@@ -18,6 +18,7 @@ import ActivityService from "../services/ActivityService";
 import TicketService from "../services/TicketService";
 import TranscriptService from "../services/TranscriptService";
 import LiveService from "../services/LiveService";
+import ModerationService from "../services/ModerationService";
 import GuildSettings from "../models/GuildSettings";
 import DashboardGroups from "../models/DashboardGroups";
 import Notifications from "../models/Notifications";
@@ -31,6 +32,9 @@ import TicketSettings from "../models/TicketSettings";
 import Tickets from "../models/Tickets";
 import TicketBlacklist from "../models/TicketBlacklist";
 import TicketTranscripts from "../models/TicketTranscripts";
+import UserCodes from "../models/UserCodes";
+import ModSettings from "../models/ModSettings";
+import ModCases from "../models/ModCases";
 
 export default class BotClient extends Client implements IBotClient {
 
@@ -52,6 +56,7 @@ export default class BotClient extends Client implements IBotClient {
     ticketService: TicketService;
     transcriptService: TranscriptService;
     liveService: LiveService;
+    moderationService: ModerationService;
 
     // Ein Model je Tabelle. Sie hängen am Client, damit Befehle, Events und
     // Routen dieselbe Instanz benutzen - und damit denselben Cache.
@@ -68,6 +73,9 @@ export default class BotClient extends Client implements IBotClient {
     tickets: Tickets;
     ticketBlacklist: TicketBlacklist;
     ticketTranscripts: TicketTranscripts;
+    userCodes: UserCodes;
+    modSettings: ModSettings;
+    modCases: ModCases;
 
     constructor() {
         // Vor super(): die Intents hängen an der Konfiguration, und this gibt es
@@ -88,6 +96,9 @@ export default class BotClient extends Client implements IBotClient {
                 // ModMail lebt in der DM: ohne dieses Intent bekommt der Bot sie nie
                 // zu sehen. Es ist nicht privilegiert.
                 GatewayIntentBits.DirectMessages,
+                // Bans und Entbannungen - die Moderation schließt damit offene Fälle
+                // und hält die Bannliste für /unban aktuell. Nicht privilegiert.
+                GatewayIntentBits.GuildModeration,
                 ...(config.GUILD_MEMBER_INTENT ? [GatewayIntentBits.GuildMembers] : []),
             ],
             // Einen DM-Kanal kennt der Bot beim ersten Mal noch nicht - ohne dieses
@@ -113,6 +124,7 @@ export default class BotClient extends Client implements IBotClient {
         this.ticketService = new TicketService(this);
         this.transcriptService = new TranscriptService(this);
         this.liveService = new LiveService(this);
+        this.moderationService = new ModerationService(this);
 
         this.groups = new DashboardGroups(this);
         this.notifications = new Notifications(this);
@@ -127,6 +139,9 @@ export default class BotClient extends Client implements IBotClient {
         this.tickets = new Tickets(this);
         this.ticketBlacklist = new TicketBlacklist(this);
         this.ticketTranscripts = new TicketTranscripts(this);
+        this.userCodes = new UserCodes(this);
+        this.modSettings = new ModSettings(this);
+        this.modCases = new ModCases(this);
     }
 
     Init(): void {

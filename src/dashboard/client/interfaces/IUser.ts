@@ -3,7 +3,7 @@
 import { IGuild } from "./IGuild.js";
 
 // Spiegelt IDashboardUser aus dem Backend.
-export type DashboardGroup = "administrator" | "developer" | "partner" | "premium" | "testphase";
+export type DashboardGroup = "administrator" | "developer" | "partner" | "premium" | "guardian" | "testphase";
 
 export interface IUser {
     id: string;

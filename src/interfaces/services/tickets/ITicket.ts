@@ -14,6 +14,8 @@ export interface ITicketOption {
     /** Stabil über Umbenennungen hinweg - steht in der customId und am Ticket. */
     id: string;
     name: string;
+    /** Kürzel für die Ticket-ID: SUP -> SUP-5. 2 bis 6 Großbuchstaben oder Ziffern. */
+    code: string;
     description: string;
     /** Unicode-Emoji oder ein Server-Emoji als <:name:id>. */
     emoji: string | null;
@@ -86,8 +88,12 @@ export interface ITicket {
     id: number;
     guildId: string;
     number: number;
+    /** Das Kürzel des Themas beim Öffnen - SUP-5 bleibt SUP-5. Ältere Tickets: null. */
+    code: string | null;
     optionId: string;
     openerId: string;
+    /** Die feste User-ID des Erstellers (ohne "U-"), siehe UserCodes. Ältere Tickets: null. */
+    openerCode: string | null;
     contact: TicketContact;
     channelId: string | null;
     messageId: string | null;
