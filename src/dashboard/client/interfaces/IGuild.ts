@@ -1,6 +1,6 @@
 /** Ein Server, wie ihn /api/me liefert. Spiegelt IDashboardGuild aus dem Backend. */
 
-export type DashboardRole = "Owner" | "Admin" | "Staff" | "Support";
+export type DashboardRole = "Owner" | "Admin" | "Staff" | "Moderator";
 
 export interface IGuild {
     id: string;
@@ -12,9 +12,11 @@ export interface IGuild {
     active: boolean;
     role: DashboardRole;
     canManage: boolean;
-    /** Live Tickets und Transcriptions - wer verwaltet, und die Support-Rollen. */
+    /** Live Tickets und Transcriptions - wer verwaltet, Moderatoren und die Support-Rollen. */
     canSupport: boolean;
     created: string;
+    /** Seit wann RL Nexus dabei ist - null ohne Bot. */
+    joined: string | null;
     teams: number;
     modules: string[];
     c1: string;

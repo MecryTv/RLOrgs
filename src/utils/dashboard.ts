@@ -2,6 +2,7 @@ import path from "path";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { FastifyReply, FastifyRequest } from "fastify";
+import { Guild, GuildMember } from "discord.js";
 import BotClient from "../client/BotClient";
 import IDashboardSession from "../interfaces/services/dashboard/IDashboardSession";
 import {
@@ -14,6 +15,22 @@ import {
     SESSION_COOKIE,
     SITE_PLACEHOLDER,
 } from "../constants/Dashboard";
+
+/** Mitglieder nach Name oder User-ID - für Auswahlen im Dashboard. Ohne Bots, höchstens zehn. */
+export async function SearchMembers(guild: Guild, query: string): Promise<GuildMember[]> {
+    if (!query) return [];
+
+    const found = /^\d{17,20}$/.test(query)
+        ? [await guild.members.fetch(query).catch(() => null)]
+        : [...((await guild.members.search({ query, limit: 10 }).catch(() => null))?.values() ?? [])];
+
+    return found.filter((member): member is GuildMember => member !== null && !member.user.bot).slice(0, 10);
+}
+
+/** Wie eine Person in Auswahlen des Dashboards steht. */
+export function PersonOf(member: GuildMember): { id: string; name: string; avatar: string } {
+    return { id: member.id, name: member.displayName, avatar: member.displayAvatarURL({ extension: "webp", size: 64 }) };
+}
 
 export function SessionOf(client: BotClient, request: FastifyRequest): IDashboardSession | null {
     return client.dashboardService.Session(ParseCookies(request.headers.cookie)[SESSION_COOKIE]);

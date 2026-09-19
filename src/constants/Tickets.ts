@@ -84,6 +84,8 @@ export const MAX_OPTIONS = 25;
 export const MAX_LIMIT = 10;
 export const MAX_NOTE = 1000;
 export const MAX_REASON = 300;
+/** Höchstens so viele Moderatoren - je User und je Rolle. */
+export const MAX_MODERATORS = 25;
 
 /** "Sofort" unter den Löschfristen - kein Stundenwert, deshalb eine eigene Zahl. */
 export const DELETE_NOW = -1;
@@ -183,6 +185,7 @@ export function DefaultConfig(): ITicketConfig {
         tags: { low: null, normal: null, high: null, claimed: null, closed: null },
         panel: { channelId: null, messageId: null },
         transcripts: { enabled: true, channelId: null, dm: false },
+        moderators: { users: [], roles: [] },
     };
 }
 

@@ -1,9 +1,9 @@
 /** Seite: Serverauswahl. */
-import { clone, ghost, link, need } from "../core/Dom.js";
-import { countMembers, paintCrest } from "../layout/GuildCard.js";
-import { monthOf, numbers } from "../core/Format.js";
+import { clone, ghost, icon, link, need } from "../core/Dom.js";
+import { paintCrest } from "../layout/GuildCard.js";
+import { activeModules, humansOf, showGuildInfo } from "../layout/GuildInfo.js";
+import { compact, numbers } from "../core/Format.js";
 import { GROUPS, ROLE_ICONS, ROLE_LABELS, STAFF_GROUPS } from "../constants/Groups.js";
-import { KNOWN_MODULES } from "../constants/Modules.js";
 import { motionOff } from "../core/Prefs.js";
 import { clickSound, hoverSound } from "../core/Sound.js";
 import { toast } from "../core/Toast.js";
@@ -45,50 +45,48 @@ export function cardFor(guild, position, animate) {
     card.querySelector("[data-role]").textContent = ROLE_LABELS[guild.role];
     // Ein Server, den man nur über die eigene RL Nexus-Gruppe sieht, bekommt eine
     // eigene Farbe - sonst ist er von den eigenen Servern nicht zu unterscheiden.
+    const pill = card.querySelector("[data-role]").closest(".pill");
     if (guild.role === "Staff") {
         card.dataset.staff = "true";
         card.style.setProperty("--accent", "var(--purple)");
         card.style.setProperty("--tint", "color-mix(in srgb,var(--purple) 14%,transparent)");
-        const pill = card.querySelector("[data-role]").closest(".pill");
         pill?.classList.replace("pill--role", "pill--staff");
     }
-    countMembers(card, guild);
-    if (!guild.canManage)
+    // Moderator: gruen - der Server ist offen, nur nicht zum Einstellen.
+    if (guild.role === "Moderator") {
+        card.dataset.mod = "true";
+        card.style.setProperty("--accent", "var(--live)");
+        card.style.setProperty("--tint", "color-mix(in srgb,var(--live) 12%,transparent)");
+        pill?.classList.replace("pill--role", "pill--mod");
+    }
+    if (!guild.canManage && guild.role !== "Moderator")
         card.querySelector("[data-view]").hidden = false;
     const status = card.querySelector("[data-status]");
-    const facts = card.querySelector("[data-facts]");
     const hint = card.querySelector("[data-hint]");
     const foot = card.querySelector("[data-foot]");
+    paintStats(card.querySelector("[data-stats]"), guild);
     if (guild.active) {
-        status.textContent = "RL Nexus läuft auf diesem Server";
-        const teams = card.querySelector("[data-teams]");
-        const modules = card.querySelector("[data-modules]");
-        // Teams führt der Bot noch nicht. Module schon: eingeschaltet werden sie
-        // auf der Serverseite, hier steht nur, wie viele es sind. Eine gespeicherte
-        // ID, deren Modul es nicht mehr gibt, zählt dabei als aus.
-        const on = guild.modules.filter((id) => KNOWN_MODULES.has(id)).length;
-        teams.textContent = String(guild.teams);
-        teams.classList.toggle("is-empty", guild.teams === 0);
-        modules.textContent = String(on);
-        modules.classList.toggle("is-empty", on === 0);
-        card.querySelector("[data-created]").textContent = monthOf(guild.created);
+        // Seit wann, steht gleich im Status - ein Datum ist keine Zahl zum Vergleichen.
+        status.textContent = guild.joined
+            ? `RL Nexus läuft hier seit ${new Date(guild.joined).toLocaleDateString("de-DE", { month: "long", year: "numeric" })}`
+            : "RL Nexus läuft auf diesem Server";
+        paintModules(card.querySelector("[data-mods]"), guild);
         if (guild.role === "Staff") {
             hint.hidden = false;
             hint.textContent =
                 "Du bist hier weder Owner noch Admin - sichtbar ist der Server über deine RL Nexus-Gruppe. Öffnen darfst du ihn, Änderungen brauchen „Server verwalten“ auf dem Server selbst.";
         }
-        // Supporter landen direkt bei den Tickets - mehr steht für sie nicht offen.
-        if (guild.role === "Support") {
+        // Moderatoren landen direkt bei den Tickets - mehr steht für sie nicht offen.
+        if (guild.role === "Moderator") {
             hint.hidden = false;
-            hint.textContent = "Du bist hier im Support-Team: Live Tickets und Transcriptions stehen dir offen.";
+            hint.textContent = "Du bist hier Moderator: Live Tickets und Transcriptions stehen dir offen.";
         }
-        foot.append(guild.role === "Support"
+        foot.append(guild.role === "Moderator"
             ? link("btn btn--primary", "Live Tickets öffnen", `${BASE}/guild/${guild.id}/live-tickets`)
-            : link("btn btn--primary", "Dashboard öffnen", `${BASE}/guild/${guild.id}/uebersicht`), ghost("#i-sliders", `Kurzinfo zu ${guild.name}`));
+            : link("btn btn--primary", "Dashboard öffnen", `${BASE}/guild/${guild.id}/uebersicht`), ghost("#i-info", `Kurzinfo zu ${guild.name}`));
     }
     else {
         status.textContent = "RL Nexus ist hier noch nicht hinzugefügt";
-        facts.remove();
         hint.hidden = false;
         hint.textContent =
             "Lade den Bot ein, damit er hier Rang-Rollen vergeben, Ergebnisse posten und Queues fahren kann.";
@@ -97,6 +95,52 @@ export function cardFor(guild, position, animate) {
             : link("btn btn--quiet", "Keine Berechtigung", url("/")), ghost("#i-info", "Was RL Nexus auf einem Server macht"));
     }
     return card;
+}
+/** Die Zahlen der Karte: Mitglieder und - wenn der Bot sie kennt - Bots. */
+function paintStats(box, guild) {
+    const stat = (value, label, title) => {
+        const cell = document.createElement("div");
+        const term = document.createElement("dt");
+        const data = document.createElement("dd");
+        cell.className = "cstat";
+        cell.title = title;
+        term.textContent = label;
+        data.textContent = value;
+        cell.append(term, data);
+        return cell;
+    };
+    const humans = humansOf(guild);
+    const cells = [stat(compact(humans), "Mitglieder", `${numbers.format(humans)} Mitglieder${guild.bots === null ? ", Bots inbegriffen" : ""}`)];
+    if (guild.bots !== null)
+        cells.push(stat(compact(guild.bots), guild.bots === 1 ? "Bot" : "Bots", `${numbers.format(guild.bots)} Bots auf diesem Server`));
+    box.replaceChildren(...cells);
+}
+/** Die eingeschalteten Module als Symbole - höchstens sechs, der Rest als Zahl. */
+function paintModules(box, guild) {
+    const modules = activeModules(guild);
+    const list = box.querySelector("[data-modlist]");
+    const label = box.querySelector("[data-modlabel]");
+    const shown = modules.length > 6 ? modules.slice(0, 5) : modules;
+    box.hidden = false;
+    box.classList.toggle("is-empty", modules.length === 0);
+    label.textContent = modules.length ? "Module" : "Noch kein Modul aktiv";
+    list.replaceChildren(...shown.map((module) => {
+        const item = document.createElement("li");
+        const name = document.createElement("span");
+        item.title = module.name;
+        name.className = "sr";
+        name.textContent = module.name;
+        item.append(icon(module.icon), name);
+        return item;
+    }));
+    if (modules.length > shown.length) {
+        const more = document.createElement("li");
+        const rest = modules.slice(shown.length);
+        more.className = "is-more";
+        more.textContent = `+${rest.length}`;
+        more.title = rest.map((module) => module.name).join(", ");
+        list.append(more);
+    }
 }
 export let inviteBase = "";
 export function inviteFor(guildId) {
@@ -108,6 +152,7 @@ export function matches(guild) {
     const byTab = state.filter === "all" ||
         (state.filter === "active" && guild.active) ||
         (state.filter === "idle" && !guild.active) ||
+        (state.filter === "mod" && guild.role === "Moderator") ||
         (state.filter === "staff" && guild.role === "Staff");
     if (!byTab)
         return false;
@@ -151,6 +196,12 @@ export function renderServers(data) {
             target?.scrollIntoView({ block: "nearest", behavior: motionOff() ? "auto" : "smooth" });
         });
     }
+    // Moderation: nur wer auf mindestens einem Server Moderator ist.
+    const moderated = data.guilds.filter((guild) => guild.role === "Moderator");
+    if (moderated.length > 0) {
+        need("#tab-mod").hidden = false;
+        need("#count-mod").textContent = String(moderated.length);
+    }
     need("#count-all").textContent = String(data.guilds.length);
     need("#count-active").textContent = String(active.length);
     need("#count-idle").textContent = String(data.guilds.length - active.length);
@@ -173,20 +224,23 @@ export function renderServers(data) {
         const animate = state.firstPaint;
         state.firstPaint = false;
         const fragment = document.createDocumentFragment();
-        // Eigene Server zuerst, fremde in einem eigenen Abschnitt darunter.
-        // Überschriften nur, wenn wirklich beides in der Ansicht steht.
-        const own = list.filter((guild) => guild.role !== "Staff");
-        const foreign = list.filter((guild) => guild.role === "Staff");
-        const split = own.length > 0 && foreign.length > 0;
+        // Eigene Server zuerst, dann die als Moderator, fremde darunter.
+        // Überschriften nur, wenn mehr als eine Gruppe in der Ansicht steht.
+        const groups = [
+            ["Deine Server", list.filter((guild) => guild.role === "Owner" || guild.role === "Admin")],
+            ["Als Moderator", list.filter((guild) => guild.role === "Moderator")],
+            ["Fremde Server", list.filter((guild) => guild.role === "Staff")],
+        ];
+        const filled = groups.filter(([, entries]) => entries.length > 0);
         let position = 0;
         function place(guild) {
             fragment.appendChild(cardFor(guild, position++, animate));
         }
-        if (split) {
-            fragment.appendChild(heading("Deine Server", own.length));
-            own.forEach(place);
-            fragment.appendChild(heading("Fremde Server", foreign.length));
-            foreign.forEach(place);
+        if (filled.length > 1) {
+            for (const [title, entries] of filled) {
+                fragment.appendChild(heading(title, entries.length));
+                entries.forEach(place);
+            }
         }
         else {
             list.forEach(place);
@@ -201,7 +255,9 @@ export function renderServers(data) {
                 ? "Kein Server passt zu diesem Namen"
                 : state.filter === "staff"
                     ? "Kein Server über deine Gruppe"
-                    : "Kein Server in dieser Ansicht";
+                    : state.filter === "mod"
+                        ? "Du bist nirgends Moderator"
+                        : "Kein Server in dieser Ansicht";
             need("#emptyText").textContent = searching
                 ? "Prüfe die Schreibweise oder leere die Suche, um alle Server zu sehen."
                 : state.filter === "staff"
@@ -345,11 +401,8 @@ export function bindCardEffects(grid, data) {
         clickSound("primary");
         if (!guild)
             return;
-        if (trigger.classList.contains("btn--ghost")) {
-            toast("info", guild.active ? "Kurzinfo" : "Was RL Nexus macht", guild.active
-                ? `${guild.name}: ${numbers.format(guild.members)} Mitglieder, erstellt ${monthOf(guild.created)}.`
-                : "Rang-Rollen, Match-Ergebnisse, Queues und ein Season-Leaderboard.");
-        }
+        if (trigger.classList.contains("btn--ghost"))
+            showGuildInfo(guild, trigger);
     });
 }
 export function ripple(element, event) {

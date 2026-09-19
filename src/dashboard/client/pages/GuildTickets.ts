@@ -41,6 +41,15 @@ interface IConfig {
     tags: Record<string, string | null>;
     panel: { channelId: string | null; messageId: string | null };
     transcripts: { enabled: boolean; channelId: string | null; dm: boolean };
+    moderators: { users: string[]; roles: string[] };
+}
+
+/** Ein User in Auswahlen - gone: hat den Server verlassen. */
+interface IPerson {
+    id: string;
+    name: string;
+    avatar: string | null;
+    gone?: boolean;
 }
 
 interface INamed {
@@ -77,6 +86,8 @@ interface IBlocked {
 
 interface IPayload {
     config: IConfig;
+    /** Die einzeln eingetragenen Moderatoren mit Namen und Bild. */
+    moderators: IPerson[];
     /** Wo das Panel wirklich steht - null, wenn die Nachricht weg ist. */
     panel: { channelId: string; url: string } | null;
     guild: IResources;
@@ -135,6 +146,8 @@ const DELETE_LABELS: [number, string][] = [
 ];
 
 const MAX_OPTIONS = 25;
+// Wie MAX_MODERATORS im Bot: je Liste.
+const MAX_MODERATORS = 25;
 
 const PANEL_TOASTS: Record<string, [string, string]> = {
     sent: ["Panel gesendet", "Der Bot hat das Panel in den Kanal gestellt."],
@@ -161,6 +174,15 @@ function row(label: string, hint: string, control: HTMLElement): HTMLElement {
     if (!control.hasAttribute("aria-label") && control.matches("input, select")) control.setAttribute("aria-label", label);
 
     return el("div", "row", el("div", "row__text", el("b", "", label), ...(hint ? [el("i", "", hint)] : [])), control);
+}
+
+function face(person: IPerson): HTMLElement {
+    const box = el("span", "travatar");
+
+    if (person.avatar?.startsWith("https://")) box.style.backgroundImage = `url("${person.avatar.replace(/["\\]/g, "")}")`;
+    else box.textContent = person.name.trim().slice(0, 1).toUpperCase() || "?";
+
+    return box;
 }
 
 function hint(text: string): HTMLElement {
@@ -243,6 +265,8 @@ export function renderTickets(guildId: string, canManage: boolean, user: ITicket
 
     let data: IPayload | null = null;
     let config: IConfig | null = null;
+    // Namen und Bilder der Moderatoren - auch derer, die gerade erst dazukamen.
+    let people = new Map<string, IPerson>();
     let dirty = false;
     let saving = false;
     let tab: Tab = TABS.find((entry) => `#${entry.hash}` === window.location.hash)?.id ?? "setup";
@@ -320,6 +344,7 @@ export function renderTickets(guildId: string, canManage: boolean, user: ITicket
 
             data = (await response.json()) as IPayload;
             config = structuredClone(data.config);
+            people = new Map((data.moderators ?? []).map((person) => [person.id, person]));
             panelChannel = data.panel?.channelId ?? config.panel.channelId;
             dirty = false;
             bar.hidden = true;
@@ -734,7 +759,149 @@ export function renderTickets(guildId: string, canManage: boolean, user: ITicket
             )
         );
 
-        return [flow, team, after];
+        return [flow, team, moderators(), after];
+    }
+
+    /** Moderatoren: Rollen und einzelne User, die jedes Ticket sehen - in Discord wie im Dashboard. */
+    function moderators(): HTMLElement {
+        const cfg = config!;
+        const resources = data!.guild;
+        const roleChips = el("div", "tkchips");
+        const userChips = el("div", "tkchips");
+        const results = el("div", "tkmod__results");
+        const query = el("input", "text tkmod__search");
+        let timer = 0;
+        let asked = 0;
+
+        function chip(parts: Node[], name: string, remove: () => void): HTMLElement {
+            const button = el("button", "", icon("#i-x"));
+
+            button.type = "button";
+            button.disabled = !canManage;
+            button.setAttribute("aria-label", `${name} entfernen`);
+            button.addEventListener("click", () => {
+                remove();
+                touch();
+            });
+
+            return el("span", "tkchip", ...parts, button);
+        }
+
+        function paintRoles(): void {
+            const picker = select(
+                resources.roles
+                    .filter((entry) => !cfg.moderators.roles.includes(entry.id))
+                    .map((entry) => ({ value: entry.id, label: `@${entry.name}` })),
+                null,
+                (value) => {
+                    if (!value) return;
+
+                    cfg.moderators.roles.push(value);
+                    touch();
+                    paintRoles();
+                },
+                "+ Rolle hinzufügen"
+            );
+
+            picker.disabled = !canManage || cfg.moderators.roles.length >= MAX_MODERATORS;
+            picker.setAttribute("aria-label", "Moderatoren-Rolle hinzufügen");
+
+            roleChips.replaceChildren(
+                ...cfg.moderators.roles.map((id) => {
+                    const role = resources.roles.find((entry) => entry.id === id);
+                    const dot = el("span", "tkmod__dot");
+                    const name = `@${role?.name ?? "gelöschte Rolle"}`;
+
+                    dot.style.background = role && role.color !== "#000000" ? role.color : "var(--text-3)";
+
+                    return chip([dot, el("span", "", name)], name, () => {
+                        cfg.moderators.roles = cfg.moderators.roles.filter((entry) => entry !== id);
+                        paintRoles();
+                    });
+                }),
+                picker
+            );
+        }
+
+        function paintUsers(): void {
+            userChips.replaceChildren(
+                ...(cfg.moderators.users.length
+                    ? cfg.moderators.users.map((id) => {
+                          const person = people.get(id) ?? { id, name: id, avatar: null };
+                          const parts: Node[] = [face(person), el("span", "", person.name)];
+
+                          if (person.gone) parts.push(el("em", "tkmod__gone", "nicht mehr auf dem Server"));
+
+                          return chip(parts, person.name, () => {
+                              cfg.moderators.users = cfg.moderators.users.filter((entry) => entry !== id);
+                              paintUsers();
+                          });
+                      })
+                    : [el("span", "tkempty", "Noch niemand einzeln eingetragen.")])
+            );
+            query.disabled = !canManage || cfg.moderators.users.length >= MAX_MODERATORS;
+        }
+
+        query.type = "search";
+        query.placeholder = "User suchen: Name oder User-ID …";
+        query.setAttribute("aria-label", "User als Moderator suchen");
+        query.addEventListener("input", () => {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(async () => {
+                const mine = ++asked;
+                const text = query.value.trim();
+
+                if (!text) {
+                    results.replaceChildren();
+
+                    return;
+                }
+
+                const answer = await send({ action: "members", query: text });
+
+                if (mine !== asked) return;
+
+                const found = ((answer?.members ?? []) as IPerson[]).filter((person) => !cfg.moderators.users.includes(person.id));
+
+                results.replaceChildren(
+                    ...(found.length
+                        ? found.map((person) => {
+                              const button = el("button", "ltperson", face(person), el("span", "", person.name));
+
+                              button.type = "button";
+                              button.addEventListener("click", () => {
+                                  people.set(person.id, person);
+                                  cfg.moderators.users.push(person.id);
+                                  query.value = "";
+                                  results.replaceChildren();
+                                  touch();
+                                  paintUsers();
+                                  query.focus();
+                              });
+
+                              return button;
+                          })
+                        : [el("span", "tkempty", "Niemand gefunden – oder schon eingetragen.")])
+                );
+            }, 300);
+        });
+
+        paintRoles();
+        paintUsers();
+
+        return card(
+            "Moderatoren",
+            "Sehen jedes Ticket – in Discord und im Dashboard unter Live Tickets und Transcriptions – und dürfen alle Aktionen. Die Einstellungen bleiben bei „Server verwalten“.",
+            el("div", "tkmod", el("div", "row__text", el("b", "", "Rollen"), el("i", "", "Jeder mit einer dieser Rollen")), roleChips),
+            el(
+                "div",
+                "tkmod",
+                el("div", "row__text", el("b", "", "Einzelne User"), el("i", "", "Auch ohne passende Rolle – gilt, solange sie auf dem Server sind")),
+                userChips,
+                query,
+                results
+            )
+        );
     }
 
     /* ------------------------------------------------------------

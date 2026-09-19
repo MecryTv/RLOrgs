@@ -101,20 +101,27 @@ export function paintReward(level: number, wins: number): HTMLElement {
     const track = document.createElement("div");
     track.className = "reward__track";
 
-    const bar = document.createElement("span");
-    bar.className = "reward__bar";
+    // Zehn Segmente statt eines Balkens: jeder Sieg ist ein Schritt, den man sieht.
+    const segments = document.createElement("span");
+    const done = top ? REWARD_WINS : Math.min(Math.max(wins, 0), REWARD_WINS);
 
-    const fill = document.createElement("i");
-    const percent = top ? 100 : Math.min(Math.round((wins / REWARD_WINS) * 100), 100);
+    segments.className = "reward__segments";
+    segments.setAttribute("role", "img");
+    segments.setAttribute("aria-label", top ? "Höchste Stufe erreicht" : `${done} von ${REWARD_WINS} Siegen`);
 
-    fill.style.width = `${percent}%`;
+    for (let index = 0; index < REWARD_WINS; index++) {
+        const segment = document.createElement("i");
+
+        if (index < done) segment.className = "is-on";
+
+        segments.appendChild(segment);
+    }
 
     const count = document.createElement("span");
     count.className = "reward__count";
-    count.textContent = top ? "MAX" : `${wins}/${REWARD_WINS}`;
+    count.textContent = top ? "MAX" : `${done}/${REWARD_WINS}`;
 
-    bar.appendChild(fill);
-    track.append(bar, count);
+    track.append(segments, count);
     box.append(text, track);
 
     return box;
@@ -213,71 +220,135 @@ export function paintClub(club: IClubView, wtsi: number | null, ownName: string 
     scores.append(mmr, mine);
     box.appendChild(scores);
 
+    // Tag und Mitgliederzahl stehen schon im Kopf - hier nur, was dort fehlt.
     const owner = club.members.find((member) => member.owner);
 
     const facts = document.createElement("div");
     facts.className = "clubfacts";
 
     facts.append(
-        clubFact("Tag", club.tag),
         clubFact("Owner", owner?.name ?? "—"),
-        clubFact("Mitglieder", String(club.members.length)),
         clubFact("Gegründet", club.createdAt ? new Date(club.createdAt).toLocaleDateString("de-DE") : "—")
     );
 
     box.appendChild(facts);
 
-    const list = document.createElement("div");
+    // Die Mitglieder nach MMR, die stärksten oben. Der Balken zeigt den Abstand
+    // zum Besten - wer ohne Rang ist, steht unten und ohne Balken.
+    const ranked = [...club.members].sort((a, b) => (b.mmr ?? -1) - (a.mmr ?? -1));
+    const best = Math.max(...ranked.map((member) => member.mmr ?? 0), 1);
+
+    const heading = document.createElement("span");
+    heading.className = "club__label";
+    heading.textContent = "Mitglieder nach MMR";
+
+    const list = document.createElement("ol");
     list.className = "club__members";
 
-    for (const member of club.members) {
-        const row = document.createElement("div");
+    ranked.forEach((member, index) => {
+        const row = document.createElement("li");
         row.className = "club__member";
-
-        const who = document.createElement("span");
-        who.className = "club__who";
 
         // Der eigene Eintrag wird am Spielernamen erkannt: eine Discord-ID hat
         // ein Club-Mitglied nicht zwingend, einen Namen im Spiel immer.
         const self = ownName !== null && member.name === ownName;
 
-        who.textContent = self ? `${member.name} (Du)` : member.name;
+        if (self) row.classList.add("is-self");
 
-        if (member.owner) row.append(icon("#i-crown"));
+        row.style.setProperty("--w", member.mmr === null ? "0%" : `${Math.round((member.mmr / best) * 100)}%`);
 
-        row.append(who);
+        const position = document.createElement("span");
+        position.className = "club__pos";
+        position.textContent = String(index + 1);
 
-        // Die MMR des Mitglieds - der Beitrag zum Schnitt daneben.
+        const who = document.createElement("span");
+        who.className = "club__who";
+        who.textContent = member.name;
+
+        if (member.owner) {
+            const crown = icon("#i-crown");
+
+            crown.setAttribute("aria-label", "Owner");
+            who.append(crown);
+        }
+
+        if (self) {
+            const you = document.createElement("i");
+
+            you.className = "club__you";
+            you.textContent = "Du";
+            who.append(you);
+        }
+
+        // Die MMR des Mitglieds - der Beitrag zum Schnitt.
         const score = document.createElement("span");
-        score.className = "tagline";
+        score.className = "club__score";
         score.textContent = member.mmr === null ? "—" : numbers.format(member.mmr);
 
-        row.append(score);
+        row.append(position, who, score);
         list.appendChild(row);
-    }
+    });
 
-    box.appendChild(list);
+    box.append(heading, list);
 
     return box;
 }
 
+/** Die zehn Platzierungsspiele als Punkte - gespielte gefüllt. */
+function placementDots(played: number): HTMLElement {
+    const dots = document.createElement("span");
+
+    dots.className = "rankcard__dots";
+    dots.setAttribute("role", "img");
+    dots.setAttribute("aria-label", `${played} von 10 Platzierungsspielen`);
+
+    for (let index = 0; index < 10; index++) {
+        const dot = document.createElement("i");
+
+        if (index < played) dot.className = "is-on";
+
+        dots.appendChild(dot);
+    }
+
+    return dots;
+}
+
+/**
+ * Eine Rang-Karte: oben Playlist und Spiele, in der Mitte Abzeichen, Rang und
+ * MMR, unten die Serie. Die Serie steht immer unten - so enden drei Karten
+ * nebeneinander auf einer Linie, auch wenn eine noch in der Platzierung ist.
+ */
 export function rankCard(rank: IRank): HTMLElement {
-    const card = document.createElement("div");
+    const card = document.createElement("article");
     card.className = "rankcard";
     card.style.setProperty("--tier", tierColor(rank.placement ? 0 : rank.tier));
+
+    const top = document.createElement("header");
+    top.className = "rankcard__top";
 
     const mode = document.createElement("span");
     mode.className = "rankcard__mode";
     mode.textContent = rank.label;
 
+    top.append(mode);
+
+    const games = document.createElement("span");
+    games.className = "rankcard__games";
+    games.textContent = rank.matches === 1 ? "1 Spiel" : `${numbers.format(rank.matches)} Spiele`;
+
     const badge = picture(rankImage(rank.tier, rank.placement), "rankcard__badge");
 
-    const tier = document.createElement("b");
-
     // Der Rang steht erst nach den Platzierungsspielen fest.
-    tier.textContent = rank.placement
-        ? `Platzierung ${rank.placementMatches}/10`
-        : rank.tierName + (rank.divisionName ? ` · Div ${rank.divisionName}` : "");
+    const tier = document.createElement("b");
+    tier.className = "rankcard__tier";
+    tier.textContent = rank.placement ? "Platzierung" : rank.tierName;
+
+    const detail = rank.placement
+        ? placementDots(rank.placementMatches)
+        : Object.assign(document.createElement("span"), {
+              className: "rankcard__div",
+              textContent: rank.divisionName ? `Division ${rank.divisionName}` : "",
+          });
 
     const mmr = document.createElement("span");
     mmr.className = "rankcard__mmr";
@@ -287,28 +358,38 @@ export function rankCard(rank: IRank): HTMLElement {
     unit.textContent = "MMR";
     mmr.appendChild(unit);
 
-    const meta = document.createElement("span");
-    meta.className = "rankcard__meta";
-    meta.textContent = rank.matches === 1 ? "1 Spiel" : `${numbers.format(rank.matches)} Spiele`;
+    // Die Mitte steht zwischen Kopf und Serie zentriert - wird die Karte hoeher,
+    // waechst der Rand um den Rang, nicht eine Luecke darunter.
+    const body = document.createElement("div");
+    body.className = "rankcard__body";
+    body.append(badge, tier, detail, mmr, games);
 
-    card.append(mode, badge, tier, mmr, meta);
+    const foot = document.createElement("div");
+    foot.className = "rankcard__foot";
 
-    // Die Serie steht als eigenes Abzeichen darunter: gruen bei Siegen, rot bei
-    // Niederlagen. Bei 0 gibt es keine Serie - dann bleibt die Zeile weg.
+    const label = document.createElement("span");
+    label.className = "rankcard__label";
+    label.textContent = "Serie";
+
+    // Die Serie: gruen bei Siegen, rot bei Niederlagen, mit Symbol und Text -
+    // nicht nur ueber die Farbe. "in Folge" sagt das Label darueber.
+    const streak = document.createElement("span");
+
     if (rank.streak !== 0) {
         const won = rank.streak > 0;
         const count = Math.abs(rank.streak);
+        const text = `${count} ${won ? (count === 1 ? "Sieg" : "Siege") : count === 1 ? "Niederlage" : "Niederlagen"}`;
 
-        const streak = document.createElement("span");
         streak.className = `streak ${won ? "streak--win" : "streak--loss"}`;
-
-        streak.append(icon(won ? "#i-boost" : "#i-warn"));
-        streak.append(
-            `${count} ${won ? (count === 1 ? "Sieg" : "Siege") : count === 1 ? "Niederlage" : "Niederlagen"} in Folge`
-        );
-
-        card.appendChild(streak);
+        streak.title = `${text} in Folge`;
+        streak.append(icon(won ? "#i-boost" : "#i-warn"), text);
+    } else {
+        streak.className = "streak streak--none";
+        streak.textContent = "keine";
     }
+
+    foot.append(label, streak);
+    card.append(top, body, foot);
 
     return card;
 }
@@ -327,15 +408,47 @@ export function statTile(stat: { key: string; label: string; value: number }): H
     symbol.style.setProperty("--icon", `url("${BASE}/assets/images/rocketleague/rlstatsicons/${stat.key}.png")`);
     box.append(symbol);
 
-    const value = document.createElement("b");
-    value.textContent = numbers.format(stat.value);
-
+    // Beschriftung links, Zahl rechtsbündig - eine Liste liest sich schneller als sechs Kacheln.
     const label = document.createElement("span");
+    label.className = "stat__label";
     label.textContent = stat.label;
 
-    box.append(value, label);
+    const value = document.createElement("b");
+    value.className = "stat__value";
+    value.textContent = numbers.format(stat.value);
+
+    box.append(label, value);
 
     return box;
+}
+
+/**
+ * Zwei Quoten aus den Karriere-Werten: Tore pro Schuss und MVP pro Sieg. Beide
+ * stehen nur, wenn der Nenner da ist - eine Quote aus null waere erfunden.
+ */
+export function rates(stats: { key: string; value: number }[]): HTMLElement[] {
+    const value = (key: string): number => stats.find((stat) => stat.key === key)?.value ?? 0;
+    const percent = new Intl.NumberFormat("de-DE", { style: "percent", maximumFractionDigits: 0 });
+    const cells: [string, number, number, string][] = [
+        ["Trefferquote", value("goals"), value("shots"), "Tore pro Schuss"],
+        ["MVP-Quote", value("mvps"), value("wins"), "MVP pro Sieg"],
+    ];
+
+    return cells
+        .filter(([, , total]) => total > 0)
+        .map(([name, part, total, hint]) => {
+            const cell = document.createElement("div");
+            const label = document.createElement("span");
+            const number = document.createElement("b");
+
+            cell.className = "rate";
+            cell.title = `${numbers.format(part)} von ${numbers.format(total)} - ${hint}`;
+            label.textContent = name;
+            number.textContent = percent.format(part / total);
+            cell.append(number, label);
+
+            return cell;
+        });
 }
 
 /**
@@ -419,6 +532,7 @@ export function bindFreshness(refresh: () => void): (due: number | null) => void
         }
 
         box!.classList.remove("is-due");
+        box!.style.setProperty("--left", String(Math.min(1, left / RANK_MAX_AGE)));
 
         const seconds = Math.ceil(left / 1000);
 
@@ -581,7 +695,10 @@ export async function renderTracking(): Promise<void> {
 
         need<HTMLElement>("#statsBox").hidden = data.stats.length === 0;
 
-        if (data.stats.length > 0) need<HTMLElement>("#statGrid").replaceChildren(...data.stats.map(statTile));
+        if (data.stats.length > 0) {
+            need<HTMLElement>("#statGrid").replaceChildren(...data.stats.map(statTile));
+            need<HTMLElement>("#statRates").replaceChildren(...rates(data.stats));
+        }
 
         need<HTMLElement>("#seasonBox").hidden = data.season === null;
 

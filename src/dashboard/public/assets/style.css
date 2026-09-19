@@ -148,7 +148,7 @@ mark{background:color-mix(in srgb,var(--brand) 18%,transparent);color:color-mix(
   );
 }
 
-.tabs,.freshness,.status,.acct,.note,.grow,.person,.stat,.notice,
+.tabs,.freshness,.status,.acct,.note,.grow,.person,.stat,.rate,.notice,
 .club__mmr,.club__mine,.clubfact,.club__member,.club__tag,.crest,.empty__mark,
 .mfa__steps li{
   clip-path:polygon(
@@ -691,6 +691,73 @@ body:has(.controls.is-stuck) .topbar{box-shadow:none}
 .fact dd.is-empty{color:var(--text-3)}
 
 .hint{margin-top:14px;font-size:13px;color:var(--text-3);line-height:1.5}
+
+/* Zahlen der Karte: gross und gleich breit, die Beschriftung klein darunter. */
+.cstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:8px;margin:14px 0 0}
+.cstat{
+  display:flex;flex-direction:column-reverse;gap:4px;padding:10px 12px;
+  border:1px solid var(--line);background:rgba(255,255,255,.02);
+}
+.cstat dd{
+  margin:0;font-family:var(--f-accent);font-size:19px;font-weight:700;line-height:1.1;
+  color:var(--text);font-variant-numeric:tabular-nums;
+}
+.cstat dt{font-family:var(--f-label);font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
+/* Aktive Module als Symbole - der Name steht im Tooltip und fuer Vorleser. */
+.cmods{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}
+.cmods__label{font-size:12.5px;color:var(--text-3);margin-right:2px}
+.cmods__list{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.cmods__list li{
+  width:32px;height:32px;display:grid;place-items:center;
+  color:var(--accent,var(--brand));border:1px solid color-mix(in srgb,var(--accent,var(--brand)) 28%,transparent);
+  background:color-mix(in srgb,var(--accent,var(--brand)) 8%,transparent);
+}
+.cmods__list li svg{width:16px;height:16px}
+.cmods__list li.is-more{width:auto;padding:0 9px;font-size:12px;font-weight:600;color:var(--text-2);border-color:var(--line-strong);background:var(--glass)}
+.cmods.is-empty .cmods__label{font-style:italic}
+/* Moderator: gruen, wie "laeuft" - der Server ist offen, nur nicht zum Einstellen. */
+.pill--mod{color:var(--live);border-color:color-mix(in srgb,var(--live) 28%,transparent);background:color-mix(in srgb,var(--live) 7%,transparent)}
+.pill--mod svg{color:var(--live)}
+.card[data-mod="true"] .card__boost{background:linear-gradient(90deg,transparent,var(--live),transparent)}
+
+/* ---------- Kurzinfo zu einem Server (Popover an der Karte) ---------- */
+.ginfo{
+  position:fixed;inset:auto;margin:0;padding:16px;display:none;gap:12px;
+  color:var(--text);border:1px solid var(--line-strong);background:#0a1016;
+  box-shadow:0 18px 40px rgba(0,0,0,.55);
+}
+.ginfo:popover-open{display:grid}
+.ginfo:focus{outline:none}
+.ginfo__head{display:flex;align-items:center;gap:12px}
+.ginfo__crest{width:40px;height:40px;font-size:13px}
+.ginfo__title{display:grid;gap:4px;min-width:0}
+.ginfo__name{font-size:15px;font-weight:700;overflow-wrap:anywhere}
+.ginfo__role{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-2)}
+.ginfo__role svg{width:14px;height:14px}
+.ginfo__facts{display:grid;grid-template-columns:1fr auto;gap:6px 16px;margin:0;padding:12px 0;border-block:1px solid var(--line);font-size:13px}
+.ginfo__facts dt{color:var(--text-3)}
+.ginfo__facts dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.ginfo__mods{display:grid;gap:8px}
+.ginfo__label{font-family:var(--f-label);font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
+.ginfo__modlist{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0;padding:0;list-style:none}
+.ginfo__modlist li{display:flex;align-items:center;gap:8px;min-width:0;font-size:12.5px;color:var(--text-2)}
+.ginfo__modlist li svg{width:15px;height:15px;flex:none;color:var(--brand)}
+.ginfo__modlist li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ginfo__rights,.ginfo__lead{margin:0;font-size:13px;color:var(--text-2)}
+.ginfo__features{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.ginfo__features li{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--text-2)}
+.ginfo__features svg{width:16px;height:16px;flex:none;margin-top:2px;color:var(--blue)}
+.ginfo__links{display:flex;flex-wrap:wrap;gap:8px}
+.ginfo__link{
+  flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:0 12px;
+  font-family:var(--f-label);font-size:12.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text);border:1px solid var(--line-strong);background:var(--glass);text-decoration:none;
+}
+.ginfo__link svg{width:14px;height:14px}
+.ginfo__link:hover{border-color:var(--text-3)}
+.ginfo__link.is-primary{color:#fff;border-color:transparent;background:var(--brand)}
+.ginfo__link.is-primary:hover{background:var(--brand-bright)}
+.ginfo__link:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 
 .card__foot{display:flex;gap:10px;padding:18px 20px 20px;margin-top:18px}
 
@@ -1632,7 +1699,7 @@ body[data-page="guild"]{--shell:1440px}
 /* Kopf der Tracking-Seite: Avatar, Name samt Merkmalen, Frische-Anzeige und
    der Knopf zum Neuladen. */
 .playerhead{
-  display:flex;align-items:center;flex-wrap:wrap;gap:20px;margin-bottom:22px;
+  display:flex;align-items:center;flex-wrap:wrap;gap:20px;margin-bottom:24px;
 }
 .avatar--big{width:74px;height:74px;font-size:22px}
 .avatar--big::after{width:14px;height:14px;border-width:3px}
@@ -1640,47 +1707,70 @@ body[data-page="guild"]{--shell:1440px}
 .playerhead h1{font-size:clamp(26px,4vw,38px);font-weight:800;letter-spacing:-.025em;word-break:break-word}
 .playerhead__meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 
-/* Rang-Karten */
+/* Rang-Karten: oben Playlist und Spiele, Mitte Abzeichen, Rang und MMR, unten
+   die Serie. Die Serie haengt unten (margin-top:auto) - drei Karten enden
+   nebeneinander auf einer Linie, auch wenn eine in der Platzierung ist. */
 .rankgrid{
-  display:grid;gap:14px;margin-bottom:20px;
+  display:grid;gap:16px;margin-bottom:20px;
   grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
 }
 .rankcard{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
-  padding:22px 18px 18px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:14px 16px 16px;text-align:center;
   --rim:color-mix(in srgb,var(--tier,var(--text-3)) 65%,transparent);
-  --fill:radial-gradient(120% 80% at 50% 0%,color-mix(in srgb,var(--tier,var(--text-3)) 16%,transparent),transparent 70%),var(--panel-fill);
+  --fill:radial-gradient(120% 70% at 50% 18%,color-mix(in srgb,var(--tier,var(--text-3)) 18%,transparent),transparent 70%),var(--panel-fill);
   transition:transform var(--t-mid) var(--ease);
 }
 .rankcard:hover{transform:translateY(-3px);--rim-bg:var(--tier,var(--text-3))}
-.rankcard__mode{
-  font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--text-3);
+.rankcard__top{
+  align-self:stretch;display:flex;align-items:center;justify-content:center;
+  padding-bottom:10px;border-bottom:1px solid var(--line);
 }
+.rankcard__mode{font-size:12.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-2)}
+/* Die Mitte steht zwischen Kopf und Serie zentriert (margin:auto). */
+.rankcard__body{display:flex;flex-direction:column;align-items:center;gap:4px;margin:auto 0}
+.rankcard__games{margin-top:2px;font-size:12.5px;color:var(--text-3);font-variant-numeric:tabular-nums}
 .rankcard__badge{
-  width:96px;height:96px;object-fit:contain;margin:4px 0;
-  filter:drop-shadow(0 8px 22px color-mix(in srgb,var(--tier,transparent) 40%,transparent));
+  width:92px;height:92px;object-fit:contain;margin:12px 0 6px;
+  filter:drop-shadow(0 8px 22px color-mix(in srgb,var(--tier,transparent) 45%,transparent));
 }
-.rankcard b{font-family:var(--f-display);font-size:15px;font-weight:600;color:var(--tier,var(--text))}
+.rankcard__tier{font-family:var(--f-display);font-size:16px;font-weight:700;line-height:1.2;color:var(--tier,var(--text))}
+.rankcard__div{min-height:18px;font-size:12.5px;color:var(--text-2)}
+.rankcard__dots{display:flex;gap:4px;min-height:18px;align-items:center}
+.rankcard__dots i{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.12)}
+.rankcard__dots i.is-on{background:var(--text-2)}
 .rankcard__mmr{
-  font-family:var(--f-display);font-size:30px;font-weight:600;letter-spacing:-.02em;line-height:1.1;
+  margin-top:8px;font-family:var(--f-accent);font-size:28px;font-weight:700;letter-spacing:-.01em;line-height:1.1;
   font-variant-numeric:tabular-nums;
 }
-.rankcard__mmr i{
-  display:block;font-style:normal;font-size:10.5px;font-weight:500;letter-spacing:.08em;color:var(--text-3);
+.rankcard__mmr i{margin-left:6px;font-family:var(--f-label);font-style:normal;font-size:12px;font-weight:600;letter-spacing:.1em;color:var(--text-3)}
+.rankcard__foot{
+  align-self:stretch;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding-top:10px;border-top:1px solid var(--line);
 }
-.rankcard__meta{font-size:11.5px;color:var(--text-3)}
+.rankcard__label{font-family:var(--f-label);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
 
-/* Karriere-Werte */
-.statgrid{
-  display:grid;gap:14px;
-  grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+/* Sieg- und Niederlagenserie in der Rang-Karte */
+.streak{
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  padding:5px 10px;border-radius:0;
+  font-size:12px;font-weight:600;letter-spacing:.02em;
+  color:var(--streak);
+  border:1px solid color-mix(in srgb,var(--streak) 36%,transparent);
+  background:color-mix(in srgb,var(--streak) 13%,transparent);
 }
+.streak svg{width:13px;height:13px;flex:none}
+.streak--win{--streak:var(--win)}
+.streak--loss{--streak:var(--loss)}
+.streak--none{--streak:var(--text-3);background:transparent}
+
+/* Karriere-Werte: eine Liste - Symbol, Beschriftung, Zahl rechtsbuendig. Die
+   Farbe des Werts traegt der Strich links, wie die Linie auf der Rang-Karte. */
+.statgrid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));align-content:start}
 .stat{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
-  padding:14px 10px;border:1px solid var(--line);border-radius:0;
-  /* Oben eine Linie in der Farbe des Werts, wie auf der Rang-Karte. */
-  border-top:1.5px solid color-mix(in srgb,var(--stat,var(--line-strong)) 75%,transparent);
+  display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:12px;
+  padding:11px 14px;border:1px solid var(--line);border-radius:0;
+  box-shadow:inset 3px 0 0 color-mix(in srgb,var(--stat,var(--line-strong)) 85%,transparent);
   background:rgba(255,255,255,.022);
   transition:border-color var(--t-fast) var(--ease),background var(--t-fast) var(--ease);
 }
@@ -1689,35 +1779,30 @@ body[data-page="guild"]{--shell:1440px}
    nehmen sie die Farbe des Werts an, dieselbe wie auf der Rang-Karte und auf
    der Webseite. --stat und --icon setzt Tracking.ts. */
 .stat__icon{
-  display:block;width:30px;height:30px;margin-bottom:2px;
+  display:block;width:24px;height:24px;
   background:var(--stat,var(--text-2));
   -webkit-mask:var(--icon) center/contain no-repeat;
           mask:var(--icon) center/contain no-repeat;
 }
-.stat b{font-family:var(--f-display);font-size:19px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
-.stat span{font-size:11.5px;color:var(--text-3)}
+.stat__label{font-size:13px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stat__value{font-family:var(--f-accent);font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* Quoten unter den Karriere-Werten: Zahl gross, Name klein darunter. */
+.rates{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:12px}
+.rates:empty{display:none}
+.rate{
+  display:flex;flex-direction:column;gap:3px;padding:11px 14px;
+  border:1px solid color-mix(in srgb,var(--blue) 22%,transparent);background:color-mix(in srgb,var(--blue) 6%,transparent);
+}
+.rate b{font-family:var(--f-accent);font-size:20px;font-weight:700;color:var(--blue-soft);font-variant-numeric:tabular-nums}
+.rate span{font-family:var(--f-label);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
 
 
 @media (max-width:620px){
   .playerhead{gap:14px}
   .avatar--big{width:58px;height:58px}
   .rankgrid{grid-template-columns:1fr}
-  .rankcard__badge{width:78px;height:78px}
 }
-
-
-/* Sieg- und Niederlagenserie in der Rang-Karte */
-.streak{
-  display:inline-flex;align-items:center;gap:6px;margin-top:4px;
-  padding:4px 11px;border-radius:0;
-  font-size:11.5px;font-weight:600;
-  color:var(--streak);
-  border:1px solid color-mix(in srgb,var(--streak) 36%,transparent);
-  background:color-mix(in srgb,var(--streak) 13%,transparent);
-}
-.streak svg{width:13px;height:13px;flex:none}
-.streak--win{--streak:var(--win)}
-.streak--loss{--streak:var(--loss)}
 
 
 /* Season-Reward: breiter Streifen ueber den Raengen.
@@ -1732,95 +1817,90 @@ body[data-page="guild"]{--shell:1440px}
   --fill:radial-gradient(75% 170% at 0% 50%,color-mix(in srgb,var(--tier,var(--text-3)) 15%,transparent),transparent 72%),var(--panel-fill);
 }
 .reward__badge{
-  width:72px;height:72px;object-fit:contain;flex:none;
+  width:64px;height:64px;object-fit:contain;flex:none;
   filter:drop-shadow(0 6px 18px color-mix(in srgb,var(--tier,transparent) 45%,transparent));
 }
 .reward__text{flex:none;min-width:0}
 .reward__eyebrow{
-  display:block;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  display:block;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
   color:var(--text-3);
 }
 .reward__text b{
-  display:block;font-family:var(--f-display);font-size:22px;font-weight:600;letter-spacing:-.02em;
+  display:block;font-family:var(--f-display);font-size:22px;font-weight:700;letter-spacing:-.02em;
   color:var(--tier,var(--text));
 }
-.reward__meta{display:block;font-size:12.5px;color:var(--text-2)}
+.reward__meta{display:block;font-size:13px;color:var(--text-2)}
 
-.reward__track{flex:1;display:flex;align-items:center;gap:12px;min-width:140px}
-.reward__bar{
-  flex:1;height:8px;border-radius:var(--r-pill);
-  background:rgba(255,255,255,.07);overflow:hidden;
+.reward__track{flex:1;display:flex;align-items:center;gap:14px;min-width:160px}
+/* Zehn Segmente: ein Sieg, ein Schritt. */
+.reward__segments{flex:1;display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:4px}
+.reward__segments i{
+  height:10px;background:rgba(255,255,255,.08);
+  transition:background var(--t-mid) var(--ease),box-shadow var(--t-mid) var(--ease);
 }
-.reward__bar i{
-  display:block;height:100%;border-radius:inherit;
-  background:linear-gradient(90deg,var(--tier,var(--brand)),color-mix(in srgb,var(--tier,var(--brand)) 50%,#fff));
-  box-shadow:0 0 10px color-mix(in srgb,var(--tier,var(--brand)) 70%,transparent);
-  transition:width var(--t-slow) var(--ease);
+.reward__segments i.is-on{
+  background:linear-gradient(90deg,var(--tier,var(--brand)),color-mix(in srgb,var(--tier,var(--brand)) 60%,#fff));
+  box-shadow:0 0 8px color-mix(in srgb,var(--tier,var(--brand)) 55%,transparent);
 }
 .reward__count{
-  flex:none;font-family:var(--f-display);font-size:13px;font-weight:600;
+  flex:none;font-family:var(--f-accent);font-size:14px;font-weight:700;
   color:var(--text-2);font-variant-numeric:tabular-nums;
 }
 
 
-/* Karriere links neben 1v1, Club rechts neben 3v3.
+/* Karriere links neben den Raengen, Club rechts.
    Flex statt Raster: ein ausgeblendeter Block ist kein Flex-Element mehr und
-   hinterlaesst keine leere Spalte - bei festen Spalten bliebe die Luecke
-   stehen, und ohne Club stuende die Rangreihe schief in der Zeile.
-   Die Basiswerte bestimmen den Umbruch: unter rund 1080px passen die drei
-   Spalten nicht mehr nebeneinander, dann rutschen Karriere und Club unter die
-   Raenge, statt sie zusammenzuquetschen.
+   hinterlaesst keine leere Spalte. Unter rund 1080px rutschen Karriere und Club
+   unter die Raenge, statt sie zusammenzuquetschen.
 
-   Alle drei Spalten enden auf derselben Hoehe: stretch statt flex-start. Die
-   hoechste gibt vor, die anderen ziehen nach - und damit dabei kein toter Rand
-   entsteht, waechst in jeder Spalte der Inhalt mit (siehe flex:1 unten). */
-/* 26px statt 14: bei drei Spalten dicht an dicht liest sich die Zeile als ein
-   Block, und die Rangkarten hatten kaum Luft zu Karriere und Club. */
-.trackmain{display:flex;flex-wrap:wrap;gap:26px;align-items:stretch;margin-bottom:18px}
-.trackmain > .factbox--side{flex:1 1 250px;min-width:0;margin:0;display:flex;flex-direction:column}
+   Die Spalten enden auf derselben Hoehe (stretch), der Inhalt darin aber
+   nicht: Karriere-Werte und Club-Karte bleiben so hoch wie ihr Inhalt. Frueher
+   wuchsen sie mit - daher die hohen, leeren Kacheln. */
+.trackmain{display:flex;flex-wrap:wrap;gap:24px;align-items:stretch;margin-bottom:18px}
+.trackmain > .factbox--side{flex:1 1 260px;min-width:0;margin:0;display:flex;flex-direction:column}
 
-/* Der Inhalt der Seitenspalten nimmt den Platz, den die hoechste Spalte
-   vorgibt: die Karriere-Kacheln und die Club-Karte wachsen mit, statt oben zu
-   kleben und unten eine Luecke zu lassen. */
-.factbox--side > .statgrid{flex:1}
-.factbox--side > .club{flex:1;display:flex;flex-direction:column}
-.factbox--side > .club > .club__inner{flex:1}
-
-/* Die Mittelspalte: Season-Reward über den drei Rangkarten. Sie ist ein eigener
-   Block, damit Karriere und Club links und rechts am Reward vorbei nach oben
-   durchlaufen — stünde der Reward wie früher quer darüber, fingen die
-   Seitenspalten erst unter ihm an. */
-.trackmid{flex:2.4 1 520px;min-width:0;display:flex;flex-direction:column;gap:20px}
+/* Die Mittelspalte: Season-Reward ueber den drei Rangkarten. Die Karten nehmen
+   den Rest der Hoehe; ihr Inhalt verteilt sich (die Serie haengt unten). */
+.trackmid{flex:2.4 1 520px;min-width:0;display:flex;flex-direction:column;gap:18px}
 .trackmid > .rewardstrip{margin:0}
-/* Der Reward behaelt seine Hoehe, die Rangkarten nehmen den Rest - so endet die
-   Mitte genau dort, wo Karriere und Club enden. */
-.trackmid > .rankgrid{margin:0;gap:18px;grid-template-columns:repeat(3,minmax(0,1fr));flex:1}
+.trackmid > .rankgrid{margin:0;gap:16px;grid-template-columns:repeat(3,minmax(0,1fr));flex:1}
 
-/* Frische-Anzeige im Kopf: wie lange der gezeigte Stand noch gilt. */
+/* Frische-Anzeige im Kopf: wie lange der gezeigte Stand noch gilt. Der duenne
+   Strich unten schrumpft mit der verbleibenden Zeit (--left, 1 bis 0). */
 .freshness{
-  display:flex;align-items:center;gap:9px;flex:none;
-  padding:8px 13px;border:1px solid var(--line);border-radius:var(--r-md);
+  position:relative;
+  display:flex;align-items:center;gap:10px;flex:none;
+  padding:9px 14px 11px;border:1px solid var(--line);border-radius:var(--r-md);
   background:rgba(255,255,255,.022);
+}
+.freshness::after{
+  content:"";position:absolute;left:0;bottom:0;height:2px;
+  width:calc(var(--left,0) * 100%);background:var(--brand);
+  transition:width 1s linear;
 }
 .freshness__dot{
   width:7px;height:7px;border-radius:50%;flex:none;
   background:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 14%,transparent);
 }
-/* Fällig: der Stand ist älter als zehn Minuten, die Seite holt ihn gerade neu. */
+/* Faellig: der Stand ist aelter als zehn Minuten, die Seite holt ihn gerade neu. */
 .freshness.is-due .freshness__dot{
   background:var(--warn);box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 14%,transparent);
 }
+.freshness.is-due::after{width:0}
 .freshness__text{display:flex;flex-direction:column;line-height:1.25;min-width:0}
 .freshness__text b{
-  font-family:var(--f-display);font-size:15px;font-weight:600;
+  font-family:var(--f-accent);font-size:15px;font-weight:700;
   font-variant-numeric:tabular-nums;
 }
-.freshness__text i{font-style:normal;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3)}
+.freshness__text i{font-style:normal;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
 
 @media (max-width:620px){
-  /* Auf dem Handy nimmt der Zähler eine eigene Zeile, statt Name und Knopf
+  /* Auf dem Handy nimmt der Zaehler eine eigene Zeile, statt Name und Knopf
      zusammenzuschieben. */
   .freshness{order:3;width:100%}
+}
+@media (prefers-reduced-motion:reduce){
+  .freshness::after,.reward__segments i{transition:none}
 }
 
 /* Die Seitenspalten richten sich nach ihrer eigenen Breite, nicht nach der des
@@ -1832,52 +1912,68 @@ body[data-page="guild"]{--shell:1440px}
 .club__head{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .club__tag{
   flex:none;display:grid;place-items:center;min-width:56px;height:56px;padding:0 12px;
-  border-radius:var(--r-md);font-family:var(--f-display);font-size:18px;font-weight:600;
+  border-radius:var(--r-md);font-family:var(--f-accent);font-size:17px;font-weight:700;
   color:var(--brand);
   border:1px solid color-mix(in srgb,var(--brand) 30%,transparent);background:color-mix(in srgb,var(--brand) 8%,transparent);
 }
 .club__title{flex:1;min-width:0}
-.club__title b{display:block;font-family:var(--f-display);font-size:17px;font-weight:600}
-.club__title span{font-size:12.5px;color:var(--text-3)}
+.club__title b{display:block;font-family:var(--f-display);font-size:17px;font-weight:700;line-height:1.25}
+.club__title span{font-size:13px;color:var(--text-3)}
 
-/* Club-MMR und der eigene WTSI-Wert nebeneinander */
-.club__scores{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* Club-MMR und der eigene WTSI-Wert: je eine flache Zeile, Zahl links. */
+.club__scores{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .club__mmr,.club__mine{
-  padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-md);
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  padding:10px 14px;border:1px solid var(--line);border-radius:var(--r-md);
   background:rgba(255,255,255,.022);
 }
 .club__mmr{border-color:color-mix(in srgb,var(--brand) 24%,transparent);background:color-mix(in srgb,var(--brand) 6%,transparent)}
 .club__mmr b,.club__mine b{
-  display:block;font-family:var(--f-display);font-size:25px;font-weight:600;letter-spacing:-.02em;
+  display:block;font-family:var(--f-accent);font-size:23px;font-weight:700;letter-spacing:-.01em;
   line-height:1.15;font-variant-numeric:tabular-nums;
 }
 .club__mmr b{color:var(--brand)}
 .club__mmr i,.club__mine i{
-  font-style:normal;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);
+  font-style:normal;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);
 }
 
-/* Die Eckdaten des Clubs */
+/* Die Eckdaten des Clubs - nur Owner und Gruendung, der Rest steht im Kopf. */
 .clubfacts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .clubfact{
-  display:flex;flex-direction:column;gap:1px;min-width:0;padding:9px 12px;
+  display:flex;flex-direction:column;gap:2px;min-width:0;padding:9px 12px;
   border:1px solid var(--line);border-radius:var(--r-sm);background:rgba(255,255,255,.02);
 }
-.clubfact span{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+.clubfact span{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
 .clubfact b{
-  font-size:13.5px;font-weight:600;
+  font-size:14px;font-weight:600;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 
-.club__members{display:grid;gap:6px}
+/* Mitglieder nach MMR: Platz, Name, Zahl - der Strich unten zeigt den Abstand
+   zum Besten (--w setzt Tracking.ts). */
+.club__label{font-family:var(--f-label);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
+.club__members{display:grid;gap:6px;margin:-6px 0 0;padding:0;list-style:none}
 .club__member{
-  display:flex;align-items:center;gap:10px;padding:8px 12px;
-  border:1px solid var(--line);border-radius:var(--r-sm);background:rgba(255,255,255,.02);
+  position:relative;display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:10px;
+  padding:9px 12px 10px;border:1px solid var(--line);border-radius:var(--r-sm);background:rgba(255,255,255,.02);
 }
-.club__member > svg{width:14px;height:14px;flex:none;color:var(--blue-soft)}
+.club__member::after{
+  content:"";position:absolute;left:0;bottom:0;height:2px;width:var(--w,0%);
+  background:color-mix(in srgb,var(--blue) 70%,transparent);
+}
+.club__member.is-self{border-color:color-mix(in srgb,var(--brand) 38%,transparent);background:color-mix(in srgb,var(--brand) 7%,transparent)}
+.club__member.is-self::after{background:var(--brand)}
+.club__pos{font-family:var(--f-accent);font-size:12px;font-weight:700;color:var(--text-3);font-variant-numeric:tabular-nums}
 .club__who{
-  flex:1;min-width:0;font-size:13px;color:var(--text-2);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  display:flex;align-items:center;gap:6px;min-width:0;font-size:13.5px;color:var(--text);
+  overflow:hidden;white-space:nowrap;
 }
+.club__who svg{width:14px;height:14px;flex:none;color:var(--warn)}
+.club__you{
+  flex:none;padding:1px 6px;font-family:var(--f-label);font-style:normal;font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--brand);border:1px solid color-mix(in srgb,var(--brand) 40%,transparent);
+}
+.club__score{font-family:var(--f-accent);font-size:13.5px;font-weight:700;color:var(--text-2);font-variant-numeric:tabular-nums}
 .club__who.mono{
   font-family:var(--f-mono);font-size:12px;
 }
@@ -1885,9 +1981,9 @@ body[data-page="guild"]{--shell:1440px}
 /* Zwischen Umbruch und Handy wird die Mittelspalte am engsten. Die Abzeichen
    geben als Erstes nach - die Zahl darunter ist der Wert, auf den es ankommt. */
 @media (max-width:1200px){
-  .trackmid > .rankgrid .rankcard{padding:18px 10px 14px}
-  .trackmid > .rankgrid .rankcard__badge{width:72px;height:72px}
-  .trackmid > .rankgrid .rankcard__mmr{font-size:25px}
+  .trackmid > .rankgrid .rankcard{padding:12px 10px 14px}
+  .trackmid > .rankgrid .rankcard__badge{width:76px;height:76px}
+  .trackmid > .rankgrid .rankcard__mmr{font-size:24px}
 }
 @media (max-width:900px){
   .trackmid > .rankgrid{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
@@ -1903,8 +1999,8 @@ body[data-page="guild"]{--shell:1440px}
    auf breiten Bildschirmen kaum groesser als 380px, nach dem Umbruch dagegen
    so breit wie die Seite. */
 @container (max-width:420px){
-  /* Karriere-Werte zu zweit statt zu sechst in einer Reihe. */
-  .statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* In der Seitenspalte: eine Werteliste untereinander. */
+  .statgrid{grid-template-columns:1fr}
   /* Nebeneinander bliebe von "Ø Club-MMR · WTSI" nur ein Zeilenumbruch. */
   .club__scores{grid-template-columns:1fr}
 }
@@ -2381,6 +2477,17 @@ body.no-motion .hero__field .run{display:none}
 }
 .tkchip button:hover{color:var(--loss)}
 .tkchip svg{width:13px;height:13px}
+.tkchip .travatar{width:18px;height:18px;font-size:10px}
+
+/* Moderatoren: Beschriftung oben, Chips darunter - die Listen wachsen. */
+.tkmod{display:grid;gap:8px;padding:10px 0}
+.tkmod + .tkmod{border-top:1px solid rgba(255,255,255,.045)}
+.tkmod .pick{width:auto;max-width:240px;height:34px}
+.tkmod__dot{width:10px;height:10px;flex:none;border-radius:50%}
+.tkmod__gone{font-style:normal;font-size:11px;color:var(--warn)}
+.tkmod__search{max-width:360px}
+.tkmod__results{display:flex;flex-wrap:wrap;gap:6px}
+.tkmod__results:empty{display:none}
 
 /* ---------- Vorschau ---------- */
 .tkprev{

@@ -13,7 +13,7 @@ import {
 } from "discord.js";
 import BotClient from "../client/BotClient";
 import ComponentV2Builder from "../builder/ComponentV2Builder";
-import { OptionOf, RELAY_MARK, SupportRoleOf } from "../builder/TicketPanel";
+import { IsModerator, OptionOf, RELAY_MARK, SupportRoleOf } from "../builder/TicketPanel";
 import { Duration, RenderTranscript } from "../builder/TranscriptHtml";
 import { DASHBOARD_PATH } from "../constants/Dashboard";
 import { TicketNumber } from "../constants/Tickets";
@@ -500,7 +500,7 @@ export default class TranscriptService {
      * Themen mit eigener Rolle, die es nicht hat; sonst nur die Themen seiner Rollen.
      */
     Visible(member: GuildMember, config: ITicketConfig): { include?: string[]; exclude?: string[] } {
-        if (member.permissions.has(PermissionFlagsBits.ManageGuild)) return {};
+        if (member.permissions.has(PermissionFlagsBits.ManageGuild) || IsModerator(member, config)) return {};
 
         const has = (role: string | null): boolean => role !== null && member.roles.cache.has(role);
         const own = config.options.filter((option) => option.supportRoleId !== null);
@@ -583,11 +583,10 @@ export default class TranscriptService {
         const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
 
         if (!member) return false;
-        if (member.permissions.has(PermissionFlagsBits.ManageGuild)) return true;
 
+        // Dieselbe Regel wie im Ticket: "Server verwalten", Moderatoren, die Support-Rolle des Themas.
         const config = await this.client.ticketSettings.Of(entry.guildId);
-        const role = SupportRoleOf(config, config.options.find((option) => option.id === meta.optionId) ?? null);
 
-        return role !== null && member.roles.cache.has(role);
+        return this.client.ticketService.IsStaff(member, { config, option: config.options.find((option) => option.id === meta.optionId) ?? null });
     }
 }

@@ -26,6 +26,7 @@ import {
     InfoView,
     IRelayFile,
     IsImageFile,
+    IsModerator,
     IsPanelMessage,
     ITicketView,
     IVaultItem,
@@ -47,6 +48,7 @@ import {
     DELETE_NOW_DELAY,
     HOUR_MS,
     MAX_LIMIT,
+    MAX_MODERATORS,
     MAX_NOTE,
     MAX_OPTIONS,
     MESSAGE_KEYS,
@@ -61,6 +63,7 @@ import {
     TicketNumber,
     TicketPriority,
 } from "../constants/Tickets";
+import { SNOWFLAKE } from "../constants/Discord";
 import { ITicket, ITicketConfig, ITicketOption } from "../interfaces/services/tickets/ITicket";
 import { TicketPatch } from "../models/Tickets";
 import logger from "../utils/logger";
@@ -242,6 +245,7 @@ export default class TicketService {
     /** Team heißt: die Support-Rolle, die für das Ticket gilt, oder "Server verwalten". */
     IsStaff(member: GuildMember, context: { config: ITicketConfig; option: ITicketOption | null }): boolean {
         if (member.permissions.has(PermissionFlagsBits.ManageGuild)) return true;
+        if (IsModerator(member, context.config)) return true;
 
         const role = SupportRoleOf(context.config, context.option);
 
@@ -344,6 +348,19 @@ export default class TicketService {
             return type === ChannelType.GuildText || type === ChannelType.GuildAnnouncement ? (value as string) : null;
         };
 
+        // Moderatoren: nur echte IDs, Rollen nur, wenn es sie auf dem Server gibt.
+        const mods = IsRecord(input.moderators) ? input.moderators : null;
+        const ids = (value: unknown, keep: (id: string) => boolean): string[] =>
+            Array.isArray(value)
+                ? [...new Set(value.filter((id): id is string => typeof id === "string" && SNOWFLAKE.test(id) && keep(id)))].slice(0, MAX_MODERATORS)
+                : [];
+        const moderators = mods
+            ? {
+                  users: ids(mods.users, (id) => id !== this.client.user?.id),
+                  roles: ids(mods.roles, (id) => role(id) !== null),
+              }
+            : previous.moderators;
+
         const wanted = IsRecord(input.transcripts) ? input.transcripts : {};
         const transcripts = {
             enabled: typeof wanted.enabled === "boolean" ? wanted.enabled : previous.transcripts.enabled,
@@ -365,6 +382,7 @@ export default class TicketService {
             tags: previous.tags,
             panel: previous.panel,
             transcripts,
+            moderators,
         };
     }
 
@@ -393,8 +411,46 @@ export default class TicketService {
         // Ein schon gesendetes Panel zeigt sofort den neuen Stand - etwa den
         // DM-Hinweis, sobald ModMail an ist. Die Antwort wartet nicht darauf.
         void this.RefreshPanel(guild, config);
+        void this.SyncModerators(guild, previous, config);
 
         return config;
+    }
+
+    /**
+     * Neue Moderatoren sehen auch die schon offenen Ticket-Kanäle, entfernte nicht
+     * mehr. Forum-Posts erben die Rechte des Forums - dort gibt es nichts zu tun.
+     */
+    private async SyncModerators(guild: Guild, before: ITicketConfig, after: ITicketConfig): Promise<void> {
+        const kind = (config: ITicketConfig) =>
+            new Map<string, OverwriteType>([
+                ...config.moderators.users.map((id): [string, OverwriteType] => [id, OverwriteType.Member]),
+                ...config.moderators.roles.map((id): [string, OverwriteType] => [id, OverwriteType.Role]),
+            ]);
+        const was = kind(before);
+        const now = kind(after);
+        const added = [...now].filter(([id]) => !was.has(id));
+        const removed = [...was].filter(([id]) => !now.has(id));
+
+        if (added.length === 0 && removed.length === 0) return;
+
+        const allow = Grant(Allowed(guild, MEMBER_ALLOW));
+
+        for (const ticket of await this.client.tickets.OpenOfGuild(guild.id)) {
+            const channel = ticket.channelId ? guild.channels.cache.get(ticket.channelId) : null;
+
+            if (channel?.type !== ChannelType.GuildText) continue;
+
+            // Wer das Ticket aus anderem Grund sieht, behält es.
+            const keep = new Set([SupportRoleOf(after, OptionOf(after, ticket)), ticket.openerId, ...ticket.members]);
+
+            for (const [id, type] of added) {
+                await channel.permissionOverwrites.edit(id, allow, { type }).catch((error) => logger.warn(`🎫 Moderator ${id}: ${String(error)}`));
+            }
+
+            for (const [id] of removed) {
+                if (!keep.has(id)) await channel.permissionOverwrites.delete(id).catch(() => undefined);
+            }
+        }
     }
 
     /** Zieht ein gesendetes Panel auf den gespeicherten Stand nach. Ohne Panel passiert nichts. */
@@ -785,6 +841,11 @@ export default class TicketService {
             { id: this.client.user!.id, type: OverwriteType.Member, allow: Allowed(guild, BOT_ALLOW) },
             ...(ticket.contact === "direct" ? [{ id: ticket.openerId, type: OverwriteType.Member, allow: member }] : []),
             ...(role ? [{ id: role, type: OverwriteType.Role, allow: member }] : []),
+            // Moderatoren sehen jedes Ticket. Eine Rolle, die schon Support-Rolle ist, steht nur einmal da.
+            ...config.moderators.roles.filter((id) => id !== role).map((id) => ({ id, type: OverwriteType.Role, allow: member })),
+            ...config.moderators.users
+                .filter((id) => id !== ticket.openerId || ticket.contact !== "direct")
+                .map((id) => ({ id, type: OverwriteType.Member, allow: member })),
         ];
     }
 

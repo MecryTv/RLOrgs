@@ -109,7 +109,7 @@ Bilder stehen als Galerie in der Karte, andere Dateien als Datei-Baustein — Co
 
 ## Die 15 Aktionen
 
-Alle in **einem** Menü unter der Eröffnung — und dieselben in [Live Tickets](#live-tickets) im Dashboard. Fest dabei: `close`, `claim`/`unclaim`, `add_user`/`remove_user`. Der Rest wird zugeschaltet. Schließen darf bei Klassisch auch der Ersteller, alles andere nur das Team (Support-Rolle der Option bzw. die allgemeine, oder „Server verwalten“).
+Alle in **einem** Menü unter der Eröffnung — und dieselben in [Live Tickets](#live-tickets) im Dashboard. Fest dabei: `close`, `claim`/`unclaim`, `add_user`/`remove_user`. Der Rest wird zugeschaltet. Schließen darf bei Klassisch auch der Ersteller, alles andere nur das Team (Support-Rolle der Option bzw. die allgemeine, [Moderatoren](#moderatoren) oder „Server verwalten“).
 
 | Aktion | Kanal | Forum-Post | Bei ModMail zusätzlich |
 |---|---|---|---|
@@ -187,7 +187,7 @@ Beim Schließen liest der Bot den ganzen Verlauf des Tickets und legt ihn ab —
 | alle Anhänge eines Tickets | 100 MB |
 | Bilder in der HTML-Datei | 6 MB eingebettet, der Rest zeigt auf die Online-Ansicht; über 10 MB gibt es nur den Link |
 
-**Ansehen** unter `/transcript/<ticket>` — nur angemeldet (Discord-Login des Dashboards, also mit Zwei-Faktor). Öffnen dürfen: „Server verwalten“, die Support-Rolle des Tickets und bei Klassisch der Ersteller und hinzugefügte User. Wer es nicht darf, sieht dieselbe Seite wie bei einer Nummer, die es nicht gibt. `?download=1` liefert die Datei mit eingebetteten Bildern. **Löschen** geht in der Liste (zweimal klicken) — samt der gesicherten Anhänge.
+**Ansehen** unter `/transcript/<ticket>` — nur angemeldet (Discord-Login des Dashboards, also mit Zwei-Faktor). Öffnen darf das Team des Tickets (`IsStaff()`: „Server verwalten“, Moderatoren, die Support-Rolle des Themas) und bei Klassisch der Ersteller und hinzugefügte User. Wer es nicht darf, sieht dieselbe Seite wie bei einer Nummer, die es nicht gibt. `?download=1` liefert die Datei mit eingebetteten Bildern. **Löschen** geht in der Liste (zweimal klicken) — samt der gesicherten Anhänge.
 
 **Reihenfolge beim Schließen:** Das Transcript entsteht im Hintergrund, die Antwort im Menü wartet nicht darauf. Die Löschfrist (auch „sofort“) wartet dagegen: `Remove()` löscht den Kanal erst, wenn das Transcript steht. Scheitert es, bleibt der Kanal eine Stunde länger, dann versucht der minütliche Lauf es erneut. Wer geschlossen hat und warum, steht am Ticket (`closed_by`, `close_reason`) — auch ein Transcript nach einem Neustart kennt es.
 
@@ -197,7 +197,7 @@ Beim Schließen liest der Bot den ganzen Verlauf des Tickets und legt ihn ab —
 
 Im Dashboard unter **Live Tickets**: links alle offenen Tickets des Servers, rechts der Verlauf — so, wie ihn auch das Transcript zeigt (Components V2 inklusive), nur live. Neue Tickets, Nachrichten, Bearbeitungen und Löschungen kommen ohne Neuladen an.
 
-**Wer es sieht:** „Server verwalten“ alle Tickets. Im Verlauf steht an jedem Namen **TEAM** oder **USER** (wie Discords BOT-Marke); weitergeleitete ModMail-Nachrichten erscheinen unter dem Ersteller selbst. Transcripts tragen die Marke ab jetzt ebenfalls, ältere bleiben ohne. Dazu die **Support-Rollen** — sie bekommen den Server in ihrer Liste, obwohl sie ihn nicht verwalten dürfen, sehen dort aber nur **Live Tickets** und **Transcriptions**, und darin nur die Tickets ihrer Rolle. Das ist dieselbe Regel wie im Ticket selbst (`IsStaff()`): die allgemeine Support-Rolle sieht alles außer Themen mit eigener Rolle, eine Themen-Rolle nur ihr Thema. Einstellungen, Panel und Löschen bleiben bei „Server verwalten“.
+**Wer es sieht:** „Server verwalten“ alle Tickets. Im Verlauf steht an jedem Namen **TEAM** oder **USER** (wie Discords BOT-Marke); weitergeleitete ModMail-Nachrichten erscheinen unter dem Ersteller selbst. Transcripts tragen die Marke ab jetzt ebenfalls, ältere bleiben ohne. Dazu [Moderatoren](#moderatoren) und die **Support-Rollen** — sie bekommen den Server in ihrer Liste (Marke „Moderator“), obwohl sie ihn nicht verwalten dürfen, sehen dort aber nur **Live Tickets** und **Transcriptions**. Moderatoren sehen darin jedes Ticket, Support-Rollen nur die ihrer Rolle. Das ist dieselbe Regel wie im Ticket selbst (`IsStaff()`): die allgemeine Support-Rolle sieht alles außer Themen mit eigener Rolle, eine Themen-Rolle nur ihr Thema. Einstellungen, Panel und Löschen bleiben bei „Server verwalten“.
 
 **Schreiben:** Die Nachricht geht über einen Webhook mit Namen und Bild des Teammitglieds und dem Zusatz „· via Dashboard“ — im Discord sieht jeder, woher sie kam. Im anonymen Modus steht dort der Team-Alias mit dem Server-Bild. Ohne Webhook-Recht schreibt der Bot sie selbst, mit dem Namen davor. Bei ModMail geht sie wie jede Team-Antwort per DM an den User; kommt sie dort nicht an (DMs zu), sagt das Dashboard es.
 
@@ -233,6 +233,20 @@ Im Kopf stehen Übernehmen/Zurückgeben, Priorität und Schließen, daneben das 
 
 ---
 
+## Moderatoren
+
+Unter *Einrichtung › Moderatoren* trägt man **Rollen** und **einzelne User** ein (je bis 25). Sie zählen für **jedes** Thema zum Team (`IsModerator()` in `TicketPanel.ts`, geprüft in `IsStaff()`):
+
+| Wo | Wirkung |
+|---|---|
+| Discord | Neue Ticket-Kanäle bekommen für sie dieselben Rechte wie die Support-Rolle. Beim Speichern zieht der Bot die schon **offenen** Kanäle nach — neue Moderatoren sehen sie, entfernte nicht mehr (außer sie sehen das Ticket aus anderem Grund). Forum-Posts erben die Rechte des Forums, dort tut der Bot nichts |
+| Aktions-Menü | alle Aktionen, wie das Team |
+| Dashboard | Startseite mit Marke „Moderator“, Live Tickets und Transcriptions mit **allen** Tickets. Keine Einstellungen, kein Transcript-Löschen |
+
+User sucht die Karte per Name oder User-ID (`POST …/tickets` mit `action: "members"`); wer den Server verlassen hat, steht mit Hinweis in der Liste, bis man ihn entfernt. `Clean()` nimmt nur echte IDs und nur Rollen, die es auf dem Server gibt.
+
+---
+
 ## Was der Bot braucht
 
 - **Rechte:** Kanäle verwalten, Rollen verwalten (für Overwrites), Nachrichten verwalten, Webhooks verwalten (anonymer Modus, ModMail-Nachrichten mit Name und Bild des Users, Antworten aus dem Dashboard), im Forum Threads verwalten.
@@ -256,7 +270,7 @@ Im Kopf stehen Übernehmen/Zurückgeben, Priorität und Schließen, daneben das 
 ## Prüfen
 
 ```bash
-npm run check:tickets     # Aktionsliste, Platzhalter, Einstellungen, Menü, Panel, Transcript- und Live-Darstellung, wer was sieht, Datenbank
+npm run check:tickets     # Aktionsliste, Platzhalter, Einstellungen, Moderatoren, Menü, Panel, ModMail-Karten, Transcript- und Live-Darstellung, wer was sieht, Datenbank
 npm run check:dashboard   # Platzhalter-Spiegel, Rechte und CSRF der Ticket-, Transcript- und Live-Routen
 ```
 

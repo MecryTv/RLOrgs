@@ -53,6 +53,16 @@ export interface ITicketConfig {
     tags: ITicketTags;
     panel: { channelId: string | null; messageId: string | null };
     transcripts: ITicketTranscriptSettings;
+    moderators: ITicketModerators;
+}
+
+/**
+ * Moderatoren: einzelne User oder ganze Rollen. Sie zählen für jedes Ticket zum
+ * Team - in Discord wie im Dashboard (Live Tickets, Transcriptions).
+ */
+export interface ITicketModerators {
+    users: string[];
+    roles: string[];
 }
 
 /** Was nach dem Schließen mit dem Verlauf passiert. */

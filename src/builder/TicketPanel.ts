@@ -1,4 +1,4 @@
-import { AttachmentBuilder, ContainerBuilder, escapeMarkdown, Guild, Message, User } from "discord.js";
+import { AttachmentBuilder, ContainerBuilder, escapeMarkdown, Guild, GuildMember, Message, User } from "discord.js";
 import BotClient from "../client/BotClient";
 import ComponentV2Builder from "./ComponentV2Builder";
 import { RenderDoc } from "./MessageDoc";
@@ -32,6 +32,11 @@ export function OptionOf(config: ITicketConfig, ticket: ITicket): ITicketOption 
 /** Die Rolle, die ein Ticket sieht: die eigene der Option, sonst die allgemeine. */
 export function SupportRoleOf(config: ITicketConfig, option: ITicketOption | null): string | null {
     return option?.supportRoleId ?? config.supportRoleId;
+}
+
+/** Moderatoren - einzeln eingetragen oder über eine Rolle - zählen für jedes Thema zum Team. */
+export function IsModerator(member: GuildMember, config: ITicketConfig): boolean {
+    return config.moderators.users.includes(member.id) || config.moderators.roles.some((role) => member.roles.cache.has(role));
 }
 
 /**

@@ -42,6 +42,7 @@ export default class TicketSettings extends Model<ITicketSettingsRow> {
             tags: { ...base.tags, ...stored.tags },
             panel: { ...base.panel, ...stored.panel },
             transcripts: { ...base.transcripts, ...stored.transcripts },
+            moderators: { ...base.moderators, ...stored.moderators },
         };
     }
 

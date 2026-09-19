@@ -247,6 +247,14 @@ function checkClean(client: BotClient): void {
     check("Transcripts: was fehlt, bleibt stehen", !partial.transcripts.enabled && partial.transcripts.channelId === TEXT && !partial.transcripts.dm);
     check("Transcripts: der Log-Kanal muss ein Textkanal sein", invented.transcripts.channelId === null, String(invented.transcripts.channelId));
     check("Transcripts: ohne Angabe bleibt alles, wie es war", client.ticketService.Clean(guild, {}, archived).transcripts.channelId === TEXT);
+
+    // Moderatoren: echte IDs, doppelte nur einmal, Rollen nur, wenn es sie gibt.
+    const mods = client.ticketService.Clean(guild, { moderators: { users: [STAFF, STAFF, "abc", 42], roles: [ROLE, "90071992547400001", GUILD] } }, config);
+
+    check("Moderatoren: User-IDs, doppelte nur einmal", JSON.stringify(mods.moderators.users) === JSON.stringify([STAFF]), JSON.stringify(mods.moderators.users));
+    check("Moderatoren: nur Rollen, die es gibt - @everyone nicht", JSON.stringify(mods.moderators.roles) === JSON.stringify([ROLE]), JSON.stringify(mods.moderators.roles));
+    check("Moderatoren: ohne Angabe bleibt die Liste", client.ticketService.Clean(guild, {}, mods).moderators.users[0] === STAFF);
+    check("Moderatoren: ältere Einstellungen haben leere Listen", DefaultConfig().moderators.users.length === 0 && DefaultConfig().moderators.roles.length === 0);
 }
 
 function checkMenu(client: BotClient): void {
@@ -553,6 +561,18 @@ async function checkLive(client: BotClient): Promise<void> {
     check("Live: aber keine Bewerbungen mit eigener Rolle", !client.liveService.CanSee(access([ROLE]), FakeTicket({ optionId: "bewerbung" })));
     check("Live: die Themen-Rolle sieht ihre Bewerbungen", client.liveService.CanSee(access([RECRUIT]), FakeTicket({ optionId: "bewerbung" })));
     check("Live: Tickets anderer Server nie", !client.liveService.CanSee(access([ROLE]), FakeTicket({ guildId: "90071992547400000" })));
+
+    // Moderatoren sehen jedes Thema - einzeln eingetragen oder über ihre Rolle.
+    const MOD_ROLE = "90071992547400002";
+    const moderated = { ...config, moderators: { users: [STAFF], roles: [MOD_ROLE] } };
+    const mod = (roles: string[], id = STAFF) =>
+        ({ id, permissions: { has: () => false }, roles: { cache: new Map(roles.map((role) => [role, {}])) } }) as unknown as GuildMember;
+    const bewerbung = moderated.options.find((option) => option.id === "bewerbung") ?? null;
+
+    check("Moderator (User) zählt bei jedem Thema zum Team", client.ticketService.IsStaff(mod([]), { config: moderated, option: bewerbung }));
+    check("Moderator (Rolle) zählt bei jedem Thema zum Team", client.ticketService.IsStaff(mod([MOD_ROLE], USER), { config: moderated, option: bewerbung }));
+    check("Ohne Eintrag und Rolle: kein Team", !client.ticketService.IsStaff(mod([], USER), { config: moderated, option: bewerbung }));
+    check("Transcripts: Moderatoren sehen alle", JSON.stringify(client.transcriptService.Visible(mod([MOD_ROLE], USER), moderated)) === "{}");
 }
 
 /* ----------------------------------------------------------

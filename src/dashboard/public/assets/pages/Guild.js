@@ -140,14 +140,14 @@ export function renderGuild(data) {
     created.textContent = `Erstellt ${monthOf(guild.created)}`;
     meta.replaceChildren(role, members, bots, created);
     countMembers(meta, guild);
-    // Supporter: kein Verwalten, aber eine Support-Rolle - sie sehen nur die Tickets.
-    const supportOnly = !guild.canManage && guild.role === "Support";
+    // Moderatoren: kein Verwalten - sie sehen nur Live Tickets und Transcriptions.
+    const supportOnly = !guild.canManage && guild.role === "Moderator";
     if (!guild.canManage) {
         const note = need("#readonly");
         note.hidden = false;
         if (supportOnly) {
             note.querySelector("span").textContent =
-                "Du bist hier im Support-Team: Live Tickets und Transcriptions stehen dir offen. Einstellungen brauchen „Server verwalten“ auf dem Server selbst.";
+                "Du bist hier Moderator: Live Tickets und Transcriptions stehen dir offen. Einstellungen brauchen „Server verwalten“ auf dem Server selbst.";
         }
     }
     // Wurde die Seite direkt aufgerufen, laufen die Abfragen schon; sonst hier.

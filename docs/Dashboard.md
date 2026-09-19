@@ -200,13 +200,13 @@ Anmelden darf sich **jeder** Discord-Account. Was danach in der Liste steht, hä
 |---|---|---|
 | Owner des Servers | ja | ja |
 | `MANAGE_GUILD` oder `ADMINISTRATOR` | ja | ja |
-| Support-Rolle eines Ticket-Themas | ja, Marke „Support“ | nein — nur **Live Tickets** und **Transcriptions**, siehe [Tickets.md](Tickets.md#live-tickets) |
+| Moderator im Ticket-System (selbst, per Rolle oder mit Support-Rolle) | ja, Marke „Moderator“, eigener Abschnitt und Filter „Moderation“ | nein — nur **Live Tickets** und **Transcriptions**, siehe [Tickets.md](Tickets.md#moderatoren) |
 | Weder noch | nein | — |
 | Gruppe `administrator` oder `developer` | zusätzlich **jeder** Server, auf dem der Bot ist | nur mit eigenem Recht auf dem Server |
 
 Die Serverliste holt der Bot je Sitzung höchstens einmal gleichzeitig: Eine Seite fragt mehrere Routen auf einmal ab, und alle warten auf denselben Abruf. Antwortet Discord trotzdem mit 429, wartet er die genannte Zeit (bis 5 Sekunden) und fragt einmal nach (`DashboardService.Guilds()` / `Fetch()`).
 
-Die Support-Rolle kommt nicht aus Discords Serverliste, sondern vom Bot: er schaut, ob das Mitglied die allgemeine Support-Rolle oder die eines Themas trägt. Nur auf Servern mit eingeschaltetem Ticket-Modul, und nur für Server, die sonst nicht in der Liste stünden. Die Übersicht mit Aktivität bleibt für sie zu.
+Moderatoren kommen nicht aus Discords Serverliste, sondern vom Bot: er schaut, ob das Mitglied als Moderator eingetragen ist, eine Moderatoren-Rolle oder eine Support-Rolle (allgemein oder eines Themas) trägt. Nur auf Servern mit eingeschaltetem Ticket-Modul, und nur für Server, die sonst nicht in der Liste stünden. Die Übersicht mit Aktivität bleibt für sie zu.
 
 Karten ohne Bearbeitungsrecht tragen die Marke „Nur Ansicht“, die Detailseite blendet dort einen Hinweis ein. Wer Seiten-Admins auch dort schreiben lassen will, setzt in `DashboardService.Guilds()` beim Staff-Zweig `canManage` auf `true` — eine Zeile.
 
@@ -298,8 +298,13 @@ Die Serverauswahl lebt von einem einzigen `GET /dashboard/api/me`. **Nichts davo
 | Wappenfarben | Hash der Guild-ID — gleiche ID, immer gleiche Farbe, nichts gespeichert |
 | Rolle (Owner/Admin/Staff-Zugriff) | Die `permissions`-Bits aus derselben Antwort |
 | Gruppe des Angemeldeten | Tabelle `dashboard_groups`, plus `DEV_USER_IDs` aus der `.env` |
-| Aktive Teams | `teams` in der Datenbank, aktive Teams des Servers |
-| Aktive Module | Anzahl der eingeschalteten Module, `guild_settings.modules` in der Datenbank |
+| Aktive Teams | `teams` in der Datenbank, aktive Teams des Servers (in der Kurzinfo) |
+| Aktive Module | `guild_settings.modules` in der Datenbank — auf der Karte als Symbole, feste Module zählen mit |
+| Seit wann RL Nexus dabei ist | `joinedTimestamp` aus dem Bot-Cache (`joined`), in der Statuszeile der Karte |
+
+**Die Karte** zeigt oben Name und Rolle, darunter den Status („RL Nexus läuft hier seit März 2026“), zwei Zahlen — Mitglieder und Bots, gleich breite Ziffern — und die aktiven Module als Symbole (höchstens sechs, der Rest als „+n“; der Name steht im Tooltip und für Vorleser). **Die Kurzinfo** (der kleine Knopf neben „Dashboard öffnen“) ist ein Popover an der Karte (`layout/GuildInfo.ts`): alle Zahlen, Server erstellt, dabei seit, Teams, die Module mit Namen, was man dort darf, und Direktlinks — für Moderatoren zu Live Tickets und Transcriptions. Ohne Bot zählt sie auf, was RL Nexus mitbringt. Escape, Klick daneben oder ein zweiter Klick auf den Knopf schließen sie; der Fokus geht zurück an den Knopf.
+
+Die Liste ist in bis zu drei Abschnitte geteilt: **Deine Server** (Owner, Admin), **Als Moderator**, **Fremde Server** (Staff) — Überschriften nur, wenn mehr als einer davon in der Ansicht steht.
 
 ### Kopfzeile, Einstellungen, Postfach
 
@@ -397,8 +402,21 @@ Teams und Module kommen aus der Datenbank — zwei Abfragen für die ganze Liste
 ### Tracking-Seite `/dashboard/user/<userId>/tracking`
 
 Drei Spalten nebeneinander: **Karriere links, die Ränge in der Mitte, Club rechts.**
-Darüber der Season-Reward, der für die ganze Saison gilt und deshalb quer über
-alles steht.
+Über den Rängen der Season-Reward, der für die ganze Saison gilt.
+
+Die Spalten enden auf derselben Höhe, ihr Inhalt wird aber **nicht** gestreckt —
+früher wuchsen Kacheln und Rang-Karten mit und standen hoch und leer da:
+
+| Bereich | Aufbau |
+|---|---|
+| Karriere | eine Liste: Symbol, Name, Zahl rechtsbündig, farbiger Strich links. Darunter zwei Quoten aus denselben Zahlen: **Trefferquote** (Tore pro Schuss) und **MVP-Quote** (MVP pro Sieg) — nur, wenn der Nenner da ist |
+| Season-Reward | zehn Segmente, ein Sieg je Segment |
+| Rang-Karte | oben die Playlist, in der Mitte Abzeichen, Rang, Division (in der Platzierung zehn Punkte), MMR und Spiele, unten „Serie“ — die Mitte steht zwischen Kopf und Serie zentriert, drei Karten enden auf einer Linie |
+| Club | Tag, Name, Mitgliederzahl; Ø Club-MMR (WTSI) und der eigene WTSI als flache Zeilen; Owner und Gründung; die Mitglieder **nach MMR sortiert**, mit Platz, Balken zum Besten und der Marke „Du“ |
+
+Alle Beschriftungen haben mindestens 11,5 px, Zahlen gleich breite Ziffern. Der
+Zähler oben rechts trägt einen dünnen Strich, der bis zur nächsten Aktualisierung
+schrumpft.
 
 Umgesetzt als Flex-Zeile (`.trackmain`), nicht als Raster mit festen Spalten: ein
 ausgeblendeter Block ist kein Flex-Element mehr und hinterlässt keine leere
@@ -410,8 +428,7 @@ Breite, nicht nach der des Fensters. Bricht die Zeile um, steht der Club
 plötzlich voll breit da und wird von selbst wieder mehrspaltig; eine
 Media-Query wüsste davon nichts.
 
-Die **Club-Karte** zeigt den Club aus dem Spiel — Name, Tag, Owner,
-Gründungsdatum, Mitglieder mit ihrer MMR und den Durchschnitt nach WTSI. Nicht
+Die **Club-Karte** zeigt den Club aus dem Spiel — nicht
 zu verwechseln mit der Tabelle `clubs`, die der Bot für eigene Zwecke führt und
 die im Dashboard nirgends auftaucht. Wer in keinem Ingame-Club ist, sieht die
 Karte gar nicht.

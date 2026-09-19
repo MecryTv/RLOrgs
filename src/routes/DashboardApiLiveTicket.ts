@@ -1,6 +1,5 @@
 import path from "path";
 import { FastifyReply, FastifyRequest } from "fastify";
-import { GuildMember } from "discord.js";
 import BotClient from "../client/BotClient";
 import Route from "../structures/Route";
 import { IsImageSource } from "../builder/MessageDoc";
@@ -11,6 +10,7 @@ import { ITicket } from "../interfaces/services/tickets/ITicket";
 import { ILiveAccess } from "../services/LiveService";
 import { TicketError } from "../services/TicketService";
 import { WantsJSON } from "../utils/admin";
+import { PersonOf, SearchMembers } from "../utils/dashboard";
 import { LiveGate, LiveTicket } from "../utils/live";
 
 interface IBody {
@@ -202,17 +202,9 @@ export default class DashboardApiLiveTicket extends Route {
 
     /** Für "Benutzer hinzufügen": Mitglieder nach Name oder ID - ohne Bots und ohne, wer schon im Ticket ist. */
     private async Search(access: ILiveAccess, ticket: ITicket, query: string): Promise<IPerson[]> {
-        if (!query) return [];
-
-        const found: (GuildMember | null)[] = /^\d{17,20}$/.test(query)
-            ? [await access.guild.members.fetch(query).catch(() => null)]
-            : [...((await access.guild.members.search({ query, limit: 10 }).catch(() => null))?.values() ?? [])];
         const inside = new Set([ticket.openerId, ...ticket.members]);
 
-        return found
-            .filter((entry): entry is GuildMember => entry !== null && !entry.user.bot && !inside.has(entry.id))
-            .slice(0, 10)
-            .map((entry) => ({ id: entry.id, name: entry.displayName, avatar: entry.displayAvatarURL({ extension: "webp", size: 64 }) }));
+        return (await SearchMembers(access.guild, query)).filter((entry) => !inside.has(entry.id)).map(PersonOf);
     }
 
     private Notes(access: ILiveAccess, ticket: ITicket): { by: string; at: number; text: string }[] {

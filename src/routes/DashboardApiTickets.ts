@@ -9,7 +9,7 @@ import { ClearCookie, DASHBOARD_PATH, SESSION_COOKIE } from "../constants/Dashbo
 import { SNOWFLAKE } from "../constants/Discord";
 import { CORE_ACTIONS } from "../constants/Tickets";
 import { WantsJSON } from "../utils/admin";
-import { SessionOf } from "../utils/dashboard";
+import { PersonOf, SearchMembers, SessionOf } from "../utils/dashboard";
 import logger from "../utils/logger";
 
 interface IBody {
@@ -17,6 +17,7 @@ interface IBody {
     config?: unknown;
     channelId?: unknown;
     userId?: unknown;
+    query?: unknown;
 }
 
 /** Was die Seite zum Einstellen braucht: Rollen, Kanäle, Kategorien, Emojis. */
@@ -118,8 +119,18 @@ export default class DashboardApiTickets extends Route {
         const config = await this.client.ticketSettings.Of(guild.id);
         const blacklist = await this.client.ticketBlacklist.Of(guild.id);
 
+        // Die eingetragenen Moderatoren mit Namen und Bild. Wer den Server verlassen hat, steht mit ID da.
+        const moderators = await Promise.all(
+            config.moderators.users.map(async (id) => {
+                const member = guild.members.cache.get(id) ?? (await guild.members.fetch(id).catch(() => null));
+
+                return member ? { ...PersonOf(member), gone: false } : { id, name: this.client.users.cache.get(id)?.displayName ?? id, avatar: null, gone: true };
+            })
+        );
+
         return {
             config,
+            moderators,
             // Wo das Panel wirklich steht - null, wenn die Nachricht weg ist.
             panel: await this.client.ticketService.PanelStatus(guild, config),
             guild: Resources(guild),
@@ -167,6 +178,12 @@ export default class DashboardApiTickets extends Route {
             logger.user(`🎫 Ticket-Panel auf ${guild.id} entfernt (von ${userId})`);
 
             return { ok: true, removed };
+        }
+
+        if (body.action === "members") {
+            const query = typeof body.query === "string" ? body.query.trim().slice(0, 100) : "";
+
+            return { ok: true, members: (await SearchMembers(guild, query)).map(PersonOf) };
         }
 
         if (body.action === "unblock") {
