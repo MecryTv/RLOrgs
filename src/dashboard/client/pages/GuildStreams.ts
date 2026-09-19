@@ -17,7 +17,7 @@ import { toast } from "../core/Toast.js";
 import { api, button, card, confirmButton, el, face, IRole, pingSelect, row, select, stat, toggle } from "../core/Ui.js";
 import { TWITCH_IMAGES, TWITCH_PLACEHOLDERS, YOUTUBE_IMAGES, YOUTUBE_PLACEHOLDERS } from "../constants/Placeholders.js";
 import { IServerEmoji } from "../layout/EmojiPicker.js";
-import { IEditorContext, IMessageDoc, renderEditor, renderPreview } from "../layout/MessageEditor.js";
+import { IEditorContext, IMessageDoc, insertPlaceholder, renderEditor, renderPreview } from "../layout/MessageEditor.js";
 
 type Platform = "twitch" | "youtube";
 type Kind = "live" | "video" | "short";
@@ -83,6 +83,37 @@ const BRAND: Record<Platform, { name: string; symbol: string; input: string; hin
         hint: "Der Bot liest alle fünf Minuten den Feed der Kanäle – neue Videos und Shorts ohne API-Schlüssel, Livestreams mit.",
     },
 };
+
+/**
+ * Was man in die Nachricht schreiben kann: alle Platzhalter der Plattform zum
+ * Nachlesen. Ein Klick setzt einen dorthin, wo der Cursor zuletzt stand.
+ */
+function placeholderHint(platform: Platform, host: HTMLElement): HTMLElement {
+    const list = platform === "twitch" ? TWITCH_PLACEHOLDERS : YOUTUBE_PLACEHOLDERS;
+    const images = platform === "twitch" ? TWITCH_IMAGES : YOUTUBE_IMAGES;
+    const chips = el("div", "phhint__list");
+
+    for (const entry of list) {
+        const key = `{${entry.key}}`;
+        const chip = button("phchip", el("code", "", key), el("span", "phchip__label", entry.label));
+
+        chip.title = `${entry.label} – Beispiel: ${entry.sample || "Bild"}`;
+
+        if (images.includes(key)) chip.classList.add("is-image");
+
+        chip.addEventListener("click", () => {
+            if (!insertPlaceholder(key, host)) toast("info", "Kein Textfeld da", "Füge zuerst einen Text-Block hinzu.");
+        });
+        chips.append(chip);
+    }
+
+    return el(
+        "div",
+        "phhint",
+        el("p", "hintline phhint__lead", "Platzhalter setzt der Bot beim Senden ein – Knopf und Ping hängt er selbst an. Ein Klick setzt ihn ins Textfeld:"),
+        chips
+    );
+}
 
 export function renderStreams(guildId: string, platform: Platform): void {
     const host = need<HTMLElement>(`#${platform}Body`);
@@ -509,7 +540,7 @@ export function renderStreams(guildId: string, platform: Platform): void {
                     "sneditor__main",
                     settings,
                     el("div", "sneditor__bar", el("h4", "sneditor__title", "Nachricht"), kindTabs, template),
-                    el("p", "hintline", "Platzhalter wie {streamer} oder {video.title} setzt der Bot beim Senden ein. Knopf und Ping hängt er selbst an."),
+                    placeholderHint(platform, editorHost),
                     editorHost
                 ),
                 el("aside", "sneditor__side", el("div", "tkside__head", el("span", "tkside__live", "Live-Vorschau"), el("b", "", KIND_LABEL[draft.kind])), preview)

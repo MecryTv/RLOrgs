@@ -76,6 +76,29 @@ function area(value: string, onInput: (value: string) => void): HTMLTextAreaElem
     return field;
 }
 
+/**
+ * Setzt "{platzhalter}" ins zuletzt benutzte Textfeld - dorthin, wo der Cursor
+ * steht. Mit host zählt nur ein Feld in diesem Editor: sind zwei Nachrichten
+ * offen, landet der Platzhalter sonst in der falschen. Hat dort noch niemand
+ * getippt, nimmt er das erste Textfeld.
+ */
+export function insertPlaceholder(value: string, host?: HTMLElement): boolean {
+    const area = lastArea && (!host || host.contains(lastArea)) ? lastArea : (host?.querySelector<HTMLTextAreaElement>("textarea.tkarea") ?? null);
+
+    if (!value || !area) return false;
+
+    const start = area.selectionStart ?? area.value.length;
+    const end = area.selectionEnd ?? start;
+
+    area.value = `${area.value.slice(0, start)}${value}${area.value.slice(end)}`;
+    area.dispatchEvent(new Event("input"));
+    area.focus();
+    area.setSelectionRange(start + value.length, start + value.length);
+    lastArea = area;
+
+    return true;
+}
+
 function chip(label: string, onRemove: () => void): HTMLElement {
     const box = document.createElement("span");
 
@@ -315,16 +338,7 @@ export function renderEditor(host: HTMLElement, doc: IMessageDoc, context: IEdit
         const value = placeholders.value;
 
         placeholders.value = "";
-
-        if (!value || !lastArea) return;
-
-        const start = lastArea.selectionStart ?? lastArea.value.length;
-        const end = lastArea.selectionEnd ?? start;
-
-        lastArea.value = `${lastArea.value.slice(0, start)}${value}${lastArea.value.slice(end)}`;
-        lastArea.dispatchEvent(new Event("input"));
-        lastArea.focus();
-        lastArea.setSelectionRange(start + value.length, start + value.length);
+        insertPlaceholder(value);
     });
 
     bar.append(color, placeholders);
