@@ -3,7 +3,7 @@
 import { IRank } from "../interfaces/IRank.js";
 import { icon, need, maybe, picture } from "../core/Dom.js";
 import { numbers } from "../core/Format.js";
-import { STAT_COLORS, rankImage, tierColor } from "../constants/Ranks.js";
+import { STAT_COLORS, rankIcon, tierColor } from "../constants/Ranks.js";
 import { platformIcon } from "../constants/Platforms.js";
 import { BASE } from "../core/Base.js";
 
@@ -56,8 +56,9 @@ export const REWARD_LEVELS = [
 export const REWARD_WINS = 10;
 
 // Das Reward-Abzeichen ist dasselbe Bild wie der Rang - Stufe 1 ist Bronze I.
+// Die kleine Fassung (160 px) reicht für 64 px; die Originale wiegen bis 220 KB.
 export function rewardImage(level: number): string {
-    return rankImage(level > 0 ? (level - 1) * 3 + 1 : 0);
+    return rankIcon(level > 0 ? (level - 1) * 3 + 1 : 0);
 }
 
 /**
@@ -336,7 +337,7 @@ export function rankCard(rank: IRank): HTMLElement {
     games.className = "rankcard__games";
     games.textContent = rank.matches === 1 ? "1 Spiel" : `${numbers.format(rank.matches)} Spiele`;
 
-    const badge = picture(rankImage(rank.tier, rank.placement), "rankcard__badge");
+    const badge = picture(rankIcon(rank.tier, rank.placement), "rankcard__badge");
 
     // Der Rang steht erst nach den Platzierungsspielen fest.
     const tier = document.createElement("b");

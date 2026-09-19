@@ -24,7 +24,7 @@
     "main": "dist/index.js",
     "scripts": {
         "build": "tsc && npm run build:dashboard",
-        "build:dashboard": "tsc -p src/dashboard/tsconfig.json",
+        "build:dashboard": "tsc -p src/dashboard/tsconfig.json --noEmit && tsx src/scripts/BuildDashboard.ts",
         "check:card": "tsx src/scripts/CheckCard.ts",
         "check:dashboard": "tsx src/scripts/CheckDashboard.ts",
         "check:db": "tsx src/scripts/CheckDatabase.ts",
@@ -33,8 +33,9 @@
         "check:prime": "tsx src/scripts/CheckPrime.ts",
         "check:tickets": "tsx src/scripts/CheckTickets.ts",
         "dev": "npm run build:dashboard && tsx watch src/index.ts --dev",
-        "dev:dashboard": "tsc -p src/dashboard/tsconfig.json --watch",
+        "dev:dashboard": "tsx src/scripts/BuildDashboard.ts --watch",
         "icons:ranks": "tsx src/scripts/MakeRankIcons.ts",
+        "measure:dashboard": "tsx src/scripts/MeasureDashboard.ts",
         "start": "node .",
         "token": "tsx src/scripts/GenerateToken.ts",
         "typecheck": "tsc --noEmit"
@@ -51,6 +52,7 @@
     },
     "devDependencies": {
         "@types/node": "^26.2.0",
+        "esbuild": "^0.28.2",
         "tsx": "^4.23.12",
         "typescript": "^7.0.2"
     }

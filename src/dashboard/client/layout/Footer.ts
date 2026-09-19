@@ -17,7 +17,7 @@ export const FOOTER_HTML = `
 <footer class="footer">
   <div class="shell footer__inner">
     <div class="footer__brand">
-      <span class="footer__mark"><img src="${BASE}/assets/images/RL Nexus N Logo.png" alt="" width="26" height="26" decoding="async"></span>
+      <span class="footer__mark"><img src="${BASE}/assets/images/rl-nexus-n-96.png" alt="" width="26" height="26" decoding="async" loading="lazy"></span>
       <span>
         <b>RL Nexus</b>
         <i>Rang-Tracking und Orga-Verwaltung für Rocket League</i>

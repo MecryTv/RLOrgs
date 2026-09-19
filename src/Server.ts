@@ -7,6 +7,7 @@ import { AssertSecret } from "./utils/jwt";
 import logger from "./utils/logger";
 import { UPLOAD_TYPES } from "./constants/Gallery";
 
+import { EncodingOf, MIN_COMPRESS, Pack } from "./utils/compress";
 const DEFAULT_HOST = "0.0.0.0";
 const MAX_PORT = 65535;
 
@@ -99,6 +100,22 @@ export default class Server implements IServer {
         instance.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_request, body, done) =>
             done(null, body)
         );
+
+        // JSON-Antworten gepackt: Listen wie Transcripts oder Live Tickets sind
+        // sonst ein Vielfaches groesser. Dateien und Seiten packen SendFile und
+        // SendPage selbst (mit gemerkter Fassung) - die kommen hier als Buffer an.
+        instance.addHook("onSend", async (request, reply, payload) => {
+            if (typeof payload !== "string" || payload.length < MIN_COMPRESS || reply.hasHeader("content-encoding")) return payload;
+            if (!String(reply.getHeader("content-type") ?? "").startsWith("application/json")) return payload;
+
+            const encoding = EncodingOf(request);
+
+            if (!encoding) return payload;
+
+            reply.header("Content-Encoding", encoding).header("Vary", "Accept-Encoding").removeHeader("content-length");
+
+            return Pack(payload, encoding);
+        });
 
         await instance.register(rateLimit, {
             global: true,

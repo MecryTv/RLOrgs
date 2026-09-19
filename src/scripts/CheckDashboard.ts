@@ -12,7 +12,7 @@ process.env.DEV_CLIENT_SECRET ||= "check-secret";
 
 import path from "path";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import BotClient from "../client/BotClient";
 import { SNOWFLAKE } from "../constants/Discord";
 import { MAX_IMAGE_BYTES } from "../constants/Gallery";
@@ -491,6 +491,36 @@ async function main(): Promise<void> {
     const js = await fetch(`${BASE}${P}/assets/app.js`);
     check("app.js wird ausgeliefert (Frontend gebaut?)", js.status === 200, `${js.status} - npm run build:dashboard`);
 
+    // Ladezeit: gepackt, mit Stand (ETag), und was sich nie aendert, darf der
+    // Browser ein Jahr behalten. Ohne das lud jede Seite alles bei jedem Aufruf neu.
+    const packed = await fetch(`${BASE}${P}/assets/app.js`, { headers: { "Accept-Encoding": "br, gzip" } });
+    const etag = packed.headers.get("etag") ?? "";
+    const again = await fetch(`${BASE}${P}/assets/app.js`, { headers: { "If-None-Match": etag } });
+
+    check("app.js kommt gepackt (Brotli)", packed.headers.get("content-encoding") === "br", String(packed.headers.get("content-encoding")));
+    check("Gleicher Stand: 304 ohne Inhalt", etag !== "" && again.status === 304, `${again.status}`);
+
+    const chunkNames = existsSync(path.join(process.cwd(), "src", "dashboard", "public", "assets", "chunks"))
+        ? await readdir(path.join(process.cwd(), "src", "dashboard", "public", "assets", "chunks"))
+        : [];
+    const piece = chunkNames[0] ? await fetch(`${BASE}${P}/assets/chunks/${chunkNames[0]}`) : null;
+
+    check("Stücke mit Prüfsumme: ein Jahr Cache", (piece?.headers.get("cache-control") ?? "").includes("immutable"), String(piece?.headers.get("cache-control")));
+
+    const versioned = await fetch(`${BASE}${P}/assets/style.css?v=abc123def0`);
+    const unversioned = await fetch(`${BASE}${P}/assets/style.css`);
+
+    check("style.css mit ?v=: ein Jahr Cache", (versioned.headers.get("cache-control") ?? "").includes("immutable"));
+    check("style.css ohne ?v=: der Browser fragt nach", unversioned.headers.get("cache-control") === "no-cache");
+
+    const docuPage = await (await fetch(`${BASE}${P}/docu`)).text();
+
+    check(
+        "Seiten hängen die Prüfsumme an app.js und style.css",
+        /assets\/app\.js\?v=[0-9a-f]{10}"/.test(docuPage) && /assets\/style\.css\?v=[0-9a-f]{10}"/.test(docuPage)
+    );
+    check("Kein 1,4-MB-Logo mehr in den Seiten", !docuPage.includes("RL Nexus N Logo.png"));
+
     // ------------------------------------------------------------------
     // Der Modulbaum des Frontends.
     //
@@ -500,7 +530,8 @@ async function main(): Promise<void> {
     // dasteht. Bemerkt wuerde es erst an einer weissen Seite. Also hier.
     // ------------------------------------------------------------------
     const ASSETS = path.join(process.cwd(), "src", "dashboard", "public", "assets");
-    const IMPORT = /from\s+"([^"]+)"/g;
+    // Gebündelt und verkleinert: from"./x.js", import"./x.js" und import("./x.js").
+    const IMPORT = /(?:from\s*|import\s*\(\s*|import\s*)"([^"]+\.js)"/g;
 
     const gesehen = new Set<string>();
     const kaputt: string[] = [];
@@ -534,10 +565,14 @@ async function main(): Promise<void> {
         }
     }
 
+    // Einstieg, geteilte Stücke und je Seite eins - alle muessen erreichbar sein.
+    const pages = ["Servers", "Guild", "Tracking", "Settings", "Admin", "Docu"];
+    const reached = [...gesehen].join(" ");
+
     check(
-        `Frontend-Module laden vollständig (${gesehen.size} Dateien)`,
-        kaputt.length === 0 && gesehen.size > 10,
-        kaputt.join(", ")
+        `Frontend-Bündel lädt vollständig (${gesehen.size} Dateien)`,
+        kaputt.length === 0 && pages.every((name) => reached.includes(`chunks/${name}-`)),
+        kaputt.join(", ") || pages.filter((name) => !reached.includes(`chunks/${name}-`)).join(", ")
     );
 
     // Die Seitenleiste der Serverseite: jedes Modul zeigt ein Symbol aus dem
@@ -558,7 +593,8 @@ async function main(): Promise<void> {
     type CategoryEntry = { id: string; name: string };
 
     const { pathToFileURL } = await import("node:url");
-    const moduleFile = path.join(ASSETS, "constants", "Modules.js");
+    // Die Quelle, nicht das Bündel - dort stehen die Module nicht mehr als eigene Datei.
+    const moduleFile = path.join(process.cwd(), "src", "dashboard", "client", "constants", "Modules.ts");
     const guildPage = await readFile(path.join(ASSETS, "..", "guild.html"), "utf8");
     const loaded = existsSync(moduleFile)
         ? ((await import(pathToFileURL(moduleFile).href)) as {
@@ -630,7 +666,8 @@ async function main(): Promise<void> {
     // Das Dashboard weist zu grosse Bilder ab, bevor sie durchs Netz gehen.
     // Es kann MAX_IMAGE_BYTES nicht importieren und traegt die Zahl selbst -
     // laufen beide auseinander, nennt die Kachel eine falsche Grenze.
-    const galleryCore = await readFile(path.join(ASSETS, "core", "Gallery.js"), "utf8");
+    const CLIENT = path.join(process.cwd(), "src", "dashboard", "client");
+    const galleryCore = await readFile(path.join(CLIENT, "core", "Gallery.ts"), "utf8");
     const clientLimit = Number(/MAX_UPLOAD_BYTES = (\d+)/.exec(galleryCore)?.[1]);
 
     check(
@@ -642,7 +679,7 @@ async function main(): Promise<void> {
     // Die Platzhalter der Ticket-Nachrichten kennt der Bot; das Dashboard fuehrt
     // dieselbe Liste mit Beschriftung und Beispiel. Fehlt dort einer, bietet der
     // Editor ihn nie an - steht dort einer zu viel, ersetzt ihn niemand.
-    const placeholderFile = path.join(ASSETS, "constants", "Placeholders.js");
+    const placeholderFile = path.join(CLIENT, "constants", "Placeholders.ts");
     const placeholders = existsSync(placeholderFile)
         ? ((await import(pathToFileURL(placeholderFile).href)) as { PLACEHOLDERS?: { key: string }[] })
         : {};

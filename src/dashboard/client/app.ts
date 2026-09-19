@@ -7,8 +7,10 @@
  * über textContent im Dokument - nirgends wird HTML zusammengesetzt.
  *
  * Diese Datei ist nur noch der Einstieg: sie entscheidet anhand von
- * `<body data-page="...">`, welche Seite gezeichnet wird. Alles andere liegt
- * daneben:
+ * `<body data-page="...">`, welche Seite gezeichnet wird, und lädt genau deren
+ * Code nach (import()). Der Bündler (src/scripts/BuildDashboard.ts) macht
+ * daraus je Seite ein eigenes Stück - wer die Serverliste öffnet, lädt den
+ * Code der Serverseite nicht mit. Alles andere liegt daneben:
  *
  *   interfaces/   Was der Bot schickt - eine Datei je Bereich
  *   constants/    Gruppen, Ränge, Plattformen: Tabellen ohne Logik
@@ -25,12 +27,6 @@ import { bindFooter } from "./layout/Footer.js";
 import { renderProfile } from "./layout/Profile.js";
 import { buildUserUI } from "./layout/UserMenu.js";
 import { watchScroll } from "./layout/Topbar.js";
-import { bindDocNav } from "./pages/Docu.js";
-import { renderServers, skeletons } from "./pages/Servers.js";
-import { prefetchGuild, renderGuild } from "./pages/Guild.js";
-import { renderTracking } from "./pages/Tracking.js";
-import { renderSettings } from "./pages/Settings.js";
-import { renderAdmin } from "./pages/Admin.js";
 
 /**
  * Die Serverliste kam nicht. Der Grund steht in der Konsole, hier steht, was der
@@ -73,15 +69,32 @@ async function boot(): Promise<void> {
     // Datenschutzerklaerung hinter einem Login waere keine. Sie brauchen vom
     // Skript nur Fusszeile, Cookie-Hinweis und das Inhaltsverzeichnis.
     if (page === "static") {
-        bindDocNav();
+        (await import("./pages/Docu.js")).bindDocNav();
         return;
     }
 
-    if (page === "servers") skeletons(6);
+    // Der Code der Seite lädt neben /api/me, nicht danach. Was er vorab tun kann,
+    // hängt in derselben Kette - so läuft es sicher vor dem Zeichnen, nie doppelt.
+    const code =
+        page === "guild"
+            ? import("./pages/Guild.js").then((module) => {
+                  // Die Serverseite weiss aus ihrer Adresse schon, welcher Server gemeint
+                  // ist: ihre beiden Abfragen laufen deshalb neben /api/me statt danach.
+                  module.prefetchGuild();
 
-    // Die Serverseite weiss aus ihrer Adresse schon, welcher Server gemeint ist:
-    // ihre beiden Abfragen laufen deshalb neben /api/me statt danach.
-    if (page === "guild") prefetchGuild();
+                  return module;
+              })
+            : page === "admin"
+              ? import("./pages/Admin.js")
+              : page === "tracking"
+                ? import("./pages/Tracking.js")
+                : page === "settings"
+                  ? import("./pages/Settings.js")
+                  : import("./pages/Servers.js").then((module) => {
+                        if (page === "servers") module.skeletons(6);
+
+                        return module;
+                    });
 
     const data = await load();
 
@@ -99,11 +112,13 @@ async function boot(): Promise<void> {
     void pullNotes();
     window.setInterval(() => void pullNotes(), NOTES_POLL);
 
-    if (page === "guild") renderGuild(data);
-    else if (page === "admin") void renderAdmin();
-    else if (page === "tracking") void renderTracking();
-    else if (page === "settings") void renderSettings(data.user);
-    else renderServers(data);
+    const module = await code;
+
+    if ("renderGuild" in module) module.renderGuild(data);
+    else if ("renderAdmin" in module) void module.renderAdmin();
+    else if ("renderTracking" in module) void module.renderTracking();
+    else if ("renderSettings" in module) void module.renderSettings(data.user);
+    else module.renderServers(data);
 }
 
 void boot();

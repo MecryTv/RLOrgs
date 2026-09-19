@@ -142,7 +142,7 @@ Der Bot holt die Listen einmal beim Start (`Ready` → `DashboardService.Warm()`
 # 1. Secret aus dem Developer Portal in die .env
 #    CLIENT_SECRET="..." / DEV_CLIENT_SECRET="..."
 
-# 2. Frontend bauen (erzeugt public/assets/app.js)
+# 2. Frontend bauen (erzeugt public/assets/app.js und assets/chunks/)
 npm run build:dashboard
 
 # 3. Bot starten und http://localhost:3000/dashboard aufrufen
@@ -150,6 +150,17 @@ npm run dev
 ```
 
 `npm run dev` und `npm run build` bauen das Frontend automatisch mit. Wer nur am Frontend arbeitet, lässt nebenher `npm run dev:dashboard` laufen — das beobachtet `src/dashboard/client` und baut bei jeder Änderung neu.
+
+**Gebaut wird mit esbuild** (`src/scripts/BuildDashboard.ts`), vorher prüft `tsc` die Typen. Heraus kommt ein kleiner Einstieg `assets/app.js` und je Seite ein eigenes Stück unter `assets/chunks/` (Prüfsumme im Namen), verkleinert. `app.ts` lädt nur den Code der geöffneten Seite, die Serverseite ihre Bereiche (Tickets, Live Tickets, Galerie, Transcripts) erst, wenn man sie öffnet — samt ihrer Abfragen.
+
+**Ausgeliefert** wird gepackt (Brotli, sonst gzip) und mit ETag: gleicher Stand, `304` ohne Inhalt. Stücke mit Prüfsumme, Schriften und Adressen mit `?v=<Prüfsumme>` darf der Browser ein Jahr behalten — die HTML-Seiten hängen `?v=` selbst an `app.js` und `style.css` (`utils/dashboard.ts`). JSON-Antworten der API packt ein `onSend`-Hook in `Server.ts`. `npm run measure:dashboard` misst einen Aufruf der Doku-Seite, frisch und mit Cache:
+
+| | Anfragen | übertragen |
+|---|---|---|
+| vorher, erster Aufruf | 49 | 2.045 KB |
+| vorher, zweiter Aufruf | 48 | 626 KB |
+| jetzt, erster Aufruf | 29 (obere Grenze: alle Stücke, alle Schriften) | 211 KB |
+| jetzt, zweiter Aufruf | 1 (nur die Seite) | 7 KB |
 
 ---
 
@@ -184,9 +195,9 @@ npm run dev
 | `GET <base>/wtsi` | Alter Pfad, `301` auf `<base>/docu#wtsi` |
 | `GET <base>/assets/*` | CSS, JavaScript **und Bilder** |
 
-Alles Öffentliche liegt unter **einem** Ordner: `public/assets`. Stylesheets und Skripte stehen dort neben `assets/images` — Logos, Rang-Abzeichen, Plattform- und Statistik-Symbole. Eine eigene Bild-Route gibt es nicht mehr: sie hieß `/dashboard/images/*` und wäre im Betrieb, ohne Präfix, mit der Galerie-Route `/images/*` zusammengestoßen (siehe [Server.md](Server.md)). Bilder bekommen dabei einen Tag Cache, Code weiterhin `no-cache`.
+Alles Öffentliche liegt unter **einem** Ordner: `public/assets`. Stylesheets und Skripte stehen dort neben `assets/images` — Logos, Rang-Abzeichen, Plattform- und Statistik-Symbole. Eine eigene Bild-Route gibt es nicht mehr: sie hieß `/dashboard/images/*` und wäre im Betrieb, ohne Präfix, mit der Galerie-Route `/images/*` zusammengestoßen (siehe [Server.md](Server.md)). Bilder bekommen dabei einen Tag Cache; Stile und Skripte siehe oben.
 
-Das **RL Nexus N-Logo** ist Markenzeichen in der Kopfzeile und Favicon aller Seiten. Die Statistik-Symbole sind schwarze PNGs. Das Stylesheet färbt sie über `mask-image` ein, jedes in der Farbe, die es auch auf der Rang-Karte trägt.
+Das **RL Nexus N-Logo** ist Markenzeichen in der Kopfzeile und Favicon aller Seiten — als `rl-nexus-n-96.png` (Kopf- und Fußzeile) und `rl-nexus-n-48.png` (Favicon); das Original mit 1,4 MB stand vorher auf jeder Seite. Die Statistik-Symbole sind schwarze PNGs. Das Stylesheet färbt sie über `mask-image` ein, jedes in der Farbe, die es auch auf der Rang-Karte trägt.
 
 Alle laufen mit `prefixed: false` (also ohne `/dcapi`) und `requiresAuth: false` — das Dashboard authentifiziert per Cookie, nicht per Bearer-Token. Die bestehende Plugin-API bleibt davon unberührt.
 
@@ -548,7 +559,8 @@ src/dashboard/
     assets/style.css     Stylesheet: Tokens, Abschrägungen, Bausteine
     assets/fonts/        Oxanium, Rajdhani, Orbitron, selbst ausgeliefert
     assets/images/       Logo, Rang-Abzeichen, Plattform- und Statistik-Symbole
-    assets/**/*.js       Ergebnis von npm run build:dashboard
+    assets/app.js        Einstieg - Ergebnis von npm run build:dashboard
+    assets/chunks/       je Seite und Bereich ein Stück, Prüfsumme im Namen
 
 src/routes/Dashboard*.ts       eine Datei pro Route
 src/services/DashboardService.ts   OAuth, Sitzungen, Serverliste
@@ -559,6 +571,6 @@ src/utils/dashboard.ts         Sitzung aus dem Request, Seiten und Dateien ausli
 src/utils/seal.ts              Sitzung ver- und entschlüsseln (AES-256-GCM)
 ```
 
-Der Dashboard-Build läuft mit `noUnusedLocals` und `noUnusedParameters`: ein Import, den niemand mehr braucht, lässt den Bau scheitern statt still liegenzubleiben. Das ist bei vielen kleinen Dateien mehr wert als bei einer großen — dort fällt toter Code sonst gar nicht mehr auf.
+Die Typprüfung des Dashboards läuft mit `noUnusedLocals` und `noUnusedParameters`: ein Import, den niemand mehr braucht, lässt den Bau scheitern statt still liegenzubleiben.
 
 `public/` wird **nicht** nach `dist` kopiert — die Dateien werden zur Laufzeit aus `src/dashboard/public` gelesen, genau wie `src/images` und `src/config`. Bei einem Deployment muss der Ordner also mit auf den Server.

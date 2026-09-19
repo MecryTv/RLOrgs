@@ -1,4 +1,5 @@
 import path from "path";
+import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { FastifyReply, FastifyRequest } from "fastify";
@@ -15,6 +16,7 @@ import {
     SESSION_COOKIE,
     SITE_PLACEHOLDER,
 } from "../constants/Dashboard";
+import { COMPRESSIBLE, EncodingOf, MIN_COMPRESS, Pack } from "./compress";
 
 /** Mitglieder nach Name oder User-ID - für Auswahlen im Dashboard. Ohne Bots, höchstens zehn. */
 export async function SearchMembers(guild: Guild, query: string): Promise<GuildMember[]> {
@@ -45,16 +47,42 @@ export function Unconfigured(reply: FastifyReply): FastifyReply {
     });
 }
 
+/**
+ * Eine Datei aus public/assets. Mit ETag: hat der Browser denselben Stand, kommt
+ * ein 304 ohne Inhalt. Text, Skripte und SVG gehen gepackt raus (Brotli oder
+ * gzip) - die gepackte Fassung wird je Stand gemerkt.
+ */
 export async function SendFile(reply: FastifyReply, file: string, cache: string): Promise<unknown> {
     const info = await stat(file).catch(() => null);
 
     if (!info?.isFile()) return reply.code(404).send({ error: "Not Found" });
 
-    return reply
-        .header("Content-Type", AssetTypeOf(file) as string)
-        .header("Content-Length", info.size)
-        .header("Cache-Control", cache)
-        .send(createReadStream(file));
+    const type = AssetTypeOf(file) as string;
+    const tag = `W/"${info.size.toString(36)}-${Math.floor(info.mtimeMs).toString(36)}"`;
+    const compressible = COMPRESSIBLE.test(type);
+
+    reply.header("Content-Type", type).header("Cache-Control", cache).header("ETag", tag).header("Last-Modified", info.mtime.toUTCString());
+
+    if (compressible) reply.header("Vary", "Accept-Encoding");
+
+    const known = String(reply.request.headers["if-none-match"] ?? "");
+
+    if (known.split(",").some((entry) => entry.trim() === tag)) return reply.code(304).send();
+
+    const encoding = compressible && info.size >= MIN_COMPRESS ? EncodingOf(reply.request) : null;
+
+    if (!encoding) return reply.header("Content-Length", info.size).send(createReadStream(file));
+
+    return reply.header("Content-Encoding", encoding).send(Pack(await readFile(file), encoding, `${file}|${tag}`));
+}
+
+// Prüfsumme einer Datei in public/assets - hängt als ?v= an app.js und style.css.
+// Ändert sich die Datei, ändert sich die Adresse, und der Browser darf die alte
+// Fassung ein Jahr lang behalten, ohne je eine veraltete zu zeigen.
+async function Version(file: string): Promise<string> {
+    const body = await readFile(path.join(DASHBOARD_ROOT, "assets", file)).catch(() => null);
+
+    return body ? createHash("sha1").update(body).digest("hex").slice(0, 10) : "0";
 }
 
 /**
@@ -80,6 +108,8 @@ async function PageBody(client: BotClient, name: string): Promise<string | null>
     if (raw === null) return null;
 
     const body = raw
+        .replaceAll(`${BASE_PLACEHOLDER}/assets/app.js"`, `${BASE_PLACEHOLDER}/assets/app.js?v=${await Version("app.js")}"`)
+        .replaceAll(`${BASE_PLACEHOLDER}/assets/style.css"`, `${BASE_PLACEHOLDER}/assets/style.css?v=${await Version("style.css")}"`)
         .replaceAll(BASE_PLACEHOLDER, DASHBOARD_PATH)
         .replaceAll(SITE_PLACEHOLDER, client.config.SITE_PUBLIC_URL.replace(/\/+$/, ""));
 
@@ -95,5 +125,12 @@ export async function SendPage(client: BotClient, reply: FastifyReply, name: str
 
     if (body === null) return reply.code(404).send({ error: "Not Found" });
 
-    return reply.header("Content-Type", "text/html; charset=utf-8").header("Cache-Control", "no-store").send(body);
+    reply.header("Content-Type", "text/html; charset=utf-8").header("Cache-Control", "no-store").header("Vary", "Accept-Encoding");
+
+    const encoding = EncodingOf(reply.request);
+
+    if (!encoding) return reply.send(body);
+
+    // Im Betrieb ist die Seite fest - dann lohnt es, die gepackte Fassung zu merken.
+    return reply.header("Content-Encoding", encoding).send(Pack(body, encoding, DEVELOPER_MODE ? undefined : `page|${name}`));
 }

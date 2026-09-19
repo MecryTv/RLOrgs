@@ -1,103 +1,70 @@
-/**
- * Frontend des RL Nexus-Dashboards. Wird nach public/assets/ gebaut:
- *   npm run build:dashboard      (einmalig)
- *   npm run dev:dashboard        (beobachtet Änderungen)
- *
- * Alle Daten kommen aus GET /api/me. Servernamen landen ausschließlich
- * über textContent im Dokument - nirgends wird HTML zusammengesetzt.
- *
- * Diese Datei ist nur noch der Einstieg: sie entscheidet anhand von
- * `<body data-page="...">`, welche Seite gezeichnet wird. Alles andere liegt
- * daneben:
- *
- *   interfaces/   Was der Bot schickt - eine Datei je Bereich
- *   constants/    Gruppen, Ränge, Plattformen: Tabellen ohne Logik
- *   core/         Werkzeug für alle Seiten: DOM, Formate, Töne, Toasts, Abruf
- *   services/     Was mit dem Bot spricht: Postfach und Konto-Verknüpfung
- *   layout/       Was auf jeder Seite steht: Kopfzeile, Menü, Fußzeile
- *   pages/        Eine Datei je Seite
- */
-import { maybe, need } from "./core/Dom.js";
-import { load, redirecting } from "./core/Api.js";
-import { applyMotion } from "./core/Prefs.js";
-import { NOTES_POLL, pullNotes } from "./services/Notes.js";
-import { bindFooter } from "./layout/Footer.js";
-import { renderProfile } from "./layout/Profile.js";
-import { buildUserUI } from "./layout/UserMenu.js";
-import { watchScroll } from "./layout/Topbar.js";
-import { bindDocNav } from "./pages/Docu.js";
-import { renderServers, skeletons } from "./pages/Servers.js";
-import { prefetchGuild, renderGuild } from "./pages/Guild.js";
-import { renderTracking } from "./pages/Tracking.js";
-import { renderSettings } from "./pages/Settings.js";
-import { renderAdmin } from "./pages/Admin.js";
-/**
- * Die Serverliste kam nicht. Der Grund steht in der Konsole, hier steht, was der
- * Nutzer tun kann.
- */
-function failed() {
-    const empty = maybe("#empty");
-    const grid = maybe("#grid");
-    if (grid)
-        grid.replaceChildren();
-    if (!empty)
-        return;
-    empty.classList.add("is-on", "empty--error");
-    const symbol = maybe("#emptyIcon use");
-    if (symbol)
-        symbol.setAttribute("href", "#i-warn");
-    need("#emptyTitle").textContent = "Serverliste nicht erreichbar";
-    need("#emptyText").textContent =
-        "Der Bot antwortet gerade nicht oder Discord hat die Anfrage gebremst. Lade die Seite in einem Moment neu.";
-    const reset = maybe("#emptyReset");
-    if (reset) {
-        reset.textContent = "Neu laden";
-        reset.addEventListener("click", () => window.location.reload());
-    }
-    const line = maybe("#resultline");
-    if (line)
-        line.textContent = "Laden fehlgeschlagen";
-}
-async function boot() {
-    const page = document.body.dataset.page;
-    watchScroll();
-    applyMotion();
-    bindFooter();
-    // Datenschutz, Doku und die WTSI-Erklaerung stehen ohne Anmeldung offen: eine
-    // Datenschutzerklaerung hinter einem Login waere keine. Sie brauchen vom
-    // Skript nur Fusszeile, Cookie-Hinweis und das Inhaltsverzeichnis.
-    if (page === "static") {
-        bindDocNav();
-        return;
-    }
-    if (page === "servers")
-        skeletons(6);
-    // Die Serverseite weiss aus ihrer Adresse schon, welcher Server gemeint ist:
-    // ihre beiden Abfragen laufen deshalb neben /api/me statt danach.
-    if (page === "guild")
-        prefetchGuild();
-    const data = await load();
-    // Beim 401 läuft schon die Umleitung zum Login - dann keine Fehlermeldung zeigen.
-    if (!data) {
-        if (!redirecting())
-            failed();
-        return;
-    }
-    renderProfile(data.user);
-    buildUserUI(data.user);
-    // Das Postfach liegt beim Bot: einmal holen und danach im Hintergrund
-    // nachsehen, damit man neue Meldungen auch ohne Neuladen mitbekommt.
-    void pullNotes();
-    window.setInterval(() => void pullNotes(), NOTES_POLL);
-    if (page === "guild")
-        renderGuild(data);
-    else if (page === "admin")
-        void renderAdmin();
-    else if (page === "tracking")
-        void renderTracking();
-    else if (page === "settings")
-        void renderSettings(data.user);
-    else
-        renderServers(data);
-}
-void boot();
+import{a as _,b as p,c as E,d as f,e as T,f as M,g as y,h as x,i as w,j as A,m as S,n as K}from"./chunks/chunk-J6YK5A3V.js";import"./chunks/chunk-47UUORGG.js";import{c as N,d as Y}from"./chunks/chunk-GIVT6A2M.js";import"./chunks/chunk-CZHQ4F6H.js";import{a as g,b as H,e as V}from"./chunks/chunk-25WJ3WER.js";import"./chunks/chunk-WPAJZQ5K.js";import{d as k,e as W}from"./chunks/chunk-WC4N6S6D.js";import{a,b as L,c as u}from"./chunks/chunk-WRBNFJXV.js";import{a as c,b as z,c as s,d as i,f as h,g as b,j as m}from"./chunks/chunk-HUFDLLFV.js";function R(){return B}async function O(){let e;try{e=await fetch(L("/api/me"),{headers:{Accept:"application/json"}})}catch{return null}return e.status===401?(B=!0,window.location.href=`${a}/login?return=${encodeURIComponent(window.location.pathname)}`,null):e.ok?await e.json():null}var B,C=c(()=>{"use strict";u();B=!1});function $(){document.body.insertAdjacentHTML("beforeend",q+J);let e=i('meta[name="rlnexus-site"]')?.content.trim(),o=i("#footerNav");e&&o&&o.prepend(b("","Webseite",e));let t=i("#cookieBar"),n=i("#cookieOk");if(!t||!n)return;let r=!1;try{r=localStorage.getItem(I)==="1"}catch{r=!1}t.hidden=r,n.addEventListener("click",()=>{t.hidden=!0;try{localStorage.setItem(I,"1")}catch{}})}var q,J,I,P=c(()=>{"use strict";m();u();q=`
+<footer class="footer">
+  <div class="shell footer__inner">
+    <div class="footer__brand">
+      <span class="footer__mark"><img src="${a}/assets/images/rl-nexus-n-96.png" alt="" width="26" height="26" decoding="async" loading="lazy"></span>
+      <span>
+        <b>RL Nexus</b>
+        <i>Rang-Tracking und Orga-Verwaltung f\xFCr Rocket League</i>
+      </span>
+    </div>
+
+    <nav class="footer__nav" id="footerNav" aria-label="Fu\xDFzeile">
+      <a href="${a}/docu">Dokumentation</a>
+      <a href="${a}/docu#wtsi">WTSI erkl\xE4rt</a>
+      <a href="${a}/privacy">Datenschutz</a>
+      <a href="https://github.com/MecryTv/RLOrgs/issues" target="_blank" rel="noopener">Fehler melden</a>
+    </nav>
+
+    <p class="footer__note">
+      Rocket League ist eine Marke von Psyonix LLC. RL Nexus steht nicht mit Psyonix oder Epic Games in Verbindung.
+    </p>
+  </div>
+</footer>`,J=`
+<div class="cookiebar" id="cookieBar" role="region" aria-label="Hinweis zu Cookies" hidden>
+  <div class="cookiebar__inner">
+    <span class="cookiebar__mark"><svg><use href="#i-shield"/></svg></span>
+    <p class="cookiebar__text">
+      RL Nexus setzt nur Cookies, die f\xFCr die Anmeldung n\xF6tig sind \u2014 kein Tracking, keine Werbung,
+      keine Weitergabe. Was gespeichert wird, steht im <a href="${a}/privacy">Datenschutz</a>.
+    </p>
+    <button class="btn btn--primary" type="button" id="cookieOk">Verstanden</button>
+  </div>
+</div>`,I="rlnexus.cookies"});function U(e){let o=i("#userbox"),t=i("#profile");if(!o||!t)return;o.insertAdjacentHTML("beforeend",Q),document.body.insertAdjacentHTML("beforeend",X);let n=s("#userMenu"),r=g[e.group]??g.testphase;s("#menuAvatar").replaceChildren(x(e)),s("#menuName").textContent=e.name,s("#menuGroup").replaceChildren(h(r.icon),r.label);let v=i("#adminLink");v&&H.includes(e.group)&&(v.hidden=!1);function l(d){n.hidden=!d,t.setAttribute("aria-expanded",String(d))}t.addEventListener("click",()=>{l(t.getAttribute("aria-expanded")!=="true"),N("primary")}),document.addEventListener("click",d=>{o.contains(d.target)||l(!1)}),document.addEventListener("keydown",d=>{d.key==="Escape"&&l(!1)});let j=s("#notesModal");for(let d of document.querySelectorAll(".modal [data-close]"))d.addEventListener("click",()=>d.closest("dialog")?.close());s("#openNotes").addEventListener("click",()=>{l(!1),f(),j.showModal(),T()}),s("#clearNotes").addEventListener("click",()=>M()),s("#openTracker").href=`${a}/user/${e.id}/tracking`,s("#openSettings").href=`${a}/user/${e.id}/settings`,f(),E(),S()}var Q,X,G=c(()=>{"use strict";m();V();A();y();K();Y();u();Q=`
+<span class="profile__dot" id="profileDot" hidden></span>
+<div class="menu" id="userMenu" role="menu" hidden>
+  <div class="menu__head">
+    <span class="avatar avatar--sm" id="menuAvatar" aria-hidden="true"></span>
+    <span class="menu__id"><b id="menuName"></b><span id="menuGroup"></span></span>
+  </div>
+  <a class="menu__item" href="${a}/admins" id="adminLink" role="menuitem" hidden>
+    <svg><use href="#i-shield"/></svg><span>Administration</span>
+  </a>
+  <a class="menu__item" id="openTracker" role="menuitem">
+    <svg><use href="#i-stats"/></svg><span>RL Tracker</span>
+  </a>
+  <button class="menu__item" type="button" id="openNotes" role="menuitem">
+    <svg><use href="#i-bell"/></svg><span>Benachrichtigungen</span>
+    <span class="menu__badge" id="noteBadge" hidden>0</span>
+  </button>
+  <a class="menu__item" id="openSettings" role="menuitem">
+    <svg><use href="#i-settings"/></svg><span>Einstellungen</span>
+  </a>
+  <div class="menu__line"></div>
+  <a class="menu__item menu__item--warn" href="${a}/logout" role="menuitem">
+    <svg><use href="#i-logout"/></svg><span>Abmelden</span>
+  </a>
+</div>`,X=`
+<dialog class="modal" id="notesModal" aria-labelledby="notesTitle">
+  <div class="modal__head">
+    <div>
+      <h2 id="notesTitle">Benachrichtigungen</h2>
+      <p>Alles, was dich betrifft. Auf jedem Ger\xE4t dasselbe.</p>
+    </div>
+    <button class="iconbtn modal__x" type="button" data-close aria-label="Schlie\xDFen"><svg><use href="#i-x"/></svg></button>
+  </div>
+  <div class="modal__body">
+    <div class="notes" id="noteList"></div>
+    <button class="linkrow" type="button" id="clearNotes"><svg><use href="#i-x"/></svg>Alle l\xF6schen</button>
+  </div>
+</dialog>`});function D(){let e=i(".topbar");if(!e)return;let o=i(".controls"),t=()=>{if(e.classList.toggle("is-stuck",window.scrollY>8),o){let n=o.getBoundingClientRect().top<=e.offsetHeight+1;o.classList.toggle("is-stuck",n)}};window.addEventListener("scroll",t,{passive:!0}),t()}var F=c(()=>{"use strict";m()});var te=z(()=>{m();C();W();y();P();A();G();F();function Z(){let e=i("#empty"),o=i("#grid");if(o&&o.replaceChildren(),!e)return;e.classList.add("is-on","empty--error");let t=i("#emptyIcon use");t&&t.setAttribute("href","#i-warn"),s("#emptyTitle").textContent="Serverliste nicht erreichbar",s("#emptyText").textContent="Der Bot antwortet gerade nicht oder Discord hat die Anfrage gebremst. Lade die Seite in einem Moment neu.";let n=i("#emptyReset");n&&(n.textContent="Neu laden",n.addEventListener("click",()=>window.location.reload()));let r=i("#resultline");r&&(r.textContent="Laden fehlgeschlagen")}async function ee(){let e=document.body.dataset.page;if(D(),k(),$(),e==="static"){(await import("./chunks/Docu-VP46AIGI.js")).bindDocNav();return}let o=e==="guild"?import("./chunks/Guild-HBD7GQBJ.js").then(r=>(r.prefetchGuild(),r)):e==="admin"?import("./chunks/Admin-2MSQ53TI.js"):e==="tracking"?import("./chunks/Tracking-YHRD6VYP.js"):e==="settings"?import("./chunks/Settings-VCAR2T73.js"):import("./chunks/Servers-JJEND7SH.js").then(r=>(e==="servers"&&r.skeletons(6),r)),t=await O();if(!t){R()||Z();return}w(t.user),U(t.user),p(),window.setInterval(()=>{p()},_);let n=await o;"renderGuild"in n?n.renderGuild(t):"renderAdmin"in n?n.renderAdmin():"renderTracking"in n?n.renderTracking():"renderSettings"in n?n.renderSettings(t.user):n.renderServers(t)}ee()});export default te();

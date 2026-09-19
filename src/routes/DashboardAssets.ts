@@ -13,7 +13,14 @@ const CACHE_CONTROL = "no-cache";
 // seit dem Umzug unter assets/images und kämen sonst bei jedem Laden erneut.
 const IMAGE_CACHE = "public, max-age=86400";
 
-function CacheFor(file: string): string {
+// Was sich nie ändert, darf der Browser ein Jahr behalten, ohne nachzufragen:
+// Stücke mit Prüfsumme im Namen (assets/chunks), Schriften und Adressen mit
+// ?v=<Prüfsumme> - die setzen die HTML-Seiten an app.js und style.css.
+const IMMUTABLE = "public, max-age=31536000, immutable";
+
+function CacheFor(file: string, versioned: boolean): string {
+    if (versioned || /[\\/]chunks[\\/]/.test(file) || file.endsWith(".woff2")) return IMMUTABLE;
+
     return (AssetTypeOf(file) ?? "").startsWith("image/") ? IMAGE_CACHE : CACHE_CONTROL;
 }
 
@@ -45,6 +52,8 @@ export default class DashboardAssets extends Route {
 
         if (!file) return reply.code(403).send({ error: "Forbidden" });
 
-        return SendFile(reply, file, CacheFor(file));
+        const { v } = request.query as { v?: string };
+
+        return SendFile(reply, file, CacheFor(file, typeof v === "string" && /^[0-9a-f]{6,40}$/.test(v)));
     }
 }

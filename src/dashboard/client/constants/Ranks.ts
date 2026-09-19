@@ -31,23 +31,13 @@ export const RANK_IMAGES = [
 ];
 
 /**
- * Das Abzeichen zu einem Rang.
+ * Das Abzeichen zu einem Rang, klein: 160 statt 1381 Pixel. Überall im Dashboard
+ * steht es höchstens 92 Pixel breit - die Originale wiegen bis zu 220 KB und
+ * entpacken sich auf über sieben Megabyte.
  *
  * Solange die zehn Platzierungsspiele nicht durch sind, zeigt Rocket League
  * selbst kein Abzeichen - das Dashboard hält sich daran und nimmt Unranked,
  * auch wenn im Hintergrund längst eine Stufe berechnet ist.
- */
-export function rankImage(tier: number, placement = false): string {
-    const file = placement ? RANK_IMAGES[0] : (RANK_IMAGES[tier] ?? RANK_IMAGES[0]);
-
-    return `${BASE}/assets/images/rocketleague/rlranks/${encodeURIComponent(file)}.png`;
-}
-
-/**
- * Dasselbe Abzeichen, nur klein: 160 statt 1381 Pixel. Für Listen und die
- * Rang-Verteilung, wo es 30 Pixel breit steht - dort zählt, dass neun Bilder
- * sofort da sind, nicht dass eines auch auf Postergröße scharf bliebe. Die
- * Originale wiegen bis zu 220 KB und entpacken sich auf über sieben Megabyte.
  *
  * Erzeugt npm run icons:ranks (src/scripts/MakeRankIcons.ts).
  */

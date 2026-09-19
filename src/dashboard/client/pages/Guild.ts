@@ -10,10 +10,6 @@ import { CATEGORIES, IModulePart, MODULES } from "../constants/Modules.js";
 import { clickSound } from "../core/Sound.js";
 import { BASE } from "../core/Base.js";
 import { ActivityResult, fetchActivity, renderOverview } from "./GuildOverview.js";
-import { renderGallery } from "./GuildGallery.js";
-import { renderTickets } from "./GuildTickets.js";
-import { renderTranscripts } from "./GuildTranscripts.js";
-import { renderLive } from "./GuildLive.js";
 
 // Was ein Supporter ohne "Server verwalten" sieht - die Teile des Ticket-Systems.
 const SUPPORT_SECTIONS = new Set(["live-tickets", "transcriptions"]);
@@ -198,15 +194,17 @@ export function renderGuild(data: IPayload): void {
 
     const user = { id: data.user.id, name: data.user.name, avatar: data.user.avatar };
 
-    // Was ein Supporter nicht sehen darf, wird gar nicht erst geladen.
+    // Was ein Moderator nicht sehen darf, wird gar nicht erst geladen. Der Rest
+    // erst, wenn sein Abschnitt das erste Mal offen ist - Code und Abfragen.
     if (!supportOnly) {
         void renderOverview(guild, data.user.id, waiting.activity);
-        renderGallery(guild.id, guild.canManage);
-        renderTickets(guild.id, guild.canManage, user);
+        whenShown(["gallery"], () => void import("./GuildGallery.js").then((module) => module.renderGallery(guild.id, guild.canManage)));
+        whenShown(["tickets"], () => void import("./GuildTickets.js").then((module) => module.renderTickets(guild.id, guild.canManage, user)));
     }
 
-    renderTranscripts(guild.id);
-    renderLive(guild.id, user);
+    whenShown(["transcriptions"], () => void import("./GuildTranscripts.js").then((module) => module.renderTranscripts(guild.id)));
+    // Live Tickets meldet fertige Transcripts - der Stream läuft auch, wenn nur Transcriptions offen ist.
+    whenShown(["live-tickets", "transcriptions"], () => void import("./GuildLive.js").then((module) => module.renderLive(guild.id, user)));
 
     void waiting.detail.then((detail) => {
         paintDetails(detail);
@@ -227,6 +225,27 @@ export function renderGuild(data: IPayload): void {
 /* ----------------------------------------------------------
    Abschnitte
    ---------------------------------------------------------- */
+
+/**
+ * Startet einen Abschnitt, sobald eine seiner Karten zum ersten Mal sichtbar
+ * ist. Bis dahin lädt weder sein Code noch fragt er beim Bot nach - wer nur die
+ * Übersicht ansieht, lädt keinen Ticket-Editor.
+ */
+function whenShown(ids: string[], start: () => void): void {
+    const sections = ids.map((id) => maybe<HTMLElement>(`#${id}`)).filter((section): section is HTMLElement => section !== null);
+    let started = false;
+
+    const check = (): void => {
+        if (started || sections.every((section) => section.hidden)) return;
+
+        started = true;
+        start();
+    };
+
+    for (const section of sections) new MutationObserver(check).observe(section, { attributes: true, attributeFilter: ["hidden"] });
+
+    check();
+}
 
 // Den markierten Eintrag in den sichtbaren Teil der Leiste holen: bei einem Link
 // auf ein Modul weit unten stünde er sonst außer Sicht. Es scrollt nur die
