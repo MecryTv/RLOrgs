@@ -26,6 +26,7 @@
         "build": "tsc && npm run build:dashboard",
         "build:dashboard": "tsc -p src/dashboard/tsconfig.json --noEmit && tsx src/scripts/BuildDashboard.ts",
         "check:card": "tsx src/scripts/CheckCard.ts",
+        "check:community": "tsx src/scripts/CheckCommunity.ts",
         "check:dashboard": "tsx src/scripts/CheckDashboard.ts",
         "check:db": "tsx src/scripts/CheckDatabase.ts",
         "check:gallery": "tsx src/scripts/CheckGallery.ts",

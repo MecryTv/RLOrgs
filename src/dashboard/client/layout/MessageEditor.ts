@@ -8,7 +8,7 @@
  */
 
 import { icon } from "../core/Dom.js";
-import { fill, PLACEHOLDERS } from "../constants/Placeholders.js";
+import { fill, IMAGE_PLACEHOLDERS, IPlaceholder, PLACEHOLDERS } from "../constants/Placeholders.js";
 import { emojiNode, IServerEmoji } from "./EmojiPicker.js";
 import { galleryUrl, pickImage } from "./ImagePicker.js";
 
@@ -46,6 +46,10 @@ export interface IEditorContext {
     emojis?: IServerEmoji[];
     /** structural: der Editor wird neu gezeichnet (Baustein dazu, weg, verschoben). */
     onChange: (structural?: boolean) => void;
+    /** Die Platzhalter dieser Nachricht - ohne Angabe die der Tickets. */
+    placeholders?: IPlaceholder[];
+    /** Was als Bild-Platzhalter angeboten wird - ohne Angabe die der Tickets. */
+    imagePlaceholders?: string[];
 }
 
 export function docCost(doc: IMessageDoc): number {
@@ -183,7 +187,7 @@ function blockCard(doc: IMessageDoc, index: number, context: IEditorContext): HT
         choose.className = "btn btn--quiet";
         choose.append(icon("#i-image"), document.createTextNode(block.thumbnail ? "Bild tauschen" : "Bild wählen"));
         choose.addEventListener("click", async () => {
-            const source = await pickImage(context.guildId);
+            const source = await pickImage(context.guildId, context.imagePlaceholders ?? IMAGE_PLACEHOLDERS);
 
             if (!source) return;
 
@@ -216,7 +220,7 @@ function blockCard(doc: IMessageDoc, index: number, context: IEditorContext): HT
         add.disabled = block.images.length >= 10;
         add.append(icon("#i-plus"), document.createTextNode("Bild hinzufügen"));
         add.addEventListener("click", async () => {
-            const source = await pickImage(context.guildId);
+            const source = await pickImage(context.guildId, context.imagePlaceholders ?? IMAGE_PLACEHOLDERS);
 
             if (!source) return;
 
@@ -299,7 +303,7 @@ export function renderEditor(host: HTMLElement, doc: IMessageDoc, context: IEdit
     first.value = "";
     placeholders.append(first);
 
-    for (const entry of PLACEHOLDERS) {
+    for (const entry of context.placeholders ?? PLACEHOLDERS) {
         const option = document.createElement("option");
 
         option.value = `{${entry.key}}`;

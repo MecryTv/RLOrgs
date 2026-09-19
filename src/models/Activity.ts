@@ -146,6 +146,16 @@ export default class Activity extends Model<IActivityRow> {
         );
     }
 
+    /** Nachrichten eines Mitglieds seit einem Tag - für die Bedingungen der Giveaways. */
+    async MemberMessages(guildId: string, userId: string, from: number): Promise<number> {
+        const row = await this.db.One<{ total: number | null }>(
+            `SELECT SUM(messages) AS total FROM \`${TABLES.memberActivity}\` WHERE guild_id = ? AND user_id = ? AND day >= ?`,
+            [guildId, userId, from]
+        );
+
+        return Number(row?.total ?? 0);
+    }
+
     /** Löscht, was die Aufbewahrung überschritten hat. Zurück kommt die Zahl der Zeilen. */
     async Prune(hourBefore: number, dayBefore: number, memberDayBefore: number): Promise<number> {
         const removed = [

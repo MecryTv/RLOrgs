@@ -39,6 +39,9 @@ export interface IConfig {
     // Login rundweg ab. Ohne das Intent kennt der Bot keine Mitgliederliste und
     // das Dashboard zeigt nur die Gesamtzahl statt Mitglieder und Bots getrennt.
     GUILD_MEMBER_INTENT: boolean;
+    // Das privilegierte "Presence Intent" - nur für die Live-Rolle des Twitch
+    // Notifiers. Wie oben: nur an, wenn es im Developer Portal ebenfalls an ist.
+    GUILD_PRESENCE_INTENT: boolean;
 
     /** Token fuer prime.rocketplanet.gg - ohne ihn bleibt das Rang-Tracking aus. */
     PRIME_API_TOKEN: string;
@@ -47,4 +50,12 @@ export interface IConfig {
     // und das Dashboard sagt das in den Einstellungen - alles andere laeuft weiter.
     EPIC_CLIENT_ID: string;
     EPIC_CLIENT_SECRET: string;
+
+    // Twitch-App (dev.twitch.tv) für den Twitch Notifier. Ohne beide Werte
+    // meldet er nichts, und das Dashboard sagt das.
+    TWITCH_CLIENT_ID: string;
+    TWITCH_CLIENT_SECRET: string;
+
+    // Nur für YouTube-Livestreams. Videos und Shorts kommen ohne Schlüssel aus dem Kanal-Feed.
+    YOUTUBE_API_KEY: string;
 }

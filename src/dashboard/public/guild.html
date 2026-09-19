@@ -156,6 +156,50 @@
       <div class="setcards" id="moduleCards">
         <!-- Hier wird eingeschaltet, für den ganzen Server. Ein frischer Server
              beginnt links mit genau zwei Einträgen. -->
+        <!-- Twitch Notifier: Streamer, Live-Karten, Live-Rolle. GuildStreams.ts. -->
+        <section class="setcard" id="twitch-notifier" hidden>
+          <h2 class="modhead"><svg><use href="#i-twitch"/></svg>Twitch Notifier</h2>
+          <p class="modlead">Sagt Bescheid, wenn eure Streamer live gehen – mit eigener Nachricht, Karte, die sich aktualisiert, Zusammenfassung nach dem Stream und einer Live-Rolle.</p>
+          <div class="notice modnote" id="twitchNote" hidden>
+            <svg><use href="#i-warn"/></svg>
+            <span></span>
+          </div>
+          <div id="twitchBody"></div>
+        </section>
+
+        <!-- YouTube Notifier: Videos, Shorts, Livestreams. GuildStreams.ts. -->
+        <section class="setcard" id="youtube-notifier" hidden>
+          <h2 class="modhead"><svg><use href="#i-youtube"/></svg>YouTube Notifier</h2>
+          <p class="modlead">Meldet neue Videos, Shorts und Livestreams eurer Kanäle – je Art mit eigener Nachricht und eigenem Kanal.</p>
+          <div class="notice modnote" id="youtubeNote" hidden>
+            <svg><use href="#i-warn"/></svg>
+            <span></span>
+          </div>
+          <div id="youtubeBody"></div>
+        </section>
+
+        <!-- Umfragen: eigene mit Knoepfen oder Discords eigene. GuildPolls.ts. -->
+        <section class="setcard" id="polls" hidden>
+          <h2 class="modhead"><svg><use href="#i-list-checks"/></svg>Umfragen</h2>
+          <p class="modlead">Abstimmungen im Kanal: eigene mit Knöpfen, Balken und anonymen Stimmen – oder Discords eigene Umfrage. Ergebnisse stehen hier.</p>
+          <div class="notice modnote" id="pollNote" hidden>
+            <svg><use href="#i-warn"/></svg>
+            <span></span>
+          </div>
+          <div id="pollBody"></div>
+        </section>
+
+        <!-- Giveaways: Bedingungen, Bonus-Lose, Gewinner mit Frist. GuildGiveaways.ts. -->
+        <section class="setcard" id="giveaways" hidden>
+          <h2 class="modhead"><svg><use href="#i-gift"/></svg>Giveaways</h2>
+          <p class="modlead">Verlosungen mit Bedingungen, Bonus-Losen und Gewinnern, die sich melden müssen – sonst wird automatisch neu ausgelost.</p>
+          <div class="notice modnote" id="giveawayNote" hidden>
+            <svg><use href="#i-warn"/></svg>
+            <span></span>
+          </div>
+          <div id="giveawayBody"></div>
+        </section>
+
         <!-- Moderation: Verlauf, Aktionen, Einstellungen. Das Modul ist gebaut -
              card() in Guild.ts ueberspringt die Platzhalter-Karte. GuildModeration.ts. -->
         <section class="setcard" id="moderation" hidden>

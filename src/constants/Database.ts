@@ -28,6 +28,12 @@ export const TABLES = {
     userCodes: "user_codes",
     modSettings: "mod_settings",
     modCases: "mod_cases",
+    moduleSettings: "module_settings",
+    streamNotifiers: "stream_notifiers",
+    polls: "polls",
+    pollVotes: "poll_votes",
+    giveaways: "giveaways",
+    giveawayEntries: "giveaway_entries",
 } as const;
 
 export type TableName = (typeof TABLES)[keyof typeof TABLES];

@@ -36,9 +36,13 @@ Die Datei liegt im **Projekt-Root**, nicht in `src`. Der Pfad wird beim Start au
 | `DEV_GUILD_ID` | ja | — | Server, auf dem Commands im `--dev` Modus sofort registriert werden — global dauert das bis zu eine Stunde |
 | `DEV_USER_IDs` | nein | `""` | **Kommagetrennt.** Wer `developerOnly`-Commands ausführen darf und ins Admin-Dashboard kommt |
 | `GUILD_MEMBER_INTENT` | nein | `false` | Privilegiertes Members-Intent. Nur `true`, wenn es im Developer Portal ebenfalls an ist — sonst weist Discord den Login rundweg ab |
+| `GUILD_PRESENCE_INTENT` | nein | `false` | Ebenfalls privilegiert. Nur für die **Live-Rolle** des Twitch Notifiers ([Notifiers.md](Notifiers.md#live-rolle)); aus = der Rest des Notifiers läuft trotzdem |
 | `PRIME_API_TOKEN` | nein | `""` | Rang-Tracking über prime.rocketplanet.gg. Leer = kein Tracking, siehe [Prime.md](Prime.md) |
 | `EPIC_CLIENT_ID` | nein | `""` | Epic Account Services. Leer = kein Epic-Login, das Dashboard fällt auf die Eingabe des Namens zurück |
 | `EPIC_CLIENT_SECRET` | nein | `""` | Das Secret dazu. Ohne beide Werte bleibt der Anmelde-Knopf aus |
+| `TWITCH_CLIENT_ID` | nein | `""` | Twitch-App für den [Twitch Notifier](Notifiers.md). Leer = keine Live-Meldungen, das Dashboard sagt das über dem Modul |
+| `TWITCH_CLIENT_SECRET` | nein | `""` | Das Secret dazu. Ohne beide Werte fragt der Bot Twitch gar nicht erst |
+| `YOUTUBE_API_KEY` | nein | `""` | Nur für **Livestreams** im [YouTube Notifier](Notifiers.md). Videos und Shorts kommen ohne Schlüssel aus dem Kanal-Feed |
 
 #### Epic-Login einrichten
 
@@ -63,6 +67,20 @@ Plattformen dieselben — eine zweite Anmeldung brächte keine anderen Zahlen.
 
 Für PlayStation und Nintendo gibt es ohnehin **keinen** öffentlichen Login: Sony
 und Nintendo bieten Dritten keine Anmeldung an.
+
+#### Twitch und YouTube einrichten
+
+**Twitch:** auf [dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps) eine
+kostenlose App anlegen (OAuth Redirect `http://localhost`, Kategorie *Chat Bot*),
+Client-ID und Secret in die `.env`. Der Bot holt sich damit selbst ein
+App-Token und erneuert es, wenn es abläuft — nichts weiter einzurichten.
+
+**YouTube:** Videos und Shorts liest der Bot aus dem öffentlichen Kanal-Feed,
+dafür braucht es nichts. Nur **Livestreams** gehen über die YouTube Data API:
+auf [console.cloud.google.com](https://console.cloud.google.com) ein Projekt
+anlegen, *YouTube Data API v3* aktivieren, unter *Anmeldedaten* einen
+API-Schlüssel erstellen. Ohne Schlüssel bleibt „Livestreams" im Dashboard
+gesperrt, der Rest läuft.
 
 `DEV_GUILD_ID` ist auch dann Pflicht, wenn nie im Dev-Modus gestartet wird.
 

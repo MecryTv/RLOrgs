@@ -109,6 +109,8 @@ export default function LoadConfig(): IConfig {
         // Privilegiert: nur einschalten, wenn es im Developer Portal ebenfalls an
         // ist - sonst weist Discord den Login rundweg ab.
         GUILD_MEMBER_INTENT: Bool("GUILD_MEMBER_INTENT", false),
+        // Ebenfalls privilegiert - nur für die Live-Rolle des Twitch Notifiers.
+        GUILD_PRESENCE_INTENT: Bool("GUILD_PRESENCE_INTENT", false),
 
         // Rang-Tracking ueber prime.rocketplanet.gg. Fehlt der Token, bleibt das
         // Tracking im Dashboard aus - alles andere laeuft weiter.
@@ -118,5 +120,10 @@ export default function LoadConfig(): IConfig {
         // der Knopf in den Einstellungen aus - siehe docs/Environment.md.
         EPIC_CLIENT_ID: Text("EPIC_CLIENT_ID"),
         EPIC_CLIENT_SECRET: Text("EPIC_CLIENT_SECRET"),
+
+        // Twitch Notifier und YouTube-Livestreams - siehe docs/Notifiers.md.
+        TWITCH_CLIENT_ID: Text("TWITCH_CLIENT_ID"),
+        TWITCH_CLIENT_SECRET: Text("TWITCH_CLIENT_SECRET"),
+        YOUTUBE_API_KEY: Text("YOUTUBE_API_KEY"),
     };
 }

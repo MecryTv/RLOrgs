@@ -19,6 +19,9 @@ import TicketService from "../services/TicketService";
 import TranscriptService from "../services/TranscriptService";
 import LiveService from "../services/LiveService";
 import ModerationService from "../services/ModerationService";
+import StreamService from "../services/StreamService";
+import PollService from "../services/PollService";
+import GiveawayService from "../services/GiveawayService";
 import GuildSettings from "../models/GuildSettings";
 import DashboardGroups from "../models/DashboardGroups";
 import Notifications from "../models/Notifications";
@@ -35,6 +38,10 @@ import TicketTranscripts from "../models/TicketTranscripts";
 import UserCodes from "../models/UserCodes";
 import ModSettings from "../models/ModSettings";
 import ModCases from "../models/ModCases";
+import ModuleSettings from "../models/ModuleSettings";
+import StreamNotifiers from "../models/StreamNotifiers";
+import Polls from "../models/Polls";
+import Giveaways from "../models/Giveaways";
 
 export default class BotClient extends Client implements IBotClient {
 
@@ -57,6 +64,9 @@ export default class BotClient extends Client implements IBotClient {
     transcriptService: TranscriptService;
     liveService: LiveService;
     moderationService: ModerationService;
+    streamService: StreamService;
+    pollService: PollService;
+    giveawayService: GiveawayService;
 
     // Ein Model je Tabelle. Sie hängen am Client, damit Befehle, Events und
     // Routen dieselbe Instanz benutzen - und damit denselben Cache.
@@ -76,6 +86,10 @@ export default class BotClient extends Client implements IBotClient {
     userCodes: UserCodes;
     modSettings: ModSettings;
     modCases: ModCases;
+    moduleSettings: ModuleSettings;
+    streamNotifiers: StreamNotifiers;
+    polls: Polls;
+    giveaways: Giveaways;
 
     constructor() {
         // Vor super(): die Intents hängen an der Konfiguration, und this gibt es
@@ -100,6 +114,8 @@ export default class BotClient extends Client implements IBotClient {
                 // und hält die Bannliste für /unban aktuell. Nicht privilegiert.
                 GatewayIntentBits.GuildModeration,
                 ...(config.GUILD_MEMBER_INTENT ? [GatewayIntentBits.GuildMembers] : []),
+                // Nur für die Live-Rolle des Twitch Notifiers - privilegiert wie oben.
+                ...(config.GUILD_PRESENCE_INTENT ? [GatewayIntentBits.GuildPresences] : []),
             ],
             // Einen DM-Kanal kennt der Bot beim ersten Mal noch nicht - ohne dieses
             // Partial verwirft discord.js die Nachricht, statt sie zu melden.
@@ -125,6 +141,9 @@ export default class BotClient extends Client implements IBotClient {
         this.transcriptService = new TranscriptService(this);
         this.liveService = new LiveService(this);
         this.moderationService = new ModerationService(this);
+        this.streamService = new StreamService(this);
+        this.pollService = new PollService(this);
+        this.giveawayService = new GiveawayService(this);
 
         this.groups = new DashboardGroups(this);
         this.notifications = new Notifications(this);
@@ -142,6 +161,10 @@ export default class BotClient extends Client implements IBotClient {
         this.userCodes = new UserCodes(this);
         this.modSettings = new ModSettings(this);
         this.modCases = new ModCases(this);
+        this.moduleSettings = new ModuleSettings(this);
+        this.streamNotifiers = new StreamNotifiers(this);
+        this.polls = new Polls(this);
+        this.giveaways = new Giveaways(this);
     }
 
     Init(): void {

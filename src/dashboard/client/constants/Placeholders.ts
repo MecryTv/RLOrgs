@@ -34,6 +34,36 @@ export const PLACEHOLDERS: IPlaceholder[] = [
 /** Die beiden, die als Bildquelle taugen - sie ergeben eine URL. */
 export const IMAGE_PLACEHOLDERS = ["{user.avatar}", "{guild.icon}"];
 
+/** Twitch Notifier - dieselben Schlüssel wie TWITCH_PLACEHOLDER_KEYS im Bot (constants/Streams.ts). */
+export const TWITCH_PLACEHOLDERS: IPlaceholder[] = [
+    { key: "streamer", label: "Streamer", sample: "MecryTv" },
+    { key: "streamer.login", label: "Twitch-Name", sample: "mecrytv" },
+    { key: "streamer.avatar", label: "Profilbild (Bild)", sample: "" },
+    { key: "stream.title", label: "Titel des Streams", sample: "Ranked 2v2 bis GC – !discord" },
+    { key: "stream.game", label: "Spiel", sample: "Rocket League" },
+    { key: "stream.url", label: "Link zum Stream", sample: "https://twitch.tv/mecrytv" },
+    { key: "stream.viewers", label: "Zuschauer", sample: "128" },
+    { key: "stream.preview", label: "Vorschaubild (Bild)", sample: "" },
+    { key: "stream.started", label: "Live seit (Zeitpunkt)", sample: "vor 3 Minuten" },
+    { key: "guild", label: "Servername", sample: "Dein Server" },
+];
+
+export const TWITCH_IMAGES = ["{stream.preview}", "{streamer.avatar}"];
+
+/** YouTube Notifier - dieselben Schlüssel wie YOUTUBE_PLACEHOLDER_KEYS im Bot. */
+export const YOUTUBE_PLACEHOLDERS: IPlaceholder[] = [
+    { key: "channel", label: "Kanal", sample: "RL Nexus" },
+    { key: "channel.avatar", label: "Kanalbild (Bild)", sample: "" },
+    { key: "video.title", label: "Titel", sample: "Die 10 besten Aerial-Tore der Woche" },
+    { key: "video.url", label: "Link", sample: "https://youtu.be/dQw4w9WgXcQ" },
+    { key: "video.thumbnail", label: "Vorschaubild (Bild)", sample: "" },
+    { key: "video.kind", label: "Art (Video, Short, Livestream)", sample: "Video" },
+    { key: "video.published", label: "Veröffentlicht (Zeitpunkt)", sample: "vor 2 Minuten" },
+    { key: "guild", label: "Servername", sample: "Dein Server" },
+];
+
+export const YOUTUBE_IMAGES = ["{video.thumbnail}", "{channel.avatar}"];
+
 /** Setzt ein, was bekannt ist. Unbekanntes bleibt stehen, wie beim Bot. */
 export function fill(text: string, values: Record<string, string>): string {
     return text.replace(/\{([a-z.]+)\}/g, (match, key: string) => values[key] ?? match);

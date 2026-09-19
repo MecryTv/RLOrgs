@@ -35,7 +35,14 @@ const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 const PLACEHOLDER_LABELS: Record<string, string> = {
     "{user.avatar}": "Avatar des Users",
     "{guild.icon}": "Server-Icon",
+    "{stream.preview}": "Vorschaubild des Streams",
+    "{streamer.avatar}": "Profilbild des Streamers",
+    "{video.thumbnail}": "Vorschaubild des Videos",
+    "{channel.avatar}": "Kanalbild",
 };
+
+// Die Platzhalter-Knöpfe unten - je nach Nachricht andere (Tickets, Twitch, YouTube).
+let footHost: HTMLElement | null = null;
 
 /** Die Galerie eines Servers, einmal geholt und danach gemerkt. */
 const cache = new Map<string, { folders: IGalleryFolder[]; images: IGalleryImage[] }>();
@@ -92,16 +99,37 @@ function inFolder(image: IGalleryImage, folder: IGalleryFolder): boolean {
 let dialog: HTMLDialogElement | null = null;
 let answer: ((source: string | null) => void) | null = null;
 
-/** Öffnet die Auswahl. null heißt: abgebrochen. */
-export function pickImage(guildId: string): Promise<string | null> {
+/** Öffnet die Auswahl. null heißt: abgebrochen. placeholders: die Bild-Platzhalter dieser Nachricht. */
+export function pickImage(guildId: string, placeholders: string[] = IMAGE_PLACEHOLDERS): Promise<string | null> {
     const host = dialog ?? build();
 
+    paintFoot(placeholders);
     void fill(guildId, host);
     host.showModal();
 
     return new Promise((resolve) => {
         answer = resolve;
     });
+}
+
+function paintFoot(placeholders: string[]): void {
+    if (!footHost) return;
+
+    const label = footHost.firstElementChild!;
+
+    footHost.replaceChildren(
+        label,
+        ...placeholders.map((placeholder) => {
+            const chip = document.createElement("button");
+
+            chip.type = "button";
+            chip.className = "tagline";
+            chip.textContent = PLACEHOLDER_LABELS[placeholder] ?? placeholder;
+            chip.addEventListener("click", () => done(placeholder));
+
+            return chip;
+        })
+    );
 }
 
 function done(source: string | null): void {
@@ -186,16 +214,7 @@ function build(): HTMLDialogElement {
 
     footText.textContent = "Oder ein Platzhalter:";
     foot.append(footText);
-
-    for (const placeholder of IMAGE_PLACEHOLDERS) {
-        const chip = document.createElement("button");
-
-        chip.type = "button";
-        chip.className = "tagline";
-        chip.textContent = PLACEHOLDER_LABELS[placeholder] ?? placeholder;
-        chip.addEventListener("click", () => done(placeholder));
-        foot.append(chip);
-    }
+    footHost = foot;
 
     panes.append(GalleryPane(), UploadPane(), UrlPane());
     body.append(tabs, panes, note, foot);

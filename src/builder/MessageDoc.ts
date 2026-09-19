@@ -3,7 +3,7 @@ import BotClient from "../client/BotClient";
 import ComponentV2Builder from "./ComponentV2Builder";
 import { IMessageBlock, IMessageDoc } from "../interfaces/builder/IMessageDoc";
 import { IGalleryEntry } from "../interfaces/services/gallery/IGalleryService";
-import { Fill, IMAGE_PLACEHOLDERS, PlaceholderValues } from "../constants/Placeholders";
+import { AnyPlaceholderValues, Fill, IMAGE_PLACEHOLDERS } from "../constants/Placeholders";
 
 const MAX_BLOCKS = 25;
 const MAX_BODY = 4000;
@@ -103,7 +103,7 @@ export interface IRenderedDoc {
 export async function RenderDoc(
     client: BotClient,
     doc: IMessageDoc,
-    values: PlaceholderValues,
+    values: AnyPlaceholderValues,
     options: { reserve?: number; fallback?: string } = {}
 ): Promise<IRenderedDoc> {
     const builder = new ComponentV2Builder(doc.accent ? { accentColor: doc.accent as `#${string}` } : {});

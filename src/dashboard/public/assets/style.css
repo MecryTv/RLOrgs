@@ -2576,7 +2576,7 @@ body.no-motion .hero__field .run{display:none}
    stehen bleibt. Unter 1180px rutscht die Vorschau unter den Bereich.
    Geschnitten wird wie ueberall ueber --bevel, der Fokus liegt innen.
    ---------------------------------------------------------- */
-.tkstat,.tkchoice__opt,.tktopic,.tkact,.tkcore__chip,.tkmsg,.emojibtn,.emojicell,.tid,.mcb,.mcact{
+.tkstat,.tkchoice__opt,.tktopic,.tkact,.tkcore__chip,.tkmsg,.emojibtn,.emojicell,.tid,.mcb,.mcact,.snitem{
   clip-path:polygon(
     var(--bevel,var(--cut-sm)) 0,100% 0,
     100% calc(100% - var(--bevel,var(--cut-sm))),calc(100% - var(--bevel,var(--cut-sm))) 100%,
@@ -3286,4 +3286,157 @@ body.no-motion .hero__field .run{display:none}
 }
 @media (hover:none){
   .mcnote__x,.mcevid__x{width:40px;height:40px}
+}
+
+/* ----------------------------------------------------------
+   Twitch und YouTube Notifier
+
+   Je Streamer bzw. Kanal eine Karte. Zugeklappt zeigt sie den Stand,
+   aufgeklappt links die Einstellungen samt Nachrichten-Editor und rechts die
+   Live-Vorschau - wie im Ticket-System. Live pulst ein roter Punkt.
+   ---------------------------------------------------------- */
+.snnotice{margin-bottom:14px}
+.snhead{margin-bottom:14px}
+.snskel{height:60px}
+.tkstat.is-live .tkstat__mark{color:var(--brand);border-color:color-mix(in srgb,var(--brand) 45%,transparent);background:color-mix(in srgb,var(--brand) 10%,transparent)}
+
+.snadd{margin-bottom:14px;gap:8px}
+.snadd__label{display:grid;gap:6px}
+.snadd__row{display:flex;align-items:center;gap:8px}
+.snadd__row > svg{flex:none;width:20px;height:20px;color:var(--text-3)}
+.snadd__input{flex:1;min-width:0;width:auto;height:44px}
+.snadd__go{flex:none;min-width:170px}
+
+.snlist{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.snitem{border:1px solid var(--line);background:rgba(255,255,255,.02);transition:border-color var(--t-fast) var(--ease)}
+.snitem.is-live{border-color:color-mix(in srgb,var(--brand) 45%,transparent)}
+.snitem.is-paused{opacity:.72}
+.snitem.is-open{border-color:var(--line-strong);background:rgba(255,255,255,.035)}
+.snitem__head{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 14px}
+.snitem__face{
+  flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;
+  font-size:17px;font-weight:700;color:#fff;background:#5865f2 center/cover no-repeat;
+}
+.snitem__name{display:grid;gap:2px;flex:1;min-width:140px}
+.snitem__name b{font-size:14.5px}
+.snitem__name span{font-size:12px;color:var(--text-3);overflow-wrap:anywhere}
+.snitem__switch{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--text-2);cursor:pointer}
+.snitem__edit{flex:none;height:40px;padding:0 14px;font-size:11.5px}
+.snitem__problem{margin:0 14px 10px}
+.snitem__body{padding:0 14px 14px;border-top:1px solid var(--line)}
+.snitem__foot{margin-top:12px}
+
+.snlive{
+  display:inline-flex;align-items:center;gap:7px;height:22px;padding:0 9px;border-radius:var(--r-pill);white-space:nowrap;
+  font-size:11.5px;font-weight:600;color:color-mix(in srgb,var(--brand) 40%,#fff);
+  border:1px solid color-mix(in srgb,var(--brand) 45%,transparent);background:color-mix(in srgb,var(--brand) 12%,transparent);
+}
+.snlive__dot{width:7px;height:7px;border-radius:50%;background:var(--brand);animation:snpulse 1.8s var(--ease) infinite}
+@keyframes snpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
+
+.snsettings{display:grid;padding-top:8px}
+.snkinds{display:flex;flex-wrap:wrap;gap:10px}
+.snkind{display:inline-flex;align-items:center;gap:8px;min-height:36px;font-size:13px;color:var(--text-2);cursor:pointer}
+.snkind.is-locked{opacity:.5;cursor:not-allowed}
+.sneditor{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,360px);gap:18px;align-items:start;padding-top:12px}
+.sneditor__main{display:grid;gap:10px;min-width:0}
+.sneditor__side{position:sticky;top:calc(var(--topbar-h) + 16px);display:grid;gap:10px;min-width:0}
+.sneditor__bar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:6px}
+.sneditor__title{font-size:13px;font-weight:600}
+.sneditor__kinds{margin-right:auto}
+.sneditor__reset{flex:none;height:36px;padding:0 12px;font-size:11px}
+.snprev__ping{margin-bottom:6px;font-size:12.5px;color:var(--blue-soft)}
+
+/* ----------------------------------------------------------
+   Umfragen und Giveaways: Liste, Balken, Formular mit Vorschau
+   ---------------------------------------------------------- */
+.pllist{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.plrow,.gwrow{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;width:100%;padding:12px 14px;
+  text-align:left;color:var(--text);cursor:pointer;border:1px solid var(--line);background:rgba(255,255,255,.02);
+  transition:border-color var(--t-fast) var(--ease),background var(--t-fast) var(--ease);
+}
+.plrow:hover,.gwrow:hover{border-color:var(--line-strong);background:rgba(255,255,255,.035)}
+.plrow:focus-visible,.gwrow:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--blue)}
+.plrow.is-ended{opacity:.8}
+.gwrow.is-running{border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+.plrow__main{display:grid;gap:6px;min-width:0}
+.plrow__top{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.plrow__top b{font-size:14px}
+.gwrow__facts{font-size:12.5px;color:var(--text-3)}
+
+.plbars{display:grid;gap:5px}
+.plbar{display:grid;grid-template-columns:minmax(80px,180px) minmax(0,1fr) auto;align-items:center;gap:10px;font-size:12.5px;color:var(--text-2)}
+.plbar__label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plbar__track{height:8px;background:rgba(255,255,255,.06);overflow:hidden}
+.plbar__fill{display:block;height:100%;background:var(--blue);transition:width var(--t-mid) var(--ease)}
+.plbar.is-top .plbar__fill{background:var(--live)}
+.plbar.is-top .plbar__label{color:var(--text)}
+.plbar__value{font-variant-numeric:tabular-nums;color:var(--text-3);white-space:nowrap}
+
+.plview{width:min(920px,calc(100vw - 32px));max-height:min(90vh,900px)}
+.plview__body,.gwview__body{display:grid;gap:16px;padding-top:16px}
+.plview__facts{display:flex;flex-wrap:wrap;gap:8px}
+.plview__desc{font-size:13.5px;color:var(--text-2);line-height:1.5}
+.plview__acts{flex-wrap:wrap}
+.plview__acts .btn{flex:none;min-width:auto;padding:0 14px;height:40px;font-size:11.5px}
+.plvoters{display:grid;gap:10px}
+.plvoters__list{display:flex;flex-wrap:wrap;gap:6px}
+.plvoter{cursor:default}
+
+.plkinds{margin-bottom:4px}
+.plopts{display:grid;gap:8px}
+.plopt{display:flex;align-items:center;gap:8px}
+.plopt .text{flex:1;min-width:0;width:auto;height:44px}
+.plq{width:100%;height:44px}
+.plform{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,360px);gap:18px;align-items:start}
+.plform__main{display:grid;gap:14px;min-width:0}
+.plform__side{position:sticky;top:calc(var(--topbar-h) + 16px)}
+.plprev__opt{display:grid;gap:2px;margin:6px 0;font-size:13px}
+.plprev__bar{font-family:var(--f-mono);font-size:12px;color:var(--text-3)}
+
+/* Discords eigene Umfrage - angedeutet, damit der Unterschied sichtbar ist. */
+.plnative{display:grid;gap:8px;padding:14px;border:1px solid var(--line-strong);background:#2b2d31;border-radius:8px}
+.plnative__q{font-size:15px;color:#f2f3f5}
+.plnative__hint{font-size:11.5px;color:#949ba4}
+.plnative__opt{display:flex;align-items:center;gap:8px;padding:10px 12px;font-size:13px;color:#dbdee1;background:#313338;border:1px solid #3f4147;border-radius:6px}
+.plnative__foot{font-size:11.5px;color:#949ba4}
+
+.gwfilter{margin-bottom:12px}
+.gwrules{display:grid;gap:4px;margin:0;padding-left:18px;font-size:13px;color:var(--text-2)}
+.gwwinner{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 10px;border-left:2px solid var(--line-strong);background:rgba(255,255,255,.02)}
+.gwwinner.is-out{opacity:.6}
+.gwwinner__name{flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gwwinner__reroll{flex:none;height:34px;padding:0 10px;font-size:10.5px}
+.gwentrants{display:flex;flex-wrap:wrap;gap:6px;max-height:260px;overflow-y:auto}
+.gwtickets{margin-left:2px;font-family:var(--f-accent);font-size:11px;color:var(--warn)}
+.gwnum{width:96px;height:44px}
+.gwwhen{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:flex-end}
+.gwstart{width:210px;height:44px}
+.gwbonus{display:grid;gap:8px}
+.gwbonus .mcstage .pick{width:auto;flex:1;min-width:140px}
+.gwmock{background:color-mix(in srgb,var(--live) 18%,transparent);border-color:color-mix(in srgb,var(--live) 45%,transparent)}
+
+@media (max-width:1180px){
+  .sneditor,.plform{grid-template-columns:1fr}
+  .sneditor__side,.plform__side{position:static}
+}
+@media (max-width:860px){
+  .plbar{grid-template-columns:minmax(0,1fr) auto;gap:4px 10px}
+  .plbar__track{grid-column:1/-1}
+}
+@media (max-width:620px){
+  .snadd__row{flex-wrap:wrap}
+  .snadd__input{flex-basis:100%}
+  .snadd__go{width:100%;min-width:0}
+  .snitem__head{gap:8px}
+  .snitem__edit,.snitem__switch{flex:1}
+  .snitem__foot{flex-wrap:wrap}
+  .snitem__foot .btn{flex:1 1 140px}
+  .plrow,.gwrow{grid-template-columns:auto minmax(0,1fr)}
+  .plrow .mcrow__side,.gwrow .mcrow__side{grid-column:2;grid-auto-flow:column;justify-content:start;gap:10px}
+  .plview{width:100vw;height:100dvh;max-width:100vw;max-height:100dvh}
+  .plview__acts .btn{flex:1}
+  .gwwhen{justify-content:flex-start}
+  .gwstart{width:100%}
 }

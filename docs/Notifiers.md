@@ -1,0 +1,128 @@
+# Twitch und YouTube Notifier
+
+Sagt Bescheid, wenn eure Streamer live gehen oder ein neues Video da ist — mit eigener Nachricht, einer Karte, die sich während des Streams aktualisiert, einer Zusammenfassung danach und einer Live-Rolle für Mitglieder.
+
+Zwei Module, ein Dienst (`StreamService`): `twitch-notifier` und `youtube-notifier`. Beide werden unter *Module* eingeschaltet (oder `/module an modul:twitch-notifier`). Ohne Datenbank geht nichts — die Streamer stehen dort.
+
+---
+
+## Was der Bot braucht
+
+| | Twitch | YouTube |
+|---|---|---|
+| Schlüssel | `TWITCH_CLIENT_ID` + `TWITCH_CLIENT_SECRET` (kostenlose App auf [dev.twitch.tv](https://dev.twitch.tv/console/apps)) | nichts für Videos und Shorts (Kanal-Feed), `YOUTUBE_API_KEY` nur für **Livestreams** |
+| Abfrage | jede Minute, alle Streamer aller Server in einem Rutsch (100 je Anfrage) | alle fünf Minuten, ein Feed je Kanal |
+| Intent | `GUILD_PRESENCE_INTENT` **nur** für die Live-Rolle | — |
+| Rechte | im Zielkanal schreiben (im Forum: Beiträge erstellen), für die Live-Rolle „Rollen verwalten" | dasselbe ohne Rolle |
+
+Fehlt ein Schlüssel, steht das im Dashboard als Hinweis über dem Modul — der Rest läuft weiter. Ohne `YOUTUBE_API_KEY` lässt sich „Livestreams" nicht einschalten; Videos und Shorts kommen trotzdem. Siehe [Environment.md](Environment.md).
+
+---
+
+## Einen Streamer eintragen
+
+Dashboard › *Twitch Notifier* bzw. *YouTube Notifier* › **hinzufügen**. Erlaubt sind:
+
+- **Twitch:** `mecrytv`, `@MecryTv`, `twitch.tv/MecryTv`, `https://www.twitch.tv/mecrytv` — daraus wird der Login, der Rest fällt weg.
+- **YouTube:** Kanal-ID (`UC…`), `youtube.com/channel/UC…`, `@handle` oder ein alter `/c/`- bzw. `/user/`-Link. Handles schlägt der Bot nach: erst über die API (wenn ein Schlüssel da ist), sonst liest er die Kanalseite.
+
+Bis **25 je Server und Plattform**. Wer schon drinsteht, kommt kein zweites Mal rein. Beim Eintragen eines YouTube-Kanals merkt sich der Bot, was gerade im Feed steht — sonst käme sofort eine Flut alter Videos.
+
+---
+
+## Was gemeldet wird
+
+| Art | Twitch | YouTube |
+|---|---|---|
+| `live` | Stream gestartet | Livestream läuft (braucht den API-Schlüssel) |
+| `video` | — | neues Video |
+| `short` | — | neuer Short |
+
+Shorts erkennt der Bot daran, dass `youtube.com/shorts/<id>` ohne Umleitung antwortet — der Feed selbst sagt es nicht. Jede Art hat **ihre eigene Nachricht** und meldet in denselben Kanal.
+
+**Kanal:** ein Textkanal oder ein **Beitrag in einem Forum**, genau wie die Log-Kanäle (`utils/logtarget.ts`, im Dashboard „+ Neuer Beitrag in #forum"). **Ping:** `@everyone`, `@here` oder eine Rolle — je Streamer eine eigene.
+
+---
+
+## Die Nachricht
+
+Geschrieben wird sie im selben Editor wie die Ticket-Nachrichten (Text, Bild, Galerie, Trennlinie; siehe [ComponentV2Builder.md](ComponentV2Builder.md)), mit Live-Vorschau daneben. Ohne eigene Nachricht gilt die Vorlage.
+
+| Twitch | | YouTube | |
+|---|---|---|---|
+| `{streamer}` | Name | `{channel}` | Kanal-Name |
+| `{streamer.login}` | Login | `{channel.avatar}` | Kanalbild |
+| `{streamer.avatar}` | Profilbild | `{video.title}` | Titel |
+| `{stream.title}` | Titel | `{video.url}` | Link (Short: `/shorts/…`) |
+| `{stream.game}` | Spiel | `{video.thumbnail}` | Vorschaubild |
+| `{stream.url}` | Link zum Kanal | `{video.kind}` | „Video", „Short", „Livestream" |
+| `{stream.viewers}` | Zuschauer | `{video.published}` | wann („vor 2 Stunden") |
+| `{stream.preview}` | Vorschaubild | `{guild}` | Server-Name |
+| `{stream.started}` | Start („vor 20 Minuten") | | |
+| `{guild}` | Server-Name | | |
+
+Unter der Karte sitzt immer ein Knopf („Zum Stream", „Ansehen", „Zum Livestream"). **Test senden** schickt dieselbe Karte mit Beispielwerten in den eingestellten Kanal — ohne auf den nächsten Stream zu warten.
+
+---
+
+## Während und nach dem Stream (Twitch)
+
+**Karte aktualisiert sich** (Standard an): Titel, Spiel, Zuschauer und Vorschaubild zieht der Bot nach — sofort, wenn Titel oder Spiel wechseln, sonst höchstens alle fünf Minuten. Den Höchststand der Zuschauer merkt er sich mit.
+
+**Nach dem Stream** — einstellbar je Streamer:
+
+| | |
+|---|---|
+| **Zusammenfassung** (Standard) | Aus der Karte wird „⚫ … war live": Titel, Spiel, Dauer, Zuschauer-Höchststand und, wenn es ihn schon gibt, ein Knopf zum VOD |
+| **Löschen** | Die Meldung verschwindet, sobald der Stream vorbei ist |
+| **Stehen lassen** | Die Karte bleibt, wie sie war |
+
+Vorbei ist ein Stream, sobald Twitch ihn nicht mehr meldet — oder eine andere Stream-ID meldet (Neustart). Dann endet die alte Karte und die neue beginnt.
+
+---
+
+## Live-Rolle
+
+Wer auf Twitch live geht, bekommt eine Rolle — zurück, sobald der Stream endet. Das läuft über die **Presence** (Discord meldet „streamt gerade"), nicht über die Twitch-API: Es braucht `GUILD_PRESENCE_INTENT` in der `.env` **und** im Developer Portal, sonst bleibt die Karte im Dashboard gesperrt.
+
+- **Rolle:** was der Bot vergibt. Sie muss unter seiner höchsten Rolle stehen, sonst sagt das Dashboard das beim Speichern.
+- **Nur mit Rolle:** etwa „Streamer" — dann bekommt sie nicht jeder, der zufällig streamt.
+
+Die Rolle hängt nicht an der Streamer-Liste: sie gilt für alle Mitglieder (oder alle mit der Filter-Rolle).
+
+---
+
+## Dashboard
+
+`/dashboard/guild/<id>/twitch-notifier` und `…/youtube-notifier` — oben die Zahlen (Streamer, gerade live, Live-Rolle, Meldungen), darunter das Feld zum Hinzufügen und je Streamer eine Karte: Bild, Name, Stand („live seit 20 Minuten", „Video vor 3 Stunden", „noch nichts gemeldet"), ein Schalter zum Pausieren und **Bearbeiten**. Aufgeklappt links Kanal, Ping, „Was melden" und der Nachrichten-Editor, rechts die Vorschau.
+
+| Route | |
+|---|---|
+| `GET <base>/api/guild/:id/streams/:platform` | Streamer, Einstellungen, Kanäle, Log-Ziele, Rollen, Stand und Hinweise |
+| `POST <base>/api/guild/:id/streams/:platform` | `add`, `save`, `remove`, `test`, `settings` (Live-Rolle), `logthread` — nur JSON |
+
+`:platform` ist `twitch` oder `youtube`, alles andere ist 404. Anfang wie überall: `ManageGate()` (`utils/managegate.ts`) — Sitzung, „Server verwalten", Datenbank, Modul an.
+
+---
+
+## Dahinter
+
+| | |
+|---|---|
+| Tabelle | `stream_notifiers` (Migration 014): Server, Plattform, Konto, `config` und `state` als JSON |
+| `config` | Kanal, Ping, Arten, Nachrichten je Art, Karte aktualisieren, was nach dem Stream passiert |
+| `state` | Twitch: der laufende Stream (Nachricht, Titel, Spiel, Zuschauer, Höchststand), zuletzt live. YouTube: die letzten 60 gesehenen Video-IDs, angekündigte Livestreams, die letzte Meldung. Dazu ein Problem-Hinweis (Kanal weg, keine Rechte) |
+| Einstellungen | Live-Rolle in `module_settings` (`twitch`) |
+| Lauf | `CommunityTimers` jede Minute (`RunDue()`); YouTube nur alle fünf Minuten. Ein Lauf, der noch arbeitet, wird nicht doppelt gestartet |
+
+Geht eine Meldung nicht raus, steht der Grund am Streamer und im Dashboard — gelöscht wird nichts.
+
+---
+
+## Prüfen
+
+```bash
+npm run check:community   # Namen und Links, Feed lesen, Einstellungen, Karten, Datenbank
+```
+
+Twitch wirklich fragen, Videos holen und Nachrichten senden braucht Schlüssel und einen echten Server — das fängt erst ein Lauf dort.

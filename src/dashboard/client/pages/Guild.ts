@@ -204,6 +204,12 @@ export function renderGuild(data: IPayload): void {
         whenShown(["tickets"], () => void import("./GuildTickets.js").then((module) => module.renderTickets(guild.id, guild.canManage, user)));
 
         if (guild.canManage) whenShown(["team"], () => void import("./GuildTeam.js").then((module) => module.renderTeam(guild.id)));
+
+        // Community-Module: Code und Abfragen kommen erst, wenn der Abschnitt aufgeht.
+        whenShown(["twitch-notifier"], () => void import("./GuildStreams.js").then((module) => module.renderStreams(guild.id, "twitch")));
+        whenShown(["youtube-notifier"], () => void import("./GuildStreams.js").then((module) => module.renderStreams(guild.id, "youtube")));
+        whenShown(["polls"], () => void import("./GuildPolls.js").then((module) => module.renderPolls(guild.id)));
+        whenShown(["giveaways"], () => void import("./GuildGiveaways.js").then((module) => module.renderGiveaways(guild.id)));
     }
 
     whenShown(["transcriptions"], () => void import("./GuildTranscripts.js").then((module) => module.renderTranscripts(guild.id)));
