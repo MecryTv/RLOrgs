@@ -82,6 +82,23 @@ export const LEVEL_PLACEHOLDERS: IPlaceholder[] = [
 
 export const LEVEL_IMAGES: string[] = [];
 
+/** Welcome System - dieselben Schlüssel wie WELCOME_PLACEHOLDER_KEYS im Bot. */
+export const WELCOME_PLACEHOLDERS: IPlaceholder[] = [
+    { key: "user", label: "User (Erwähnung)", sample: "@du" },
+    { key: "user.name", label: "Anzeigename", sample: "Lara" },
+    { key: "user.tag", label: "Discord-Name", sample: "lara" },
+    { key: "user.id", label: "ID des Users", sample: "123456789012345678" },
+    { key: "user.avatar", label: "Avatar (Bild)", sample: "" },
+    { key: "guild", label: "Servername", sample: "Dein Server" },
+    { key: "guild.icon", label: "Server-Icon (Bild)", sample: "" },
+    { key: "guild.members", label: "Mitgliederzahl", sample: "148" },
+    { key: "member.number", label: "Das wievielte Mitglied", sample: "148" },
+    { key: "joined", label: "Beigetreten (Zeitpunkt)", sample: "gerade eben" },
+    { key: "created", label: "Konto erstellt (Zeitpunkt)", sample: "vor 2 Jahren" },
+];
+
+export const WELCOME_IMAGES = ["{user.avatar}", "{guild.icon}"];
+
 /** Setzt ein, was bekannt ist. Unbekanntes bleibt stehen, wie beim Bot. */
 export function fill(text: string, values: Record<string, string>): string {
     return text.replace(/\{([a-z.]+)\}/g, (match, key: string) => values[key] ?? match);

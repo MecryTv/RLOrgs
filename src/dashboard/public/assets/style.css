@@ -3577,3 +3577,16 @@ body.no-motion .hero__field .run{display:none}
 .lvlink{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 10px}
 .lvlink__url{flex:1;min-width:200px;padding:8px 10px;font-family:var(--f-mono);font-size:11.5px;color:var(--text-2);border:1px solid var(--line);background:rgba(255,255,255,.03);overflow-wrap:anywhere}
 @media (max-width:620px){.board__bar{display:none}.board{padding:20px 0 40px}}
+
+/* ----------------------------------------------------------
+   Welcome System: Karten-Formular, Hintergrund, Vorschau
+   ---------------------------------------------------------- */
+.wccard{display:grid}
+.wcbg{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.wcfile{display:none}
+.wcrange__box{display:flex;align-items:center;gap:10px;width:min(320px,100%)}
+.wcrange{flex:1;min-width:0;accent-color:var(--blue);height:24px;cursor:pointer}
+.wcrange__value{width:46px;font-family:var(--f-mono);font-size:11.5px;color:var(--text-3);text-align:right}
+.wcpreview__box{display:grid;gap:8px}
+.wcpreview{width:100%;height:auto;border-radius:6px;border:1px solid var(--line)}
+@media (max-width:620px){.wcrange__box{width:100%}}

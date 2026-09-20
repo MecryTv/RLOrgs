@@ -35,7 +35,7 @@ Die Datei liegt im **Projekt-Root**, nicht in `src`. Der Pfad wird beim Start au
 | `DEV_CLIENT_SECRET` | nein | `""` | OAuth2-Secret im `--dev` Modus |
 | `DEV_GUILD_ID` | ja | — | Server, auf dem Commands im `--dev` Modus sofort registriert werden — global dauert das bis zu eine Stunde |
 | `DEV_USER_IDs` | nein | `""` | **Kommagetrennt.** Wer `developerOnly`-Commands ausführen darf und ins Admin-Dashboard kommt |
-| `GUILD_MEMBER_INTENT` | nein | `false` | Privilegiertes Members-Intent. Nur `true`, wenn es im Developer Portal ebenfalls an ist — sonst weist Discord den Login rundweg ab |
+| `GUILD_MEMBER_INTENT` | nein | `false` | Privilegiertes Members-Intent. Nur `true`, wenn es im Developer Portal ebenfalls an ist — sonst weist Discord den Login rundweg ab. Das [Welcome System](Welcome.md) braucht es: ohne sieht der Bot niemanden kommen |
 | `GUILD_PRESENCE_INTENT` | nein | `false` | Ebenfalls privilegiert. Nur für die **Live-Rolle** des Twitch Notifiers ([Notifiers.md](Notifiers.md#live-rolle)); aus = der Rest des Notifiers läuft trotzdem |
 | `PRIME_API_TOKEN` | nein | `""` | Rang-Tracking über prime.rocketplanet.gg. Leer = kein Tracking, siehe [Prime.md](Prime.md) |
 | `EPIC_CLIENT_ID` | nein | `""` | Epic Account Services. Leer = kein Epic-Login, das Dashboard fällt auf die Eingabe des Namens zurück |

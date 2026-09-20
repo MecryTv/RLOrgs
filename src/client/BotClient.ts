@@ -25,6 +25,7 @@ import GiveawayService from "../services/GiveawayService";
 import VoiceService from "../services/VoiceService";
 import LevelService from "../services/LevelService";
 import MessageService from "../services/MessageService";
+import WelcomeService from "../services/WelcomeService";
 import GuildSettings from "../models/GuildSettings";
 import DashboardGroups from "../models/DashboardGroups";
 import Notifications from "../models/Notifications";
@@ -80,6 +81,7 @@ export default class BotClient extends Client implements IBotClient {
     voiceService: VoiceService;
     levelService: LevelService;
     messageService: MessageService;
+    welcomeService: WelcomeService;
 
     // Ein Model je Tabelle. Sie hängen am Client, damit Befehle, Events und
     // Routen dieselbe Instanz benutzen - und damit denselben Cache.
@@ -167,6 +169,7 @@ export default class BotClient extends Client implements IBotClient {
         this.voiceService = new VoiceService(this);
         this.levelService = new LevelService(this);
         this.messageService = new MessageService(this);
+        this.welcomeService = new WelcomeService(this);
 
         this.groups = new DashboardGroups(this);
         this.notifications = new Notifications(this);
