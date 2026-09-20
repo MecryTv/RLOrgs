@@ -3511,3 +3511,12 @@ body.no-motion .hero__field .run{display:none}
 .tkprev__btn.is-link{background:#4e5058;color:#dbdee1}
 .tkprev__btn.is-link::after{content:" 97";font-size:11px;opacity:.7}
 @media (max-width:620px){.cmbtn__label,.cmbtn__target{flex-basis:100%}}
+
+/* Auf dem Handy duerfen Karten und Knopfzeilen schmaler werden als ihr Inhalt. */
+@media (max-width:620px){
+  .setcard,.tkcard{min-width:0}
+  .mcsave{flex-wrap:wrap;min-width:0}
+  .mcsave .btn{flex:1 1 140px}
+  .lvrewards .lvreward{flex-wrap:wrap}
+  .lvreward__role{flex-basis:100%}
+}
