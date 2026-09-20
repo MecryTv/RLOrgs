@@ -66,6 +66,22 @@ export const YOUTUBE_PLACEHOLDERS: IPlaceholder[] = [
 
 export const YOUTUBE_IMAGES = ["{video.thumbnail}", "{channel.avatar}"];
 
+/** Level System - dieselben Schlüssel wie LEVEL_PLACEHOLDER_KEYS im Bot. */
+export const LEVEL_PLACEHOLDERS: IPlaceholder[] = [
+    { key: "user", label: "User (Erwähnung)", sample: "@du" },
+    { key: "user.name", label: "Name des Users", sample: "du" },
+    { key: "user.id", label: "ID des Users", sample: "123456789012345678" },
+    { key: "level", label: "Neues Level", sample: "7" },
+    { key: "level.old", label: "Altes Level", sample: "6" },
+    { key: "xp", label: "Punkte insgesamt", sample: "2800" },
+    { key: "xp.next", label: "Punkte bis zum nächsten Level", sample: "400" },
+    { key: "rank", label: "Platz in der Rangliste", sample: "12" },
+    { key: "guild", label: "Servername", sample: "Dein Server" },
+    { key: "channel", label: "Kanal (Erwähnung)", sample: "#allgemein" },
+];
+
+export const LEVEL_IMAGES: string[] = [];
+
 /** Setzt ein, was bekannt ist. Unbekanntes bleibt stehen, wie beim Bot. */
 export function fill(text: string, values: Record<string, string>): string {
     return text.replace(/\{([a-z.]+)\}/g, (match, key: string) => values[key] ?? match);

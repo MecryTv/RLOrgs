@@ -3362,6 +3362,7 @@ body.no-motion .hero__field .run{display:none}
 .phchip:hover{border-color:var(--line-strong);background:rgba(255,255,255,.07);color:var(--text)}
 .phchip:focus-visible{outline:none;box-shadow:0 0 0 2px var(--blue)}
 .phchip code{font-family:var(--f-mono);font-size:11px;color:var(--blue-soft)}
+.phchip svg{flex:none;width:12px;height:12px}
 .phchip.is-image code{color:var(--warn)}
 .phchip__label{color:var(--text-3)}
 @media (max-width:620px){.phchip__label{display:none}.phchip{min-height:32px}}
@@ -3470,3 +3471,24 @@ body.no-motion .hero__field .run{display:none}
 .vcface{width:36px;height:36px}
 .vcface svg{width:18px;height:18px}
 @media (max-width:620px){.vcactions{grid-template-columns:1fr}}
+
+/* ----------------------------------------------------------
+   Level System: Bonus-Listen, Belohnungen, Rangliste
+   ---------------------------------------------------------- */
+.lvrange{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lvrange__to{font-size:12px;color:var(--text-3)}
+.lvbonus{display:flex;flex-wrap:wrap;align-items:center;gap:8px;width:min(420px,100%)}
+.lvbonus__row{display:flex;align-items:center;gap:8px;width:100%}
+.lvbonus__name{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lvbonus__x{font-size:12px;color:var(--text-3)}
+.lvfactor{width:86px;height:40px}
+.lvrewards{display:grid;gap:8px;width:min(460px,100%)}
+.lvreward{display:flex;align-items:center;gap:8px}
+.lvreward__lead{font-size:12px;color:var(--text-3);white-space:nowrap}
+.lvreward__role{flex:1;min-width:0;font-size:13px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lvrewardbox{display:grid;gap:2px;margin-top:8px;padding-top:12px;border-top:1px solid var(--line)}
+.lvplace{width:44px;font-family:var(--f-accent);font-size:13px;color:var(--text-3);text-align:right}
+.plrow.is-top .lvplace{color:var(--warn)}
+.lvsave{margin:4px 0 14px}
+.lvpager{gap:8px}
+@media (max-width:620px){.lvbonus,.lvrewards{width:100%}.lvplace{width:34px}}

@@ -183,6 +183,7 @@ npm run dev
 | `GET,POST <base>/api/guild/:id/moderation` | Fälle, Aktionen, Notizen, Einstellungen der Moderation — siehe [Moderation.md](Moderation.md#dashboard) |
 | `GET,POST <base>/api/guild/:id/moderation/evidence/…` | Beweisbilder hochladen (roh als `image/*`) und ausliefern |
 | `GET,POST <base>/api/guild/:id/voice` | Temp Voice: Hubs, Panel, offene Kanäle — siehe [Voice.md](Voice.md#dashboard) |
+| `GET,POST <base>/api/guild/:id/levels` | Level System: Punkte, Belohnungen, Rangliste — siehe [Levels.md](Levels.md#dashboard) |
 | `GET,POST <base>/api/guild/:id/streams/:platform` | Twitch- und YouTube-Notifier: Streamer, Nachrichten, Live-Rolle — siehe [Notifiers.md](Notifiers.md#dashboard) |
 | `GET,POST <base>/api/guild/:id/polls` | Umfragen anlegen, beenden, löschen und ihre Stimmen — siehe [Polls.md](Polls.md#dashboard) |
 | `GET,POST <base>/api/guild/:id/giveaways` | Giveaways anlegen, auslosen, neu auslosen, abbrechen — siehe [Giveaways.md](Giveaways.md#dashboard) |
@@ -485,7 +486,7 @@ Jedes Modul trägt einen Satz, worum es geht — auf seiner Kachel unter dem Nam
 
 Was zusammengehört, hängt am Modul selbst: **Teile** (`parts`) kommen mit ihrem Modul. Das Ticket System bringt **Live Tickets** und **Transcriptions** mit; sie haben keinen eigenen Schalter, stehen eingerückt unter ihm in der Leiste und haben eine eigene Karte. In `guild_settings.modules` steht dafür nur `tickets` — die IDs der Teile nie, und der Bot kennt sie auch nicht.
 
-In der Seitenleiste steht ein Modul erst, wenn es eingeschaltet ist. Ein frischer Server beginnt links also mit Übersicht, Module und **Moderatoren** (die Liste für Tickets und Moderation, nur für wer verwaltet) — statt mit zwei Dutzend auf einmal. Gebaut sind Ticket System, Gallery System, [Moderation](Moderation.md), [Twitch- und YouTube-Notifier](Notifiers.md), [Umfragen](Polls.md), [Giveaways](Giveaways.md) und [Temp Voice](Voice.md); jedes andere eingeschaltete Modul zeigt bis dahin seinen Namen, seinen Satz und „Dieses Modul kommt noch“.
+In der Seitenleiste steht ein Modul erst, wenn es eingeschaltet ist. Ein frischer Server beginnt links also mit Übersicht, Module und **Moderatoren** (die Liste für Tickets und Moderation, nur für wer verwaltet) — statt mit zwei Dutzend auf einmal. Gebaut sind Ticket System, Gallery System, [Moderation](Moderation.md), [Twitch- und YouTube-Notifier](Notifiers.md), [Umfragen](Polls.md), [Giveaways](Giveaways.md), [Temp Voice](Voice.md) und [Level System](Levels.md); jedes andere eingeschaltete Modul zeigt bis dahin seinen Namen, seinen Satz und „Dieses Modul kommt noch“.
 
 Eine gespeicherte ID, deren Modul es nicht mehr gibt, zählt als aus — auf der Serverseite und in der Anzahl auf den Karten. So verschwinden `rl-tracking` (entfernt) und `embed-builder` (heute Custom Message, `custom-message`) ohne Migration.
 

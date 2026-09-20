@@ -31,6 +31,7 @@
         "check:db": "tsx src/scripts/CheckDatabase.ts",
         "check:gallery": "tsx src/scripts/CheckGallery.ts",
         "check:image": "tsx src/scripts/CheckImage.ts",
+        "check:levels": "tsx src/scripts/CheckLevels.ts",
         "check:moderation": "tsx src/scripts/CheckModeration.ts",
         "check:prime": "tsx src/scripts/CheckPrime.ts",
         "check:tickets": "tsx src/scripts/CheckTickets.ts",

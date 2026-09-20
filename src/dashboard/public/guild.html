@@ -156,6 +156,17 @@
       <div class="setcards" id="moduleCards">
         <!-- Hier wird eingeschaltet, für den ganzen Server. Ein frischer Server
              beginnt links mit genau zwei Einträgen. -->
+        <!-- Level System: Punkte, Belohnungen, Rangliste. GuildLevels.ts. -->
+        <section class="setcard" id="levels" hidden>
+          <h2 class="modhead"><svg><use href="#i-chart-up"/></svg>Level System</h2>
+          <p class="modlead">Punkte für Nachrichten und Zeit im Sprachkanal, Rollen ab einem Level und eine Rangliste – in Discord mit /level.</p>
+          <div class="notice modnote" id="levelNote" hidden>
+            <svg><use href="#i-warn"/></svg>
+            <span></span>
+          </div>
+          <div id="levelBody"></div>
+        </section>
+
         <!-- Temp Voice: Hubs, Panel, offene Kanaele. GuildVoice.ts. -->
         <section class="setcard" id="voice-hub" hidden>
           <h2 class="modhead"><svg><use href="#i-mic"/></svg>Temp Voice</h2>
