@@ -22,6 +22,7 @@ import ModerationService from "../services/ModerationService";
 import StreamService from "../services/StreamService";
 import PollService from "../services/PollService";
 import GiveawayService from "../services/GiveawayService";
+import VoiceService from "../services/VoiceService";
 import GuildSettings from "../models/GuildSettings";
 import DashboardGroups from "../models/DashboardGroups";
 import Notifications from "../models/Notifications";
@@ -41,6 +42,9 @@ import ModCases from "../models/ModCases";
 import ModuleSettings from "../models/ModuleSettings";
 import StreamNotifiers from "../models/StreamNotifiers";
 import UserConnections from "../models/UserConnections";
+import VoiceHubs from "../models/VoiceHubs";
+import TempVoices from "../models/TempVoices";
+import VoicePresets from "../models/VoicePresets";
 import Polls from "../models/Polls";
 import Giveaways from "../models/Giveaways";
 
@@ -68,6 +72,7 @@ export default class BotClient extends Client implements IBotClient {
     streamService: StreamService;
     pollService: PollService;
     giveawayService: GiveawayService;
+    voiceService: VoiceService;
 
     // Ein Model je Tabelle. Sie hängen am Client, damit Befehle, Events und
     // Routen dieselbe Instanz benutzen - und damit denselben Cache.
@@ -90,6 +95,9 @@ export default class BotClient extends Client implements IBotClient {
     moduleSettings: ModuleSettings;
     streamNotifiers: StreamNotifiers;
     userConnections: UserConnections;
+    voiceHubs: VoiceHubs;
+    tempVoices: TempVoices;
+    voicePresets: VoicePresets;
     polls: Polls;
     giveaways: Giveaways;
 
@@ -146,6 +154,7 @@ export default class BotClient extends Client implements IBotClient {
         this.streamService = new StreamService(this);
         this.pollService = new PollService(this);
         this.giveawayService = new GiveawayService(this);
+        this.voiceService = new VoiceService(this);
 
         this.groups = new DashboardGroups(this);
         this.notifications = new Notifications(this);
@@ -166,6 +175,9 @@ export default class BotClient extends Client implements IBotClient {
         this.moduleSettings = new ModuleSettings(this);
         this.streamNotifiers = new StreamNotifiers(this);
         this.userConnections = new UserConnections(this);
+        this.voiceHubs = new VoiceHubs(this);
+        this.tempVoices = new TempVoices(this);
+        this.voicePresets = new VoicePresets(this);
         this.polls = new Polls(this);
         this.giveaways = new Giveaways(this);
     }

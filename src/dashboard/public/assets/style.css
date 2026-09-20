@@ -3459,3 +3459,14 @@ body.no-motion .hero__field .run{display:none}
   .gwwhen{justify-content:flex-start}
   .gwstart{width:100%}
 }
+
+/* ----------------------------------------------------------
+   Temp Voice: Hubs, Panel-Optionen, offene Kanaele
+   ---------------------------------------------------------- */
+.vcactions{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 14px;margin-top:6px}
+.vctitle{margin:16px 0 2px}
+.vcrow{cursor:default}
+.vcrow:hover{border-color:var(--line);background:rgba(255,255,255,.02)}
+.vcface{width:36px;height:36px}
+.vcface svg{width:18px;height:18px}
+@media (max-width:620px){.vcactions{grid-template-columns:1fr}}

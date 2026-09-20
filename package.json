@@ -34,6 +34,7 @@
         "check:moderation": "tsx src/scripts/CheckModeration.ts",
         "check:prime": "tsx src/scripts/CheckPrime.ts",
         "check:tickets": "tsx src/scripts/CheckTickets.ts",
+        "check:voice": "tsx src/scripts/CheckVoice.ts",
         "dev": "npm run build:dashboard && tsx watch src/index.ts --dev",
         "dev:dashboard": "tsx src/scripts/BuildDashboard.ts --watch",
         "icons:ranks": "tsx src/scripts/MakeRankIcons.ts",

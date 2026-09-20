@@ -156,6 +156,17 @@
       <div class="setcards" id="moduleCards">
         <!-- Hier wird eingeschaltet, für den ganzen Server. Ein frischer Server
              beginnt links mit genau zwei Einträgen. -->
+        <!-- Temp Voice: Hubs, Panel, offene Kanaele. GuildVoice.ts. -->
+        <section class="setcard" id="voice-hub" hidden>
+          <h2 class="modhead"><svg><use href="#i-mic"/></svg>Temp Voice</h2>
+          <p class="modlead">Ein eigener Sprachkanal auf Zuruf: Wer den Hub betritt, bekommt seinen eigenen – mit Panel zum Einstellen und Presets, die beim nächsten Mal von selbst gelten.</p>
+          <div class="notice modnote" id="voiceNote" hidden>
+            <svg><use href="#i-warn"/></svg>
+            <span></span>
+          </div>
+          <div id="voiceBody"></div>
+        </section>
+
         <!-- Twitch Notifier: Streamer, Live-Karten, Live-Rolle. GuildStreams.ts. -->
         <section class="setcard" id="twitch-notifier" hidden>
           <h2 class="modhead"><svg><use href="#i-twitch"/></svg>Twitch Notifier</h2>

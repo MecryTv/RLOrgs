@@ -35,6 +35,9 @@ export const TABLES = {
     giveaways: "giveaways",
     giveawayEntries: "giveaway_entries",
     userConnections: "user_connections",
+    voiceHubs: "voice_hubs",
+    tempVoices: "temp_voices",
+    voicePresets: "voice_presets",
 } as const;
 
 export type TableName = (typeof TABLES)[keyof typeof TABLES];
