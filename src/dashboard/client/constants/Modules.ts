@@ -153,6 +153,14 @@ export const MODULES: IModule[] = [
         description: "Punkte für Nachrichten und Zeit im Sprachkanal, mit Rangliste und Belohnungsrollen.",
         icon: "#i-chart-up",
         category: "community",
+        parts: [
+            {
+                id: "leaderboard",
+                name: "Rangliste",
+                description: "Wer wie viele Punkte hat – auf Wunsch auch öffentlich ohne Anmeldung.",
+                icon: "#i-crown",
+            },
+        ],
     },
     {
         id: "giveaways",

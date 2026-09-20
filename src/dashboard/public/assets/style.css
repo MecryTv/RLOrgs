@@ -2766,7 +2766,9 @@ body.no-motion .hero__field .run{display:none}
 .tkpanelbar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 6px}
 
 /* ---------- Leere Zustaende ---------- */
-.tkempty{padding:10px 0;font-size:13px;color:var(--text-3)}
+.tkempty{display:flex;align-items:center;gap:8px;padding:10px 0;font-size:13px;color:var(--text-3)}
+/* Ohne Groesse waere ein SVG 300x150 - das sprengt jede Leermeldung. */
+.tkempty > svg{flex:none;width:18px;height:18px}
 .tkempty--big{display:grid;justify-items:center;gap:6px;padding:36px 16px;text-align:center;border:1px dashed var(--line)}
 .tkempty--big svg{width:26px;height:26px;margin-bottom:4px;color:var(--text-3)}
 .tkempty--big b{font-size:14px;color:var(--text)}

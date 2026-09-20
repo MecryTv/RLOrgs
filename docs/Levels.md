@@ -48,7 +48,7 @@ Im Dashboard gibt es dazu **Rollen nachtragen**: Der Bot geht alle durch, die da
 
 ## Rangliste ohne Anmeldung
 
-Jeder Server kann seine Rangliste öffentlich stellen: Dashboard › *Level System* › *Rangliste* › **Öffentlich**. Dann liegt sie unter
+Jeder Server kann seine Rangliste öffentlich stellen: Dashboard › *Rangliste* › **Öffentlich**. Dann liegt sie unter
 
 ```
 <SERVER_PUBLIC_URL>/rangliste/<server-id>
@@ -75,10 +75,16 @@ Die Karte wird mit `@napi-rs/canvas` gezeichnet (`builder/LevelCard.ts`) — die
 
 ## Dashboard
 
-`/dashboard/guild/<id>/levels` — oben die Zahlen, darunter:
+Zwei Seiten: **Level System** stellt ein, **Rangliste** zeigt die Zahlen. Die Rangliste steht in der Leiste eingerückt unter dem Level System — so wie Live Tickets unter dem Ticket System. Einen eigenen Schalter hat sie nicht: sie kommt mit dem Modul.
+
+`/dashboard/guild/<id>/levels`
 
 - **Punkte** — Chat, Voice, Kurve, Bonus-Faktoren und die Ausnahmen.
 - **Aufsteigen** — wohin die Nachricht geht, der Editor mit Live-Vorschau, die Belohnungsrollen und „Rollen nachtragen".
+
+`/dashboard/guild/<id>/leaderboard`
+
+- **Öffentliche Rangliste** — der Schalter samt Link; er gilt sofort, ohne Speichern.
 - **Rangliste** — 25 je Seite, mit Level, Punkten, Fortschritt, Nachrichten und Voice-Minuten.
 - **Punkte von Hand** — einem Mitglied Punkte setzen oder dazugeben (auch negativ), seinen Stand zurücksetzen oder die ganze Rangliste löschen.
 

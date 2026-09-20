@@ -9,7 +9,7 @@
 import { BASE } from "../core/Base.js";
 import { icon, need } from "../core/Dom.js";
 import { toast } from "../core/Toast.js";
-import { api, button, card, confirmButton, el, face, IRole, row, select, stat, toggle } from "../core/Ui.js";
+import { api, button, card, el, IRole, row, select, stat, toggle } from "../core/Ui.js";
 import { LEVEL_IMAGES, LEVEL_PLACEHOLDERS } from "../constants/Placeholders.js";
 import { IServerEmoji } from "../layout/EmojiPicker.js";
 import { IEditorContext, IMessageDoc, renderEditor, renderPreview } from "../layout/MessageEditor.js";
@@ -54,12 +54,6 @@ interface IRank {
     voiceMinutes: number;
 }
 
-interface IPerson {
-    id: string;
-    name: string;
-    avatar: string;
-}
-
 interface IPayload {
     settings: ISettings;
     defaultMessage: IMessageDoc;
@@ -78,8 +72,6 @@ export function renderLevels(guildId: string): void {
     let data: IPayload | null = null;
     let draft: ISettings | null = null;
     let dirty = false;
-    let chosen: IPerson | null = null;
-    let page = 1;
 
     const save = el("button", "btn btn--primary") as HTMLButtonElement;
 
@@ -463,210 +455,6 @@ export function renderLevels(guildId: string): void {
     }
 
     /* ------------------------------------------------------------
-       Rangliste
-       ------------------------------------------------------------ */
-    function board(): HTMLElement {
-        const rows = data!.top.map((entry) =>
-            el(
-                "div",
-                `plrow vcrow lvrow${entry.rank <= 3 ? " is-top" : ""}`,
-                el("span", "lvplace", `#${entry.rank}`),
-                face({ name: entry.name, avatar: entry.avatar }, "travatar"),
-                el(
-                    "div",
-                    "plrow__main",
-                    el("div", "plrow__top", el("b", "", entry.name), ...(entry.gone ? [el("span", "chip", "nicht mehr da")] : [])),
-                    el("span", "gwrow__facts", `Level ${entry.level} · ${entry.xp.toLocaleString("de-DE")} Punkte · ${entry.messages} Nachrichten · ${entry.voiceMinutes} Min. Voice`)
-                ),
-                el("div", "plbars", el("div", "plbar", el("span", "plbar__label", `${entry.into} / ${entry.need}`), el("span", "plbar__track", el("span", "plbar__fill", "")), el("span", "plbar__value", `L${entry.level + 1}`)))
-            )
-        );
-
-        for (const [index, node] of rows.entries()) {
-            const fill = node.querySelector<HTMLElement>(".plbar__fill");
-            const entry = data!.top[index];
-
-            if (fill) fill.style.width = `${entry.need > 0 ? Math.round((entry.into / entry.need) * 100) : 100}%`;
-        }
-
-        const prev = button("btn btn--quiet", icon("#i-up"), "Zurück");
-        const next = button("btn btn--quiet", icon("#i-down"), "Weiter");
-
-        prev.disabled = page <= 1;
-        next.disabled = data!.top.length < 25;
-        prev.addEventListener("click", () => load(page - 1));
-        next.addEventListener("click", () => load(page + 1));
-
-        const link = `${window.location.origin}${BASE}/rangliste/${guildId}`;
-        const copy = button("btn btn--quiet", icon("#i-copy"), "Link kopieren");
-        const open = el("a", "btn btn--quiet", icon("#i-external"), "Ansehen");
-
-        (open as HTMLAnchorElement).href = link;
-        (open as HTMLAnchorElement).target = "_blank";
-        (open as HTMLAnchorElement).rel = "noopener";
-        copy.addEventListener("click", async () => {
-            await navigator.clipboard.writeText(link).catch(() => undefined);
-            toast("info", "Kopiert", "Der Link steht in der Zwischenablage.");
-        });
-
-        return card(
-            "Rangliste",
-            `${data!.total} Mitglieder haben Punkte. In Discord zeigt /level rangliste dieselbe Liste.`,
-            row(
-                "Öffentlich",
-                "An heißt: jeder mit dem Link sieht die Rangliste – ohne Anmeldung",
-                el("label", "snitem__switch", toggle(draft!.public, "Öffentliche Rangliste", (on) => {
-                    draft!.public = on;
-                    touch();
-                    paint();
-                }), el("span", "", draft!.public ? "an" : "aus"))
-            ),
-            ...(draft!.public
-                ? [el("div", "lvlink", el("code", "lvlink__url", link), copy, open), el("p", "hintline", "Zu sehen sind Platz, Name, Bild, Level und Punkte – sonst nichts. Speichern nicht vergessen.")]
-                : []),
-            ...(rows.length ? rows : [el("div", "tkempty", icon("#i-chart-up"), el("span", "", "Noch hat niemand Punkte."))]),
-            el("div", "mcsave lvpager", prev, next)
-        );
-    }
-
-    /* ------------------------------------------------------------
-       Punkte von Hand
-       ------------------------------------------------------------ */
-    function manage(): HTMLElement {
-        const amount = el("input", "text gwnum");
-        const mode = select(
-            [
-                ["set", "setzen auf"],
-                ["add", "dazugeben"],
-            ],
-            "set",
-            () => undefined,
-            "Was mit den Punkten passieren soll"
-        );
-        const go = button("btn btn--primary", icon("#i-check"), "Übernehmen");
-        const pickHost = el("div", "snperson");
-        const drawPick = (): void => {
-            pickHost.replaceChildren(
-                personPicker(chosen, (person) => {
-                    chosen = person;
-                    drawPick();
-                })
-            );
-        };
-
-        amount.type = "number";
-        amount.min = "-1000000";
-        amount.max = "1000000";
-        amount.value = "0";
-        amount.setAttribute("aria-label", "Punkte");
-
-        drawPick();
-
-        go.addEventListener("click", async () => {
-            if (!chosen) {
-                toast("info", "Niemand gewählt", "Such zuerst ein Mitglied.");
-
-                return;
-            }
-
-            go.disabled = true;
-
-            const answer = await call("", { action: "adjust", userId: chosen.id, mode: mode.value, amount: Number(amount.value) || 0 });
-
-            go.disabled = false;
-
-            if (!answer) return;
-
-            toast("info", "Punkte geändert", `${chosen.name} steht jetzt anders da.`);
-            load(page);
-        });
-
-        const wipe = confirmButton("btn btn--quiet", "#i-trash", "Punkte zurücksetzen", "Wirklich zurücksetzen?", async () => {
-            if (!chosen) {
-                toast("info", "Niemand gewählt", "Such zuerst ein Mitglied.");
-
-                return;
-            }
-
-            const answer = await call("", { action: "adjust", userId: chosen.id, mode: "reset" });
-
-            if (answer) {
-                toast("info", "Zurückgesetzt", `${chosen.name} fängt wieder bei null an.`);
-                load(page);
-            }
-        });
-
-        const clear = confirmButton("btn btn--quiet btn--danger", "#i-eraser", "Ganze Rangliste löschen", "Wirklich alle löschen?", async () => {
-            const answer = await call("", { action: "reset" });
-
-            if (answer) {
-                toast("info", "Rangliste gelöscht", "Alle fangen wieder bei null an.");
-                load(1);
-            }
-        });
-
-        return card(
-            "Punkte von Hand",
-            "Für Umzüge, Fehler und kleine Belohnungen. Belohnungsrollen zieht der Bot dabei nach.",
-            row("Mitglied", "Nach Name oder ID suchen", pickHost),
-            row("Punkte", "Setzen oder dazugeben – negative Zahlen ziehen ab", el("div", "lvrange", mode, amount, go)),
-            el("div", "mcsave", clear, wipe)
-        );
-    }
-
-    function personPicker(current: IPerson | null, onPick: (person: IPerson | null) => void): HTMLElement {
-        if (current) {
-            const change = button("btn btn--quiet mcchosen__change", "Ändern");
-
-            change.addEventListener("click", () => onPick(null));
-
-            return el("div", "mcchosen", face(current, "mcchosen__face"), el("div", "mcchosen__name", el("b", "", current.name), el("code", "mcid", current.id)), change);
-        }
-
-        const input = el("input", "text");
-        const results = el("div", "mcpeople");
-        let asked = 0;
-        let timer = 0;
-
-        input.type = "search";
-        input.placeholder = "Mitglied suchen: Name oder ID …";
-        input.setAttribute("aria-label", "Mitglied suchen");
-        input.addEventListener("input", () => {
-            window.clearTimeout(timer);
-            timer = window.setTimeout(async () => {
-                const text = input.value.trim();
-
-                if (!text) {
-                    results.replaceChildren();
-
-                    return;
-                }
-
-                const mine = ++asked;
-                const answer = await call<{ members?: IPerson[] }>("", { action: "members", query: text });
-
-                if (mine !== asked) return;
-
-                const found = answer?.members ?? [];
-
-                results.replaceChildren(
-                    ...(found.length
-                        ? found.map((person) => {
-                              const pick = button("ltperson", face(person), el("span", "", person.name));
-
-                              pick.addEventListener("click", () => onPick(person));
-
-                              return pick;
-                          })
-                        : [el("span", "tkempty", "Niemand gefunden.")])
-                );
-            }, 250);
-        });
-
-        return el("div", "mcpick", input, results);
-    }
-
-    /* ------------------------------------------------------------
        Zeichnen und Laden
        ------------------------------------------------------------ */
     function paint(): void {
@@ -675,7 +463,7 @@ export function renderLevels(guildId: string): void {
         save.replaceChildren(icon("#i-check"), document.createTextNode("Speichern"));
         save.disabled = !dirty;
 
-        host.replaceChildren(head(), points(), levelUp(), el("div", "mcsave lvsave", save), board(), manage());
+        host.replaceChildren(head(), points(), levelUp(), el("div", "mcsave lvsave", save));
     }
 
     save.addEventListener("click", async () => {
@@ -696,10 +484,8 @@ export function renderLevels(guildId: string): void {
         paint();
     });
 
-    function load(next: number): void {
-        page = Math.max(1, next);
-
-        void call<IPayload>(`?page=${page}`).then((answer) => {
+    function load(): void {
+        void call<IPayload>("").then((answer) => {
             if (!answer) return;
 
             data = answer;
@@ -708,6 +494,6 @@ export function renderLevels(guildId: string): void {
         });
     }
 
-    host.replaceChildren(el("div", "tkhead", ...Array.from({ length: 5 }, () => el("div", "sb snskel"))));
-    load(1);
+    host.replaceChildren(el("div", "tkhead", ...Array.from({ length: 4 }, () => el("div", "sb snskel"))));
+    load();
 }

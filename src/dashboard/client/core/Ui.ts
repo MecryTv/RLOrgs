@@ -200,6 +200,73 @@ export function api(base: string, note: HTMLElement): <T>(query: string, body?: 
     };
 }
 
+export interface IPerson {
+    id: string;
+    name: string;
+    avatar: string;
+}
+
+/**
+ * Ein Mitglied suchen und auswählen. Gesucht wird über die Modul-Route des
+ * Aufrufers (Aktion "members"), gezeigt wird, wer gewählt ist.
+ */
+export function personPicker(
+    call: <T>(query: string, body?: Record<string, unknown>) => Promise<T | null>,
+    chosen: IPerson | null,
+    onPick: (person: IPerson | null) => void,
+    placeholder = "Mitglied suchen: Name oder ID …"
+): HTMLElement {
+    if (chosen) {
+        const change = button("btn btn--quiet mcchosen__change", "Ändern");
+
+        change.addEventListener("click", () => onPick(null));
+
+        return el("div", "mcchosen", face(chosen, "mcchosen__face"), el("div", "mcchosen__name", el("b", "", chosen.name), el("code", "mcid", chosen.id)), change);
+    }
+
+    const input = el("input", "text");
+    const results = el("div", "mcpeople");
+    let asked = 0;
+    let timer = 0;
+
+    input.type = "search";
+    input.placeholder = placeholder;
+    input.setAttribute("aria-label", placeholder);
+    input.addEventListener("input", () => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(async () => {
+            const text = input.value.trim();
+
+            if (!text) {
+                results.replaceChildren();
+
+                return;
+            }
+
+            const mine = ++asked;
+            const answer = await call<{ members?: IPerson[] }>("", { action: "members", query: text });
+
+            if (mine !== asked) return;
+
+            const found = answer?.members ?? [];
+
+            results.replaceChildren(
+                ...(found.length
+                    ? found.map((person) => {
+                          const pick = button("ltperson", face(person), el("span", "", person.name));
+
+                          pick.addEventListener("click", () => onPick(person));
+
+                          return pick;
+                      })
+                    : [el("span", "tkempty", "Niemand gefunden.")])
+            );
+        }, 250);
+    });
+
+    return el("div", "mcpick", input, results);
+}
+
 /** Eine Kennzahl oben auf der Seite - wie im Ticket-System. */
 export function stat(symbol: string, label: string, value: string, tone = ""): HTMLElement {
     return el("div", `tkstat ${tone}`.trim(), el("span", "tkstat__mark", icon(symbol)), el("span", "tkstat__text", el("small", "", label), el("b", "", value)));
