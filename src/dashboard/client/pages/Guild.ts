@@ -206,6 +206,7 @@ export function renderGuild(data: IPayload): void {
         if (guild.canManage) whenShown(["team"], () => void import("./GuildTeam.js").then((module) => module.renderTeam(guild.id)));
 
         // Community-Module: Code und Abfragen kommen erst, wenn der Abschnitt aufgeht.
+        whenShown(["custom-message"], () => void import("./GuildMessages.js").then((module) => module.renderMessages(guild.id)));
         whenShown(["levels"], () => void import("./GuildLevels.js").then((module) => module.renderLevels(guild.id)));
         whenShown(["voice-hub"], () => void import("./GuildVoice.js").then((module) => module.renderVoice(guild.id)));
         whenShown(["twitch-notifier"], () => void import("./GuildStreams.js").then((module) => module.renderStreams(guild.id, "twitch")));

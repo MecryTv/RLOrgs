@@ -25,6 +25,7 @@ export default class CommunityTimers extends Runnable {
             ["Umfragen", () => this.client.pollService.RunDue()],
             ["Giveaways", () => this.client.giveawayService.RunDue()],
             ["Level", () => this.client.levelService.Voice()],
+            ["Nachrichten", () => this.client.messageService.RunDue()],
         ];
 
         await Promise.all(jobs.map(([name, job]) => job().catch((error) => logger.warn(`⏱️ ${name}: ${String(error)}`))));

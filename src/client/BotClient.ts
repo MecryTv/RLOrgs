@@ -24,6 +24,7 @@ import PollService from "../services/PollService";
 import GiveawayService from "../services/GiveawayService";
 import VoiceService from "../services/VoiceService";
 import LevelService from "../services/LevelService";
+import MessageService from "../services/MessageService";
 import GuildSettings from "../models/GuildSettings";
 import DashboardGroups from "../models/DashboardGroups";
 import Notifications from "../models/Notifications";
@@ -47,6 +48,8 @@ import VoiceHubs from "../models/VoiceHubs";
 import TempVoices from "../models/TempVoices";
 import VoicePresets from "../models/VoicePresets";
 import Levels from "../models/Levels";
+import CustomMessages from "../models/CustomMessages";
+import AutoResponses from "../models/AutoResponses";
 import Polls from "../models/Polls";
 import Giveaways from "../models/Giveaways";
 
@@ -76,6 +79,7 @@ export default class BotClient extends Client implements IBotClient {
     giveawayService: GiveawayService;
     voiceService: VoiceService;
     levelService: LevelService;
+    messageService: MessageService;
 
     // Ein Model je Tabelle. Sie hängen am Client, damit Befehle, Events und
     // Routen dieselbe Instanz benutzen - und damit denselben Cache.
@@ -102,6 +106,8 @@ export default class BotClient extends Client implements IBotClient {
     tempVoices: TempVoices;
     voicePresets: VoicePresets;
     levels: Levels;
+    customMessages: CustomMessages;
+    autoResponses: AutoResponses;
     polls: Polls;
     giveaways: Giveaways;
 
@@ -160,6 +166,7 @@ export default class BotClient extends Client implements IBotClient {
         this.giveawayService = new GiveawayService(this);
         this.voiceService = new VoiceService(this);
         this.levelService = new LevelService(this);
+        this.messageService = new MessageService(this);
 
         this.groups = new DashboardGroups(this);
         this.notifications = new Notifications(this);
@@ -184,6 +191,8 @@ export default class BotClient extends Client implements IBotClient {
         this.tempVoices = new TempVoices(this);
         this.voicePresets = new VoicePresets(this);
         this.levels = new Levels(this);
+        this.customMessages = new CustomMessages(this);
+        this.autoResponses = new AutoResponses(this);
         this.polls = new Polls(this);
         this.giveaways = new Giveaways(this);
     }

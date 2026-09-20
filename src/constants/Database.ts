@@ -39,6 +39,8 @@ export const TABLES = {
     tempVoices: "temp_voices",
     voicePresets: "voice_presets",
     levels: "levels",
+    customMessages: "custom_messages",
+    autoResponses: "auto_responses",
 } as const;
 
 export type TableName = (typeof TABLES)[keyof typeof TABLES];

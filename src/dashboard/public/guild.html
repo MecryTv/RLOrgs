@@ -156,6 +156,17 @@
       <div class="setcards" id="moduleCards">
         <!-- Hier wird eingeschaltet, für den ganzen Server. Ein frischer Server
              beginnt links mit genau zwei Einträgen. -->
+        <!-- Custom Message: Nachrichten, Knoepfe, Termine, Stichwoerter. GuildMessages.ts. -->
+        <section class="setcard" id="custom-message" hidden>
+          <h2 class="modhead"><svg><use href="#i-layout"/></svg>Custom Message</h2>
+          <p class="modlead">Eigene Nachrichten mit Knöpfen – von Hand, zu einem Zeitpunkt oder jede Woche. Dazu Stichwörter, auf die der Bot von selbst antwortet.</p>
+          <div class="notice modnote" id="messageNote" hidden>
+            <svg><use href="#i-warn"/></svg>
+            <span></span>
+          </div>
+          <div id="messageBody"></div>
+        </section>
+
         <!-- Level System: Punkte, Belohnungen, Rangliste. GuildLevels.ts. -->
         <section class="setcard" id="levels" hidden>
           <h2 class="modhead"><svg><use href="#i-chart-up"/></svg>Level System</h2>

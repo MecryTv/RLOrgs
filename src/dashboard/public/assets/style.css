@@ -3492,3 +3492,22 @@ body.no-motion .hero__field .run{display:none}
 .lvsave{margin:4px 0 14px}
 .lvpager{gap:8px}
 @media (max-width:620px){.lvbonus,.lvrewards{width:100%}.lvplace{width:34px}}
+
+/* ----------------------------------------------------------
+   Custom Message: Knoepfe, Termine, Vorschau-Knoepfe
+   ---------------------------------------------------------- */
+.cmbuttonbox{margin-top:14px}
+.cmbuttons{display:grid;gap:8px;margin-top:6px}
+.cmbtn{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.cmbtn__label{flex:1;min-width:140px;width:auto;height:40px}
+.cmbtn__target{display:flex;flex:1 1 220px;gap:8px;min-width:0}
+.cmbtn__target > *{flex:1;min-width:0}
+.cmschedule{display:grid;padding-top:8px;border-top:1px solid var(--line);margin-top:10px}
+.tkprev__buttons{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tkprev__btn{display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:6px;font-size:12.5px;color:#fff;background:#4e5058}
+.tkprev__btn.is-primary{background:#5865f2}
+.tkprev__btn.is-success{background:#248046}
+.tkprev__btn.is-danger{background:#da373c}
+.tkprev__btn.is-link{background:#4e5058;color:#dbdee1}
+.tkprev__btn.is-link::after{content:" 97";font-size:11px;opacity:.7}
+@media (max-width:620px){.cmbtn__label,.cmbtn__target{flex-basis:100%}}
