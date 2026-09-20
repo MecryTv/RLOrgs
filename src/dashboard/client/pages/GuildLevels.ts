@@ -66,7 +66,7 @@ interface IPayload {
     page: number;
     total: number;
     top: IRank[];
-    guild: { name: string; roles: IRole[]; channels: { id: string; name: string }[]; emojis: IServerEmoji[] };
+    guild: { name: string; roles: IRole[]; channels: { id: string; name: string }[]; categories: { id: string; name: string }[]; emojis: IServerEmoji[] };
 }
 
 export function renderLevels(guildId: string): void {
@@ -181,7 +181,10 @@ export function renderLevels(guildId: string): void {
             ),
             bonusBox("Rollen mit Bonus", "Der höchste Faktor einer Rolle zählt", settings.roleBonus, data!.guild.roles.map((role) => [role.id, `@${role.name}`])),
             bonusBox("Kanäle mit Bonus", "Etwa doppelte Punkte im Vorstellungs-Kanal", settings.channelBonus, data!.guild.channels.map((channel) => [channel.id, `# ${channel.name}`])),
-            listBox("Ohne Punkte: Kanäle", settings.noChannels, data!.guild.channels.map((channel) => [channel.id, `# ${channel.name}`])),
+            listBox("Ohne Punkte: Kanäle", settings.noChannels, [
+                ...data!.guild.channels.map((channel): [string, string] => [channel.id, `# ${channel.name}`]),
+                ...data!.guild.categories.map((category): [string, string] => [category.id, `📁 ${category.name}`]),
+            ]),
             listBox("Ohne Punkte: Rollen", settings.noRoles, data!.guild.roles.map((role) => [role.id, `@${role.name}`]))
         );
     }

@@ -4,6 +4,28 @@ import { IMessageDoc } from "../../builder/IMessageDoc";
    Custom Message - siehe docs/Messages.md
    ---------------------------------------------------------- */
 
+/**
+ * Was der Bot schickt: eine Karte (Components V2), ein Embed oder eine ganz
+ * normale Nachricht. Knöpfe gehen bei allen dreien.
+ */
+export type MessageKind = "v2" | "embed" | "text";
+
+/** Ein klassisches Embed, wie Discord es kennt. */
+export interface ICustomEmbed {
+    title: string | null;
+    description: string | null;
+    /** "#rrggbb" oder null für die Standardfarbe. */
+    color: string | null;
+    url: string | null;
+    image: string | null;
+    thumbnail: string | null;
+    author: { name: string; icon: string | null } | null;
+    footer: { text: string; icon: string | null } | null;
+    /** Die Uhrzeit des Sendens unten im Embed. */
+    timestamp: boolean;
+    fields: { name: string; value: string; inline: boolean }[];
+}
+
 /** Was ein Knopf unter der Nachricht tut. */
 export type ButtonAction = "role" | "link" | "text";
 
@@ -44,6 +66,10 @@ export interface ICustomMessage {
     id: number;
     guildId: string;
     name: string;
+    kind: MessageKind;
+    /** Der Text über dem Embed oder die ganze Nachricht - nicht bei "v2". */
+    content: string;
+    embed: ICustomEmbed | null;
     doc: IMessageDoc;
     buttons: ICustomButton[];
     channelId: string | null;
@@ -81,6 +107,9 @@ export interface IAutoResponse {
     guildId: string;
     phrase: string;
     match: MatchMode;
+    kind: MessageKind;
+    content: string;
+    embed: ICustomEmbed | null;
     doc: IMessageDoc;
     settings: IResponseSettings;
     enabled: boolean;

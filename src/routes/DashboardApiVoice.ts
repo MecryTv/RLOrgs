@@ -101,10 +101,6 @@ export default class DashboardApiVoice extends Route {
                     .filter((channel) => channel.type === ChannelType.GuildVoice)
                     .map((channel) => ({ id: channel.id, name: channel.name }))
                     .slice(0, 200),
-                categories: guild.channels.cache
-                    .filter((channel) => channel.type === ChannelType.GuildCategory)
-                    .map((channel) => ({ id: channel.id, name: channel.name }))
-                    .slice(0, 100),
             },
         };
     }

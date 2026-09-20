@@ -1,4 +1,4 @@
-import { Guild, GuildMember } from "discord.js";
+import { ChannelType, Guild, GuildMember } from "discord.js";
 import { FastifyReply, FastifyRequest } from "fastify";
 import BotClient from "../client/BotClient";
 import { SessionExpired } from "../services/DashboardService";
@@ -90,5 +90,16 @@ export function GuildResources(guild: Guild) {
         emojis: [...guild.emojis.cache.values()]
             .slice(0, 200)
             .map((emoji) => ({ id: emoji.id, name: emoji.name ?? "", animated: Boolean(emoji.animated), url: emoji.imageURL({ size: 64 }) })),
+        // Kanäle, in die der Bot schreiben kann - und die Kategorien darüber.
+        channels: [...guild.channels.cache.values()]
+            .filter((channel) => channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement)
+            .sort((a, b) => a.rawPosition - b.rawPosition)
+            .slice(0, 300)
+            .map((channel) => ({ id: channel.id, name: channel.name })),
+        categories: [...guild.channels.cache.values()]
+            .filter((channel) => channel.type === ChannelType.GuildCategory)
+            .sort((a, b) => a.rawPosition - b.rawPosition)
+            .slice(0, 100)
+            .map((channel) => ({ id: channel.id, name: channel.name })),
     };
 }

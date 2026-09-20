@@ -3520,3 +3520,26 @@ body.no-motion .hero__field .run{display:none}
   .lvrewards .lvreward{flex-wrap:wrap}
   .lvreward__role{flex-basis:100%}
 }
+
+/* ----------------------------------------------------------
+   Custom Message: Embed-Formular und Embed-Vorschau
+   ---------------------------------------------------------- */
+.cmembed__form{display:grid;margin-top:6px}
+.cmfields{display:grid;gap:8px;width:min(460px,100%)}
+.cmfield{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.cmfield input{flex:1;min-width:120px;width:auto;height:40px}
+.cmfield__name{max-width:150px}
+.cmtext{margin:0 0 8px;font-size:13.5px;line-height:1.55;color:var(--text-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.cmembed{
+  position:relative;display:grid;gap:6px;padding:12px 14px 12px 16px;border-radius:6px;
+  background:#2b2d31;border-left:4px solid var(--embed,#00afff);
+}
+.cmembed__author{font-size:12.5px;color:#dbdee1}
+.cmembed__title{font-size:15px;font-weight:600;color:#f2f3f5;overflow-wrap:anywhere}
+.cmembed__text{font-size:13.5px;line-height:1.5;color:#dbdee1;white-space:pre-wrap;overflow-wrap:anywhere}
+.cmembed__fields{display:flex;flex-wrap:wrap;gap:10px}
+.cmembed__field{display:grid;gap:2px;flex:1 1 100%;font-size:12.5px;color:#dbdee1}
+.cmembed__field.is-inline{flex:1 1 40%}
+.cmembed__field b{color:#f2f3f5}
+.cmembed__image{width:100%;border-radius:4px}
+.cmembed__footer{font-size:11.5px;color:#949ba4}

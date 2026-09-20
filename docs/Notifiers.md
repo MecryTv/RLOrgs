@@ -111,7 +111,7 @@ Eine Rolle für alle, die gerade live sind — zurück, sobald der Stream endet.
 
 ## Dashboard
 
-`/dashboard/guild/<id>/twitch-notifier` und `…/youtube-notifier` — oben die Zahlen (Streamer, gerade live, Live-Rolle, Meldungen), darunter das Feld zum Hinzufügen und je Streamer eine Karte: Bild, Name, Stand („live seit 20 Minuten", „Video vor 3 Stunden", „noch nichts gemeldet"), ein Schalter zum Pausieren und **Bearbeiten**. Aufgeklappt links Kanal, Ping, „Was melden" und der Nachrichten-Editor, rechts die Vorschau.
+`/dashboard/guild/<id>/twitch-notifier` und `…/youtube-notifier` — oben die Zahlen (Streamer bzw. Kanäle, zuletzt gemeldet, Live-Rolle, Meldungen), darunter das Feld zum Hinzufügen und je Streamer eine Karte: Bild, Name, Stand („live seit 20 Minuten", „Video vor 3 Stunden", „noch nichts gemeldet"), ein Schalter zum Pausieren und **Bearbeiten**. Aufgeklappt links Kanal, Ping, „Was melden" und der Nachrichten-Editor, rechts die Vorschau.
 
 | Route | |
 |---|---|

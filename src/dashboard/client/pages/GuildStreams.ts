@@ -198,7 +198,6 @@ export function renderStreams(guildId: string, platform: Platform): void {
             "tkhead snhead",
             stat("#i-youtube", "Kanäle", `${notifiers.length} / ${data!.max}`),
             stat("#i-play", "Zuletzt gemeldet", latest ? `${KIND_LABEL[latest.kind]} · ${ago(latest.at)}` : "noch nichts"),
-            stat("#i-bell", "Livestreams", data!.ready.youtubeLive ? "an" : "braucht API-Schlüssel", data!.ready.youtubeLive ? "is-ok" : ""),
             stat("#i-badge", "Live-Rolle", ytRole ? `@${ytRole.name}` : "aus", ytRole ? "is-ok" : ""),
             stat("#i-list-checks", "Meldungen", notifiers.some((entry) => entry.enabled && entry.config.channelId) ? "an" : "noch kein Kanal", notifiers.some((entry) => entry.enabled && entry.config.channelId) ? "is-ok" : "is-warn")
         );

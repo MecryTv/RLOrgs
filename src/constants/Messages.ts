@@ -1,4 +1,4 @@
-import { IResponseSettings, ISchedule } from "../interfaces/services/messages/IMessages";
+import { ICustomEmbed, IResponseSettings, ISchedule } from "../interfaces/services/messages/IMessages";
 import { IMessageDoc } from "../interfaces/builder/IMessageDoc";
 
 /**
@@ -17,6 +17,19 @@ export const MAX_NAME = 80;
 export const MAX_PHRASE = 200;
 export const MAX_COOLDOWN = 3600;
 export const MAX_FILTER = 15;
+export const MAX_CONTENT = 2000;
+export const MAX_EMBED_TITLE = 256;
+export const MAX_EMBED_DESCRIPTION = 4000;
+export const MAX_EMBED_FIELDS = 10;
+export const MAX_FIELD_NAME = 256;
+export const MAX_FIELD_VALUE = 1024;
+export const MAX_FOOTER = 2048;
+
+export const KIND_LABELS: Record<string, string> = {
+    v2: "Karte (Components V2)",
+    embed: "Embed",
+    text: "Normale Nachricht",
+};
 
 export const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
 
@@ -26,6 +39,21 @@ export const MATCH_LABELS: Record<string, string> = {
     starts: "beginnt mit",
     regex: "Regex",
 };
+
+export function DefaultEmbed(): ICustomEmbed {
+    return {
+        title: "Überschrift",
+        description: "Hier steht, was ihr sagen wollt.",
+        color: MESSAGE_ACCENT,
+        url: null,
+        image: null,
+        thumbnail: null,
+        author: null,
+        footer: null,
+        timestamp: false,
+        fields: [],
+    };
+}
 
 export function DefaultSchedule(): ISchedule {
     return { mode: "off", at: null, hour: 18, minute: 0, weekday: 1, next: null, replace: false };

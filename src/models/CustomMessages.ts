@@ -1,13 +1,16 @@
 import Model from "../structures/Model";
 import { TABLES, TableName, Unpack } from "../constants/Database";
 import { DefaultMessageDoc, DefaultSchedule } from "../constants/Messages";
-import { ICustomButton, ICustomMessage, ISchedule } from "../interfaces/services/messages/IMessages";
+import { ICustomButton, ICustomEmbed, ICustomMessage, ISchedule, MessageKind } from "../interfaces/services/messages/IMessages";
 import { IMessageDoc } from "../interfaces/builder/IMessageDoc";
 
 export interface ICustomMessageRow {
     id: number;
     guild_id: string;
     name: string;
+    kind: MessageKind;
+    content: string | null;
+    embed: ICustomEmbed | string | null;
     doc: IMessageDoc | string;
     buttons: ICustomButton[] | string;
     channel_id: string | null;
@@ -23,6 +26,9 @@ function ToMessage(row: ICustomMessageRow): ICustomMessage {
         id: Number(row.id),
         guildId: row.guild_id,
         name: row.name,
+        kind: row.kind ?? "v2",
+        content: row.content ?? "",
+        embed: row.embed ? Unpack<ICustomEmbed | null>(row.embed, null) : null,
         doc: Unpack<IMessageDoc>(row.doc, DefaultMessageDoc()),
         buttons: Unpack<ICustomButton[]>(row.buttons, []),
         channelId: row.channel_id,
@@ -39,11 +45,14 @@ export default class CustomMessages extends Model<ICustomMessageRow> {
     readonly Table: TableName = TABLES.customMessages;
     readonly Key = ["id"] as const;
 
-    async Create(input: Pick<ICustomMessage, "guildId" | "name" | "doc" | "buttons" | "channelId" | "schedule" | "createdBy">): Promise<ICustomMessage> {
+    async Create(input: Pick<ICustomMessage, "guildId" | "name" | "kind" | "content" | "embed" | "doc" | "buttons" | "channelId" | "schedule" | "createdBy">): Promise<ICustomMessage> {
         const now = Date.now();
         const result = await this.Insert({
             guild_id: input.guildId,
             name: input.name,
+            kind: input.kind,
+            content: input.content,
+            embed: input.embed ? JSON.stringify(input.embed) : null,
             doc: JSON.stringify(input.doc),
             buttons: JSON.stringify(input.buttons),
             channel_id: input.channelId,
@@ -67,10 +76,13 @@ export default class CustomMessages extends Model<ICustomMessageRow> {
         return (await this.Where({ guild_id: guildId }, "id DESC")).map(ToMessage);
     }
 
-    async Save(id: number, patch: Partial<Pick<ICustomMessage, "name" | "doc" | "buttons" | "channelId" | "messageId" | "schedule">>): Promise<void> {
+    async Save(id: number, patch: Partial<Pick<ICustomMessage, "name" | "kind" | "content" | "embed" | "doc" | "buttons" | "channelId" | "messageId" | "schedule">>): Promise<void> {
         const row: Partial<ICustomMessageRow> = { updated_at: Date.now() };
 
         if (patch.name !== undefined) row.name = patch.name;
+        if (patch.kind !== undefined) row.kind = patch.kind;
+        if (patch.content !== undefined) row.content = patch.content;
+        if (patch.embed !== undefined) row.embed = patch.embed ? JSON.stringify(patch.embed) : null;
         if (patch.doc !== undefined) row.doc = JSON.stringify(patch.doc);
         if (patch.buttons !== undefined) row.buttons = JSON.stringify(patch.buttons);
         if (patch.channelId !== undefined) row.channel_id = patch.channelId;

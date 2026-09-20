@@ -3,8 +3,10 @@ import BotClient from "../client/BotClient";
 import Route from "../structures/Route";
 import { DASHBOARD_PATH } from "../constants/Dashboard";
 import {
+    DefaultEmbed,
     DefaultMessageDoc,
     DefaultResponseDoc,
+    KIND_LABELS,
     MATCH_LABELS,
     MAX_BUTTONS,
     MAX_MESSAGES,
@@ -81,9 +83,10 @@ export default class DashboardApiMessages extends Route {
             messages: messages.map((message) => this.Out(message, access)),
             responses,
             limits: { messages: MAX_MESSAGES, responses: MAX_RESPONSES, buttons: MAX_BUTTONS },
-            defaults: { message: DefaultMessageDoc(), response: DefaultResponseDoc() },
+            defaults: { message: DefaultMessageDoc(), response: DefaultResponseDoc(), embed: DefaultEmbed() },
             weekdays: WEEKDAYS,
             matches: MATCH_LABELS,
+            kinds: KIND_LABELS,
             guild: { name: guild.name, ...GuildResources(guild) },
         };
     }

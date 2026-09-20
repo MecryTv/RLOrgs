@@ -1,7 +1,7 @@
 import Model from "../structures/Model";
 import { TABLES, TableName, Unpack } from "../constants/Database";
 import { DefaultResponseDoc, DefaultResponseSettings } from "../constants/Messages";
-import { IAutoResponse, IResponseSettings, MatchMode } from "../interfaces/services/messages/IMessages";
+import { IAutoResponse, ICustomEmbed, IResponseSettings, MatchMode, MessageKind } from "../interfaces/services/messages/IMessages";
 import { IMessageDoc } from "../interfaces/builder/IMessageDoc";
 
 export interface IAutoResponseRow {
@@ -9,6 +9,9 @@ export interface IAutoResponseRow {
     guild_id: string;
     phrase: string;
     match_mode: MatchMode;
+    kind: MessageKind;
+    content: string | null;
+    embed: ICustomEmbed | string | null;
     doc: IMessageDoc | string;
     settings: IResponseSettings | string;
     enabled: number;
@@ -23,6 +26,9 @@ function ToResponse(row: IAutoResponseRow): IAutoResponse {
         guildId: row.guild_id,
         phrase: row.phrase,
         match: row.match_mode,
+        kind: row.kind ?? "v2",
+        content: row.content ?? "",
+        embed: row.embed ? Unpack<ICustomEmbed | null>(row.embed, null) : null,
         doc: Unpack<IMessageDoc>(row.doc, DefaultResponseDoc()),
         settings: { ...DefaultResponseSettings(), ...Unpack<Partial<IResponseSettings>>(row.settings, {}) },
         enabled: Boolean(Number(row.enabled)),
@@ -37,11 +43,14 @@ export default class AutoResponses extends Model<IAutoResponseRow> {
     readonly Table: TableName = TABLES.autoResponses;
     readonly Key = ["id"] as const;
 
-    async Create(input: Pick<IAutoResponse, "guildId" | "phrase" | "match" | "doc" | "settings" | "createdBy">): Promise<IAutoResponse> {
+    async Create(input: Pick<IAutoResponse, "guildId" | "phrase" | "match" | "kind" | "content" | "embed" | "doc" | "settings" | "createdBy">): Promise<IAutoResponse> {
         const result = await this.Insert({
             guild_id: input.guildId,
             phrase: input.phrase,
             match_mode: input.match,
+            kind: input.kind,
+            content: input.content,
+            embed: input.embed ? JSON.stringify(input.embed) : null,
             doc: JSON.stringify(input.doc),
             settings: JSON.stringify(input.settings),
             enabled: 1,
@@ -63,11 +72,14 @@ export default class AutoResponses extends Model<IAutoResponseRow> {
         return (await this.Where({ guild_id: guildId }, "id ASC")).map(ToResponse);
     }
 
-    async Save(id: number, patch: Partial<Pick<IAutoResponse, "phrase" | "match" | "doc" | "settings" | "enabled">>): Promise<void> {
+    async Save(id: number, patch: Partial<Pick<IAutoResponse, "phrase" | "match" | "kind" | "content" | "embed" | "doc" | "settings" | "enabled">>): Promise<void> {
         const row: Partial<IAutoResponseRow> = {};
 
         if (patch.phrase !== undefined) row.phrase = patch.phrase;
         if (patch.match !== undefined) row.match_mode = patch.match;
+        if (patch.kind !== undefined) row.kind = patch.kind;
+        if (patch.content !== undefined) row.content = patch.content;
+        if (patch.embed !== undefined) row.embed = patch.embed ? JSON.stringify(patch.embed) : null;
         if (patch.doc !== undefined) row.doc = JSON.stringify(patch.doc);
         if (patch.settings !== undefined) row.settings = JSON.stringify(patch.settings);
         if (patch.enabled !== undefined) row.enabled = patch.enabled ? 1 : 0;

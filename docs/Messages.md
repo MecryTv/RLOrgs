@@ -8,11 +8,27 @@ Das Modul heißt `custom-message` und wird unter *Module* eingeschaltet (oder `/
 
 ## Eine Nachricht
 
-Angelegt wird sie mit einem Namen — den sieht nur das Team. Danach kommen Inhalt, Kanal, Knöpfe und, wenn gewünscht, ein Termin. Geschrieben wird im selben Editor wie überall (Text, Bild, Galerie, Trennlinie; siehe [ComponentV2Builder.md](ComponentV2Builder.md)), mit Live-Vorschau daneben.
+Angelegt wird sie mit einem Namen — den sieht nur das Team. Danach kommen Art, Inhalt, Kanal, Knöpfe und, wenn gewünscht, ein Termin. Für die Karte gilt derselbe Editor wie überall (Text, Bild, Galerie, Trennlinie; siehe [ComponentV2Builder.md](ComponentV2Builder.md)), für Embed und normale Nachricht die Felder daneben — die Vorschau zeigt in allen Fällen mit.
 
 **Senden** schickt sie in den Kanal und merkt sich, wo sie steht. Danach ändert **Speichern** die Nachricht in Discord gleich mit — ihr müsst sie nicht löschen und neu schicken. Ist sie in Discord weg, sagt der Bot das und vergisst die alte Stelle.
 
 Bis zu 50 Nachrichten je Server.
+
+---
+
+## Drei Arten von Nachricht
+
+Je Nachricht (und je Stichwort) wählt ihr oben im Editor, was der Bot schickt:
+
+| Art | Was rausgeht |
+|---|---|
+| **Karte (Components V2)** | Der Container des Bots: Text, Bilder, Galerie, Trennlinien, Farbbalken. Die Knöpfe sitzen in der Karte |
+| **Embed** | Ein klassisches Embed mit Überschrift, Text, Farbe, Bild, kleinem Bild, Autor, Fußzeile, Uhrzeit und bis zu zehn Feldern. Darüber passt noch eine normale Textzeile |
+| **Normale Nachricht** | Reiner Text, bis 2000 Zeichen — Markdown, Erwähnungen und Emojis wie beim Tippen |
+
+Knöpfe gibt es bei allen dreien. Bei Embed und normaler Nachricht stehen sie in klassischen Reihen darunter, bei der Karte innerhalb der Karte — technisch verlangt Discord das so, aussehen tut es gleich.
+
+Leer geht keine der drei Arten raus: Eine Karte ohne Bausteine, ein Text ohne Zeichen oder ein Embed ohne Inhalt wird beim Speichern abgelehnt.
 
 ---
 
@@ -57,7 +73,7 @@ Der Bot liest mit und antwortet, wenn etwas passt. Je Stichwort:
 - **Sperre** in Sekunden, damit dasselbe Stichwort im selben Kanal nicht im Kreis läuft.
 - **Nur in diesen Kanälen** (auch ganze Kategorien), **nur für diese Rollen**, **nie für diese Rollen**.
 
-In der Antwort setzt der Bot `{user}`, `{user.name}` und `{guild}` ein. Bots lösen nichts aus, und je Nachricht antwortet er höchstens einmal — das erste passende Stichwort gewinnt.
+Auch eine Antwort kann Karte, Embed oder normaler Text sein. Darin setzt der Bot `{user}`, `{user.name}` und `{guild}` ein. Bots lösen nichts aus, und je Nachricht antwortet er höchstens einmal — das erste passende Stichwort gewinnt.
 
 Bis zu 50 Stichwörter je Server.
 
@@ -80,7 +96,7 @@ Anfang wie überall: `ManageGate()` (`utils/managegate.ts`) — Sitzung, „Serv
 
 | | |
 |---|---|
-| Tabellen | `custom_messages` (Inhalt, Knöpfe, Kanal, Termin) und `auto_responses` (Stichwort, Antwort, Filter, Zähler) — Migration 018 |
+| Tabellen | `custom_messages` (Inhalt, Knöpfe, Kanal, Termin) und `auto_responses` (Stichwort, Antwort, Filter, Zähler) — Migration 018, die Art samt Text und Embed kam mit 019 dazu |
 | Knöpfe | `CustomButtons` hört auf die IDs `cm:btn:<nachricht>:<knopf>` |
 | Stichwörter | `AutoResponder` hört auf `MessageCreate`; die Sperre liegt im Speicher, je Stichwort und Kanal |
 | Termine | `CommunityTimers` jede Minute, der nächste Termin steht als `next` im JSON |

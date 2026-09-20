@@ -14,7 +14,7 @@ process.env.DEV_CLIENT_SECRET ||= "check-secret";
 import { ChannelType, Guild, GuildBasedChannel, Role } from "discord.js";
 import BotClient from "../client/BotClient";
 import { CustomMessageView } from "../builder/CustomView";
-import { DefaultMessageDoc, DefaultResponseDoc, MAX_BUTTONS, Matches, NextRun, WEEKDAYS } from "../constants/Messages";
+import { DefaultEmbed, DefaultMessageDoc, DefaultResponseDoc, MAX_BUTTONS, Matches, NextRun, WEEKDAYS } from "../constants/Messages";
 import { ISchedule } from "../interfaces/services/messages/IMessages";
 import { MessageError } from "../services/MessageService";
 
@@ -66,7 +66,24 @@ function checkClean(client: BotClient): void {
     check("Eine gültige Nachricht kommt durch", clean.name === "Regeln" && clean.channelId === TEXT);
     check("Ein Sprachkanal fällt weg", service.Clean(guild, { ...valid, channelId: VOICE }).channelId === null);
     fails("Ohne Namen geht nichts", { name: "  " }, "Namen");
-    fails("Ohne Inhalt auch nicht", { doc: { blocks: [] } }, "leer");
+    fails("Eine leere Karte nicht", { doc: { blocks: [] } }, "leer");
+    fails("Eine normale Nachricht ohne Text nicht", { kind: "text", content: "   " }, "leer");
+    fails("Ein leeres Embed nicht", { kind: "embed", embed: {} }, "leer");
+
+    const plain = service.Clean(guild, { ...valid, kind: "text", content: "  Hallo  " });
+
+    check("Normale Nachricht: der Text bleibt", plain.kind === "text" && plain.content === "Hallo");
+
+    const embedded = service.Clean(guild, {
+        ...valid,
+        kind: "embed",
+        embed: { title: "Titel", description: "Text", color: "#FF1E2D", image: "javascript:alert(1)", fields: [{ name: "A", value: "B", inline: true }, { name: "", value: "leer" }] },
+    });
+
+    check("Embed: Titel und Text kommen an", embedded.embed?.title === "Titel" && embedded.embed.description === "Text");
+    check("Die Farbe wird klein geschrieben", embedded.embed?.color === "#ff1e2d");
+    check("Ein unsauberer Bild-Link fällt weg", embedded.embed?.image === null);
+    check("Leere Felder fallen weg", embedded.embed?.fields.length === 1);
 
     console.log("\n  — Knöpfe —");
 
@@ -170,14 +187,35 @@ async function checkView(client: BotClient): Promise<void> {
         { label: "Text", action: "text", text: "Nur für dich." },
         ...Array.from({ length: 5 }, (_, index) => ({ label: `Nr ${index}`, action: "text", text: "x" })),
     ]);
-    const view = await CustomMessageView(client, 7, DefaultMessageDoc(), buttons, { guild: "Dev Server" });
+    const view = await CustomMessageView(client, { id: 7, kind: "v2", content: "", embed: null, doc: DefaultMessageDoc(), buttons }, { guild: "Dev Server" });
     const json = JSON.stringify(view.components[0].toJSON());
 
     check("Die Karte entsteht", view.components.length === 1);
+    check("Sie geht als Components V2 raus", view.flags !== undefined);
     check("Der Rollen-Knopf trägt die IDs", json.includes("cm:btn:7:"));
     check("Der Link-Knopf hat keine Custom-ID", json.includes("nexus-emb.de"));
     check("Acht Knöpfe ergeben zwei Reihen", (json.match(/"type":1,/g) ?? []).length >= 2, json.slice(0, 120));
-    check("Ohne Knöpfe geht es auch", (await CustomMessageView(client, 1, DefaultResponseDoc(), [])).components.length === 1);
+    check(
+        "Ohne Knöpfe geht es auch",
+        (await CustomMessageView(client, { id: 1, kind: "v2", content: "", embed: null, doc: DefaultResponseDoc(), buttons: [] })).components.length === 1
+    );
+
+    const plain = await CustomMessageView(client, { id: 8, kind: "text", content: "Hallo {guild}!", embed: null, doc: DefaultMessageDoc(), buttons }, { guild: "Dev Server" });
+
+    check("Eine normale Nachricht hat Text", plain.content === "Hallo Dev Server!", String(plain.content));
+    check("Und keine Components-V2-Flagge", plain.flags === undefined);
+    check("Die Knöpfe stehen in eigenen Reihen", plain.components.length === 2, String(plain.components.length));
+
+    const embedded = await CustomMessageView(
+        client,
+        { id: 9, kind: "embed", content: "Dazu ein Wort", embed: { ...DefaultEmbed(), title: "Titel", fields: [{ name: "Feld", value: "Wert", inline: true }] }, doc: DefaultMessageDoc(), buttons: [] },
+        {}
+    );
+    const embedJson = JSON.stringify(embedded.embeds?.[0]?.toJSON() ?? {});
+
+    check("Das Embed hat einen Titel", embedJson.includes("Titel"));
+    check("Und sein Feld", embedJson.includes("Wert"));
+    check("Der Text darüber bleibt", embedded.content === "Dazu ein Wort");
 }
 
 /* ----------------------------------------------------------
@@ -189,6 +227,9 @@ async function checkDatabase(client: BotClient): Promise<void> {
     const message = await client.customMessages.Create({
         guildId: GUILD,
         name: "Regeln",
+        kind: "embed",
+        content: "Bitte lesen",
+        embed: DefaultEmbed(),
         doc: DefaultMessageDoc(),
         buttons: client.messageService.CleanButtons(FakeGuild(), [{ label: "Rolle", action: "role", roleId: ROLE }]),
         channelId: TEXT,
@@ -197,6 +238,7 @@ async function checkDatabase(client: BotClient): Promise<void> {
     });
 
     check("Die Nachricht steht in der Tabelle", message.id > 0 && message.buttons.length === 1);
+    check("Art, Text und Embed kommen zurück", message.kind === "embed" && message.content === "Bitte lesen" && message.embed?.title === "Überschrift");
     check("Sie steht beim Server", (await client.customMessages.OfGuild(GUILD)).length === 1);
     check("Was fällig ist, wird gefunden", (await client.customMessages.Due(Date.now())).some((entry) => entry.id === message.id));
 
@@ -211,12 +253,16 @@ async function checkDatabase(client: BotClient): Promise<void> {
         guildId: GUILD,
         phrase: "training",
         match: "contains",
+        kind: "text",
+        content: "Immer montags um 20 Uhr.",
+        embed: null,
         doc: DefaultResponseDoc(),
         settings: { reply: true, delete: false, quiet: false, cooldown: 30, channels: [], roles: [], ignoreRoles: [] },
         createdBy: USER,
     });
 
     check("Das Stichwort steht in der Tabelle", response.id > 0 && response.enabled);
+    check("Auch als normale Nachricht", response.kind === "text" && response.content.startsWith("Immer montags"));
 
     await client.autoResponses.Used(response.id);
 

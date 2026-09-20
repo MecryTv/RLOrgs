@@ -1,13 +1,21 @@
 import { ButtonInteraction, Guild, GuildMember, Message, MessageFlags, PermissionFlagsBits } from "discord.js";
 import BotClient from "../client/BotClient";
 import { CleanDoc } from "../builder/MessageDoc";
-import { CustomMessageView } from "../builder/CustomView";
+import { CustomMessageView, ICustomSource } from "../builder/CustomView";
 import { InfoCard } from "../builder/CommunityView";
 import {
+    DefaultEmbed,
     DefaultMessageDoc,
     DefaultResponseDoc,
     DefaultResponseSettings,
     DefaultSchedule,
+    MAX_CONTENT,
+    MAX_EMBED_DESCRIPTION,
+    MAX_EMBED_FIELDS,
+    MAX_EMBED_TITLE,
+    MAX_FIELD_NAME,
+    MAX_FIELD_VALUE,
+    MAX_FOOTER,
     MAX_BUTTONS,
     MAX_BUTTON_TEXT,
     MAX_COOLDOWN,
@@ -21,7 +29,7 @@ import {
     Matches,
     NextRun,
 } from "../constants/Messages";
-import { IAutoResponse, ICustomButton, ICustomMessage, IResponseSettings, ISchedule, MatchMode } from "../interfaces/services/messages/IMessages";
+import { IAutoResponse, ICustomButton, ICustomEmbed, ICustomMessage, IResponseSettings, ISchedule, MatchMode, MessageKind } from "../interfaces/services/messages/IMessages";
 import { IMessageDoc } from "../interfaces/builder/IMessageDoc";
 import logger from "../utils/logger";
 
@@ -31,6 +39,16 @@ export const MESSAGES_MODULE = "custom-message";
 
 function IsRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Was der Payload-Builder braucht - egal ob Nachricht oder Stichwort. */
+function Source(entry: { id: number; kind: MessageKind; content: string; embed: ICustomEmbed | null; doc: IMessageDoc; buttons?: ICustomButton[] }): ICustomSource {
+    return { id: entry.id, kind: entry.kind, content: entry.content, embed: entry.embed, doc: entry.doc, buttons: entry.buttons ?? [] };
+}
+
+/** Leise antworten - mit und ohne Components V2. */
+function Quiet(flags: MessageFlags.IsComponentsV2 | undefined) {
+    return (flags ? MessageFlags.IsComponentsV2 | MessageFlags.SuppressNotifications : MessageFlags.SuppressNotifications) as MessageFlags.SuppressNotifications;
 }
 
 function Int(value: unknown, min: number, max: number, fallback: number): number {
@@ -56,22 +74,75 @@ export default class MessageService {
        Nachrichten
        ---------------------------------------------------------- */
     /** Prüft, was aus dem Dashboard kommt. */
-    Clean(guild: Guild, input: unknown, previous?: ICustomMessage): { name: string; doc: IMessageDoc; buttons: ICustomButton[]; channelId: string | null; schedule: ISchedule } {
+    Clean(
+        guild: Guild,
+        input: unknown,
+        previous?: ICustomMessage
+    ): { name: string; kind: MessageKind; content: string; embed: ICustomEmbed | null; doc: IMessageDoc; buttons: ICustomButton[]; channelId: string | null; schedule: ISchedule } {
         const raw = IsRecord(input) ? input : {};
         const name = typeof raw.name === "string" ? raw.name.trim().slice(0, MAX_NAME) : (previous?.name ?? "");
-        const doc = raw.doc === undefined ? (previous?.doc ?? DefaultMessageDoc()) : (CleanDoc(raw.doc, guild.id) ?? { blocks: [] });
         const channel = typeof raw.channelId === "string" ? guild.channels.cache.get(raw.channelId) : null;
+        const body = this.CleanBody(guild, raw, previous, DefaultMessageDoc());
 
         if (!name) throw new MessageError("Gib der Nachricht einen Namen – nur ihr seht ihn.");
-        if (!doc.blocks.length) throw new MessageError("Die Nachricht ist leer.");
 
         return {
             name,
-            doc,
+            ...body,
             buttons: raw.buttons === undefined ? (previous?.buttons ?? []) : this.CleanButtons(guild, raw.buttons),
             channelId: raw.channelId === undefined ? (previous?.channelId ?? null) : channel?.isTextBased() ? channel.id : null,
             schedule: this.CleanSchedule(raw.schedule, previous?.schedule),
         };
+    }
+
+    /**
+     * Der Inhalt einer Nachricht - je nach Art die Karte, das Embed oder der
+     * reine Text. Leer bleibt sie nie: Discord lehnt das ab.
+     */
+    CleanBody(
+        guild: Guild,
+        raw: Record<string, unknown>,
+        previous: { kind?: MessageKind; content?: string; embed?: ICustomEmbed | null; doc?: IMessageDoc } | undefined,
+        fallback: IMessageDoc
+    ): { kind: MessageKind; content: string; embed: ICustomEmbed | null; doc: IMessageDoc } {
+        const kind: MessageKind = raw.kind === "embed" || raw.kind === "text" ? raw.kind : raw.kind === "v2" ? "v2" : (previous?.kind ?? "v2");
+        const doc = raw.doc === undefined ? (previous?.doc ?? fallback) : (CleanDoc(raw.doc, guild.id) ?? { blocks: [] });
+        const content = typeof raw.content === "string" ? raw.content.trim().slice(0, MAX_CONTENT) : (previous?.content ?? "");
+        const embed = raw.embed === undefined ? (previous?.embed ?? null) : this.CleanEmbed(raw.embed);
+
+        if (kind === "v2" && !doc.blocks.length) throw new MessageError("Die Karte ist leer – schreib etwas hinein.");
+        if (kind === "text" && !content) throw new MessageError("Die Nachricht ist leer – schreib einen Text.");
+        if (kind === "embed" && !embed) throw new MessageError("Das Embed ist leer – schreib zumindest Überschrift oder Text.");
+
+        return { kind, content, embed, doc };
+    }
+
+    CleanEmbed(input: unknown): ICustomEmbed | null {
+        if (!IsRecord(input)) return null;
+
+        const text = (value: unknown, max: number): string | null => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
+        const link = (value: unknown): string | null => (typeof value === "string" && /^https?:\/\//i.test(value) && URL.canParse(value) ? value.slice(0, 512) : null);
+        const author = IsRecord(input.author) ? input.author : null;
+        const footer = IsRecord(input.footer) ? input.footer : null;
+        const embed: ICustomEmbed = {
+            title: text(input.title, MAX_EMBED_TITLE),
+            description: text(input.description, MAX_EMBED_DESCRIPTION),
+            color: typeof input.color === "string" && /^#[0-9a-f]{6}$/i.test(input.color) ? input.color.toLowerCase() : null,
+            url: link(input.url),
+            image: link(input.image),
+            thumbnail: link(input.thumbnail),
+            author: author && text(author.name, MAX_EMBED_TITLE) ? { name: text(author.name, MAX_EMBED_TITLE)!, icon: link(author.icon) } : null,
+            footer: footer && text(footer.text, MAX_FOOTER) ? { text: text(footer.text, MAX_FOOTER)!, icon: link(footer.icon) } : null,
+            timestamp: input.timestamp === true,
+            fields: (Array.isArray(input.fields) ? input.fields : [])
+                .filter((field): field is Record<string, unknown> => IsRecord(field))
+                .map((field) => ({ name: text(field.name, MAX_FIELD_NAME) ?? "", value: text(field.value, MAX_FIELD_VALUE) ?? "", inline: field.inline === true }))
+                .filter((field) => field.name && field.value)
+                .slice(0, MAX_EMBED_FIELDS),
+        };
+
+        // Ein Embed ohne jeden Inhalt ist keines.
+        return embed.title || embed.description || embed.image || embed.fields.length || embed.author || embed.footer ? embed : null;
     }
 
     CleanButtons(guild: Guild, input: unknown): ICustomButton[] {
@@ -182,8 +253,8 @@ export default class MessageService {
 
         if (!channel?.isTextBased()) throw new MessageError("Wähle zuerst einen Kanal.");
 
-        const view = await CustomMessageView(this.client, message.id, message.doc, message.buttons, { guild: guild.name });
-        const sent = await channel.send({ ...view, flags: MessageFlags.IsComponentsV2 }).catch(() => null);
+        const view = await CustomMessageView(this.client, Source(message), { guild: guild.name });
+        const sent = await channel.send(view).catch(() => null);
 
         if (!sent) throw new MessageError("Die Nachricht ging nicht raus – darf der Bot in den Kanal schreiben?");
 
@@ -207,9 +278,16 @@ export default class MessageService {
             throw new MessageError("Die Nachricht ist in Discord nicht mehr da – schick sie neu.");
         }
 
-        const view = await CustomMessageView(this.client, message.id, message.doc, message.buttons, { guild: guild.name });
+        const view = await CustomMessageView(this.client, Source(message), { guild: guild.name });
 
-        await target.edit({ components: view.components, files: view.files ?? [], attachments: [], allowedMentions: { parse: [] } });
+        await target.edit({
+            content: view.content ?? null,
+            embeds: view.embeds ?? [],
+            components: view.components,
+            files: view.files ?? [],
+            attachments: [],
+            allowedMentions: { parse: [] },
+        });
     }
 
     async Delete(guild: Guild, id: number, withMessage: boolean): Promise<void> {
@@ -317,18 +395,21 @@ export default class MessageService {
     /* ----------------------------------------------------------
        Autoresponder
        ---------------------------------------------------------- */
-    CleanResponse(guild: Guild, input: unknown, previous?: IAutoResponse): { phrase: string; match: MatchMode; doc: IMessageDoc; settings: IResponseSettings } {
+    CleanResponse(
+        guild: Guild,
+        input: unknown,
+        previous?: IAutoResponse
+    ): { phrase: string; match: MatchMode; kind: MessageKind; content: string; embed: ICustomEmbed | null; doc: IMessageDoc; settings: IResponseSettings } {
         const raw = IsRecord(input) ? input : {};
         const phrase = typeof raw.phrase === "string" ? raw.phrase.trim().slice(0, MAX_PHRASE) : (previous?.phrase ?? "");
         const match: MatchMode = raw.match === "exact" || raw.match === "starts" || raw.match === "regex" ? raw.match : "contains";
-        const doc = raw.doc === undefined ? (previous?.doc ?? DefaultResponseDoc()) : (CleanDoc(raw.doc, guild.id) ?? { blocks: [] });
+        const body = this.CleanBody(guild, raw, previous, DefaultResponseDoc());
         const rawSettings = IsRecord(raw.settings) ? raw.settings : {};
         const base = previous?.settings ?? DefaultResponseSettings();
         const ids = (value: unknown, has: (id: string) => boolean, fallback: string[]): string[] =>
             value === undefined ? fallback : Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === "string" && has(id)))].slice(0, MAX_FILTER) : [];
 
         if (!phrase) throw new MessageError("Gib ein Stichwort an.");
-        if (!doc.blocks.length) throw new MessageError("Die Antwort ist leer.");
 
         if (match === "regex") {
             try {
@@ -341,7 +422,7 @@ export default class MessageService {
         return {
             phrase,
             match,
-            doc,
+            ...body,
             settings: {
                 reply: typeof rawSettings.reply === "boolean" ? rawSettings.reply : base.reply,
                 delete: typeof rawSettings.delete === "boolean" ? rawSettings.delete : base.delete,
@@ -409,17 +490,15 @@ export default class MessageService {
 
             this.recent.set(key, now);
 
-            const view = await CustomMessageView(this.client, response.id, response.doc, [], {
+            const view = await CustomMessageView(this.client, Source({ ...response, buttons: [] }), {
                 user: `<@${message.author.id}>`,
                 "user.name": message.member?.displayName ?? message.author.username,
                 guild: message.guild.name,
             });
-            const payload = { ...view, flags: MessageFlags.IsComponentsV2 as const, allowedMentions: { users: [message.author.id] } };
+            const payload = { ...view, allowedMentions: { users: [message.author.id] } };
 
             if (settings.reply) {
-                await message
-                    .reply(settings.quiet ? { ...payload, flags: (MessageFlags.IsComponentsV2 | MessageFlags.SuppressNotifications) as typeof MessageFlags.IsComponentsV2 } : payload)
-                    .catch(() => undefined);
+                await message.reply(settings.quiet ? { ...payload, flags: Quiet(view.flags) } : payload).catch(() => undefined);
             } else if (message.channel.isSendable()) {
                 await message.channel.send(payload).catch(() => undefined);
             }
