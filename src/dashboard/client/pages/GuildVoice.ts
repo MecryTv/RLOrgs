@@ -152,7 +152,7 @@ export function renderVoice(guildId: string): void {
         const draft = draftOf(hub);
         const isOpen = open === hub.id;
         const edit = button("btn btn--quiet snitem__edit", icon(isOpen ? "#i-up" : "#i-sliders"), isOpen ? "Zuklappen" : "Bearbeiten");
-        const remove = confirmButton("btn btn--quiet btn--icon", "#i-trash", "Hub entfernen", "Wirklich? Offene Kanäle bleiben, bis sie leer sind.", async () => {
+        const remove = confirmButton("btn btn--quiet btn--icon", "#i-trash", "Hub entfernen", "Wirklich entfernen?", async () => {
             const answer = await call("", { action: "remove", id: hub.id });
 
             if (!answer) return;

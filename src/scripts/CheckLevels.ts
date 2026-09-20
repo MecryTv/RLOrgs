@@ -158,6 +158,9 @@ function checkSettings(client: BotClient): void {
     check("Ein echter Kanal wird übernommen", targeted.announceChannelId === TEXT);
     check("Ein erfundener nicht", service.Clean(guild, { announceChannelId: "999" }, base).announceChannelId === null);
     check("Die Vorlage hat Platzhalter", JSON.stringify(DefaultLevelMessage()).includes("{level}"));
+    check("Die Rangliste ist erst einmal nicht öffentlich", base.public === false);
+    check("Öffentlich lässt sich einschalten", service.Clean(guild, { public: true }, base).public === true);
+    check("Unsinn schaltet nichts ein", service.Clean(guild, { public: "ja" }, base).public === false);
 }
 
 /* ----------------------------------------------------------

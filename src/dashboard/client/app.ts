@@ -73,6 +73,13 @@ async function boot(): Promise<void> {
         return;
     }
 
+    // Die öffentliche Rangliste steht ohne Anmeldung offen - sie fragt /api/me
+    // gar nicht erst, sondern holt nur ihre eine Liste.
+    if (page === "board") {
+        await (await import("./pages/Board.js")).renderBoard();
+        return;
+    }
+
     // Der Code der Seite lädt neben /api/me, nicht danach. Was er vorab tun kann,
     // hängt in derselben Kette - so läuft es sicher vor dem Zeichnen, nie doppelt.
     const code =

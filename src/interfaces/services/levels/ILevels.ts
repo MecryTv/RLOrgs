@@ -49,6 +49,8 @@ export interface ILevelSettings {
     rewards: ILevelReward[];
     /** Alte Belohnungsrollen behalten oder durch die neue ersetzen. */
     stack: boolean;
+    /** Die Rangliste ist ohne Anmeldung zu sehen. Standard: aus. */
+    public: boolean;
 }
 
 /** Ein Platz in der Rangliste. */

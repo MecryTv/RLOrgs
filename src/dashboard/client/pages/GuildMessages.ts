@@ -450,7 +450,7 @@ export function renderMessages(guildId: string): void {
                 ),
                 ...(message.url ? [linkButton(message.url)] : []),
                 edit,
-                confirmButton("btn btn--quiet btn--icon", "#i-trash", "Nachricht löschen", "Wirklich? Die Vorlage ist dann weg – die gesendete Nachricht bleibt stehen.", async () => {
+                confirmButton("btn btn--quiet btn--icon", "#i-trash", "Nachricht löschen", "Wirklich löschen?", async () => {
                     const answer = await call("", { action: "delete", id: message.id, withMessage: false });
 
                     if (!answer) return;
@@ -857,7 +857,7 @@ export function renderMessages(guildId: string): void {
                     }
                 }), el("span", "", response.enabled ? "an" : "aus")),
                 edit,
-                confirmButton("btn btn--quiet btn--icon", "#i-trash", "Stichwort löschen", "Wirklich? Der Bot antwortet darauf nicht mehr.", async () => {
+                confirmButton("btn btn--quiet btn--icon", "#i-trash", "Stichwort löschen", "Wirklich löschen?", async () => {
                     const answer = await call("", { action: "response-delete", id: response.id });
 
                     if (!answer) return;

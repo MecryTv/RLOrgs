@@ -46,6 +46,22 @@ Im Dashboard gibt es dazu **Rollen nachtragen**: Der Bot geht alle durch, die da
 
 ---
 
+## Rangliste ohne Anmeldung
+
+Jeder Server kann seine Rangliste öffentlich stellen: Dashboard › *Level System* › *Rangliste* › **Öffentlich**. Dann liegt sie unter
+
+```
+<SERVER_PUBLIC_URL>/rangliste/<server-id>
+```
+
+und jeder mit dem Link sieht sie — ohne Discord-Login, ohne Konto. Den Link kopiert ihr direkt aus der Karte.
+
+Zu sehen sind **Platz, Anzeigename, Profilbild, Level und Punkte**, dazu Nachrichten und Voice-Minuten; die ersten 100 Plätze. Mehr gibt die Seite nicht heraus, und ohne den Schalter antwortet sie mit 404 — auch dann, wenn es den Server gibt.
+
+**Der Schalter steht standardmäßig auf aus.** Wer ihn anschaltet, veröffentlicht Namen und Bilder seiner aktivsten Mitglieder; das sollte der Server wissen, bevor er es tut.
+
+---
+
 ## In Discord
 
 | Befehl | |
@@ -70,6 +86,8 @@ Die Karte wird mit `@napi-rs/canvas` gezeichnet (`builder/LevelCard.ts`) — die
 |---|---|
 | `GET <base>/api/guild/:id/levels` | Einstellungen, Vorlage, Grenzen und die Rangliste (`page`) |
 | `POST <base>/api/guild/:id/levels` | `save`, `members`, `adjust`, `sync`, `reset` — nur JSON |
+| `GET <base>/rangliste/:id` | Die öffentliche Seite — ohne Anmeldung |
+| `GET <base>/api/public/levels/:id` | Die Liste dazu. 404, solange die Rangliste nicht öffentlich steht |
 
 Anfang wie überall: `ManageGate()` (`utils/managegate.ts`) — Sitzung, „Server verwalten", Datenbank, Modul an.
 

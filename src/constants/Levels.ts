@@ -33,6 +33,7 @@ export function DefaultLevelSettings(): ILevelSettings {
         message: null,
         rewards: [],
         stack: true,
+        public: false,
     };
 }
 

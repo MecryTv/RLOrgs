@@ -37,6 +37,7 @@ interface ISettings {
     message: IMessageDoc | null;
     rewards: IReward[];
     stack: boolean;
+    public: boolean;
 }
 
 interface IRank {
@@ -92,14 +93,16 @@ export function renderLevels(guildId: string): void {
        ------------------------------------------------------------ */
     function head(): HTMLElement {
         const best = data!.top[0];
+        const chat = draft!.chat.on ? `${draft!.chat.min}–${draft!.chat.max} alle ${draft!.chat.cooldown}s` : "aus";
+        const voice = draft!.voice.on ? `${draft!.voice.xp} je Minute` : "aus";
 
         return el(
             "div",
             "tkhead snhead",
             stat("#i-chart-up", "Mit Punkten", String(data!.total)),
             stat("#i-crown", "Spitze", best ? `${best.name} · Level ${best.level}` : "noch niemand"),
-            stat("#i-message", "Chat-Punkte", draft!.chat.on ? `${draft!.chat.min}–${draft!.chat.max} alle ${draft!.chat.cooldown}s` : "aus", draft!.chat.on ? "is-ok" : ""),
-            stat("#i-mic", "Voice-Punkte", draft!.voice.on ? `${draft!.voice.xp} je Minute` : "aus", draft!.voice.on ? "is-ok" : ""),
+            // Chat und Voice in einer Kachel - fünf nebeneinander brechen unschön um.
+            stat("#i-message", "Punkte", `Chat ${chat} · Voice ${voice}`, draft!.chat.on || draft!.voice.on ? "is-ok" : ""),
             stat("#i-badge", "Belohnungsrollen", String(draft!.rewards.length))
         );
     }
@@ -466,7 +469,7 @@ export function renderLevels(guildId: string): void {
         const rows = data!.top.map((entry) =>
             el(
                 "div",
-                `plrow vcrow${entry.rank <= 3 ? " is-top" : ""}`,
+                `plrow vcrow lvrow${entry.rank <= 3 ? " is-top" : ""}`,
                 el("span", "lvplace", `#${entry.rank}`),
                 face({ name: entry.name, avatar: entry.avatar }, "travatar"),
                 el(
@@ -494,9 +497,33 @@ export function renderLevels(guildId: string): void {
         prev.addEventListener("click", () => load(page - 1));
         next.addEventListener("click", () => load(page + 1));
 
+        const link = `${window.location.origin}${BASE}/rangliste/${guildId}`;
+        const copy = button("btn btn--quiet", icon("#i-copy"), "Link kopieren");
+        const open = el("a", "btn btn--quiet", icon("#i-external"), "Ansehen");
+
+        (open as HTMLAnchorElement).href = link;
+        (open as HTMLAnchorElement).target = "_blank";
+        (open as HTMLAnchorElement).rel = "noopener";
+        copy.addEventListener("click", async () => {
+            await navigator.clipboard.writeText(link).catch(() => undefined);
+            toast("info", "Kopiert", "Der Link steht in der Zwischenablage.");
+        });
+
         return card(
             "Rangliste",
             `${data!.total} Mitglieder haben Punkte. In Discord zeigt /level rangliste dieselbe Liste.`,
+            row(
+                "Öffentlich",
+                "An heißt: jeder mit dem Link sieht die Rangliste – ohne Anmeldung",
+                el("label", "snitem__switch", toggle(draft!.public, "Öffentliche Rangliste", (on) => {
+                    draft!.public = on;
+                    touch();
+                    paint();
+                }), el("span", "", draft!.public ? "an" : "aus"))
+            ),
+            ...(draft!.public
+                ? [el("div", "lvlink", el("code", "lvlink__url", link), copy, open), el("p", "hintline", "Zu sehen sind Platz, Name, Bild, Level und Punkte – sonst nichts. Speichern nicht vergessen.")]
+                : []),
             ...(rows.length ? rows : [el("div", "tkempty", icon("#i-chart-up"), el("span", "", "Noch hat niemand Punkte."))]),
             el("div", "mcsave lvpager", prev, next)
         );
@@ -554,7 +581,7 @@ export function renderLevels(guildId: string): void {
             load(page);
         });
 
-        const wipe = confirmButton("btn btn--quiet", "#i-trash", "Punkte zurücksetzen", "Wirklich? Damit sind alle Punkte dieses Mitglieds weg.", async () => {
+        const wipe = confirmButton("btn btn--quiet", "#i-trash", "Punkte zurücksetzen", "Wirklich zurücksetzen?", async () => {
             if (!chosen) {
                 toast("info", "Niemand gewählt", "Such zuerst ein Mitglied.");
 
@@ -569,7 +596,7 @@ export function renderLevels(guildId: string): void {
             }
         });
 
-        const clear = confirmButton("btn btn--quiet btn--danger", "#i-eraser", "Ganze Rangliste löschen", "Wirklich? Danach hat niemand mehr Punkte – das lässt sich nicht rückgängig machen.", async () => {
+        const clear = confirmButton("btn btn--quiet btn--danger", "#i-eraser", "Ganze Rangliste löschen", "Wirklich alle löschen?", async () => {
             const answer = await call("", { action: "reset" });
 
             if (answer) {

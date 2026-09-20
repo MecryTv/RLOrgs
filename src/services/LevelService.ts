@@ -119,6 +119,7 @@ export default class LevelService {
             message: doc && doc.blocks.length ? doc : null,
             rewards: raw.rewards === undefined ? previous.rewards : rewards,
             stack: typeof raw.stack === "boolean" ? raw.stack : previous.stack,
+            public: typeof raw.public === "boolean" ? raw.public : previous.public,
         };
     }
 
