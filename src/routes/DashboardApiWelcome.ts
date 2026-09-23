@@ -98,11 +98,6 @@ export default class DashboardApiWelcome extends Route {
                 return { ok: true, image: `data:image/png;base64,${png.toString("base64")}` };
             }
 
-            case "background-remove":
-                await service.RemoveBackground(guild, which);
-
-                return { ok: true, config: await service.Settings(guild.id) };
-
             default:
                 throw new WelcomeError("Unbekannte Aktion.");
         }

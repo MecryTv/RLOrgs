@@ -13,6 +13,7 @@ import { api, button, card, el, IRole, rolePicker, row, select, stat, toggle } f
 import { bodyEditor, IBody, IBodyEditor, IEmbed } from "../layout/BodyEditor.js";
 import { IEditorContext, IMessageDoc } from "../layout/MessageEditor.js";
 import { IServerEmoji } from "../layout/EmojiPicker.js";
+import { pickImage } from "../layout/ImagePicker.js";
 import { fill, WELCOME_PLACEHOLDERS } from "../constants/Placeholders.js";
 
 type Which = "join" | "leave";
@@ -361,70 +362,42 @@ export function renderWelcome(guildId: string): void {
         return box;
     }
 
-    /** Hintergrundbild hochladen, ansehen, entfernen. */
+    /**
+     * Das Hintergrundbild kommt aus der Bildauswahl: aus der Galerie des Servers
+     * oder frisch hochgeladen - hochgeladene landen ebenfalls in der Galerie.
+     * Eine fremde Adresse geht hier nicht: die Karte zeichnet der Bot selbst,
+     * und was er lädt, soll bei ihm liegen.
+     */
     function backgroundRow(entry: ICard, refresh: () => void): HTMLElement {
-        const input = el("input", "wcfile");
-        const pick = button("btn btn--quiet", icon("#i-upload"), entry.background ? "Bild tauschen" : "Bild hochladen");
+        const pick = button("btn btn--quiet", icon("#i-image"), "");
         const drop = button("btn btn--quiet btn--icon", icon("#i-trash"), "Entfernen");
+        const sync = (): void => {
+            pick.replaceChildren(icon("#i-image"), document.createTextNode(entry.background ? "Bild tauschen" : "Bild wählen"));
+            drop.hidden = !entry.background;
+        };
 
-        input.type = "file";
-        input.accept = "image/png,image/jpeg,image/gif,image/webp";
-        input.setAttribute("aria-label", "Hintergrundbild wählen");
-        input.addEventListener("change", async () => {
-            const file = input.files?.[0];
+        pick.addEventListener("click", async () => {
+            const source = await pickImage(guildId, [], ["gallery", "upload"]);
 
-            input.value = "";
+            if (!source) return;
 
-            if (!file) return;
-            if (file.size > 8 * 1024 * 1024) {
-                toast("info", "Zu groß", "Das Bild darf höchstens 8 MB haben.");
-
-                return;
-            }
-
-            pick.disabled = true;
-
-            const response = await fetch(`${BASE}/api/guild/${encodeURIComponent(guildId)}/welcome/background/${which}`, {
-                method: "POST",
-                headers: { "Content-Type": file.type, Accept: "application/json" },
-                body: file,
-            }).catch(() => null);
-
-            pick.disabled = false;
-
-            if (!response?.ok) {
-                toast("info", "Nicht hochgeladen", "Der Bot hat das Bild abgelehnt. PNG, JPG, GIF oder WebP bis 8 MB.");
-
-                return;
-            }
-
-            const answer = (await response.json()) as { config: IConfig };
-
-            data!.config = answer.config;
-            entry.background = answer.config[which].card.background;
-            toast("info", "Hochgeladen", "Das Bild liegt beim Bot und steht gleich auf der Karte.");
+            entry.background = source;
+            touch();
+            sync();
             void drawCard(refresh);
-            paint();
         });
 
-        drop.disabled = !entry.background;
-        drop.addEventListener("click", async () => {
-            const answer = await call<{ config: IConfig }>("", { action: "background-remove", which });
-
-            if (!answer) return;
-
+        drop.addEventListener("click", () => {
             entry.background = null;
-            data!.config = answer.config;
+            touch();
+            sync();
             toast("info", "Entfernt", "Die Karte nutzt wieder den Farbverlauf.");
             void drawCard(refresh);
-            paint();
         });
 
-        return row(
-            "Hintergrund",
-            entry.background ? "Liegt beim Bot – verkleinert auf 1920 px" : "Ohne Bild zeichnet der Bot einen Farbverlauf",
-            el("div", "wcbg", pick, ...(entry.background ? [drop] : []), input)
-        );
+        sync();
+
+        return row("Hintergrund", "Aus der Galerie oder ein eigenes Bild – ohne zeichnet der Bot einen Farbverlauf", el("div", "wcbg", pick, drop));
     }
 
     /** Die Karte kommt fertig gezeichnet vom Bot - die Schriften liegen dort. */

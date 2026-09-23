@@ -1,4 +1,3 @@
-import path from "path";
 import { IWelcomeCard, IWelcomeConfig, IWelcomeMessage } from "../interfaces/services/welcome/IWelcome";
 import { IMessageDoc } from "../interfaces/builder/IMessageDoc";
 
@@ -8,11 +7,6 @@ import { IMessageDoc } from "../interfaces/builder/IMessageDoc";
  */
 export const WELCOME_ACCENT = "#00afff";
 export const LEAVE_ACCENT = "#6b7683";
-
-/** Hintergrundbilder der Karten - eines je Server und Richtung. */
-export const WELCOME_ROOT = path.join(process.cwd(), "welcome");
-export const STORED_BACKGROUND = /^(join|leave)\.(png|jpe?g|gif|webp)$/;
-export const MAX_BACKGROUND_BYTES = 8 * 1024 * 1024;
 
 export const MAX_ROLES = 10;
 export const MAX_LINE = 120;

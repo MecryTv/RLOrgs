@@ -1,23 +1,10 @@
-import path from "path";
-import { mkdir, rm, writeFile } from "node:fs/promises";
 import { AttachmentBuilder, Guild, GuildMember, MessageCreateOptions, PermissionFlagsBits } from "discord.js";
 import BotClient from "../client/BotClient";
 import { CleanDoc } from "../builder/MessageDoc";
 import { CustomMessageView } from "../builder/CustomView";
 import { RenderWelcomeCard } from "../builder/WelcomeCard";
-import { Shrink } from "../utils/image";
-import {
-    DefaultCard,
-    DefaultDoc,
-    DefaultMessage,
-    DefaultWelcomeConfig,
-    MAX_LINE,
-    MAX_ROLES,
-    MAX_TITLE_SIZE,
-    MIN_TITLE_SIZE,
-    STORED_BACKGROUND,
-    WELCOME_ROOT,
-} from "../constants/Welcome";
+import { ResolveImagePath } from "../constants/Gallery";
+import { DefaultCard, DefaultDoc, DefaultWelcomeConfig, MAX_LINE, MAX_ROLES, MAX_TITLE_SIZE, MIN_TITLE_SIZE } from "../constants/Welcome";
 import { IWelcomeCard, IWelcomeConfig, IWelcomeMessage, WelcomeKind } from "../interfaces/services/welcome/IWelcome";
 import { ICustomEmbed } from "../interfaces/services/messages/IMessages";
 import logger from "../utils/logger";
@@ -110,8 +97,7 @@ export default class WelcomeService {
         const base = previous ?? DefaultCard(which);
 
         return {
-            // Der Hintergrund kommt nur über den Upload - hier zählt nur an oder aus.
-            background: raw.background === null ? null : base.background,
+            background: raw.background === undefined ? base.background : this.CleanBackground(raw.background),
             accent: typeof raw.accent === "string" && /^#[0-9a-f]{6}$/i.test(raw.accent) ? raw.accent.toLowerCase() : base.accent,
             dim: Int(raw.dim, 0, 90, base.dim),
             title: Line(raw.title, base.title),
@@ -126,6 +112,26 @@ export default class WelcomeService {
             icon: typeof raw.icon === "boolean" ? raw.icon : base.icon,
             date: typeof raw.date === "boolean" ? raw.date : base.date,
         };
+    }
+
+    /**
+     * Der Hintergrund ist ein Bild der Galerie - "server/album[/ordner]/datei".
+     * Nichts anderes: die Karte zeichnet der Bot, und er lädt nur, was bei ihm
+     * liegt. Eine fremde Adresse ließe ihn Verbindungen aufbauen, die niemand
+     * sieht (auch ins interne Netz), genau das hält die Galerie schon zurück.
+     */
+    private CleanBackground(value: unknown): string | null {
+        if (typeof value !== "string") return null;
+
+        const source = value.trim();
+        const segments = source.split("/");
+
+        return segments.length >= 3 && segments.length <= 4 && ResolveImagePath(source) ? source : null;
+    }
+
+    /** Wo das Bild wirklich liegt - null heißt: der Bot zeichnet einen Farbverlauf. */
+    Background(source: string | null): string | null {
+        return source ? ResolveImagePath(source) : null;
     }
 
     async Save(guild: Guild, input: unknown): Promise<IWelcomeConfig> {
@@ -220,53 +226,12 @@ export default class WelcomeService {
             footer: card.count || card.date ? footer : this.Fill(card.footer, values),
             avatarURL: card.avatar ? member.displayAvatarURL({ extension: "png", size: 256 }) : null,
             iconURL: card.icon ? member.guild.iconURL({ extension: "png", size: 128 }) : null,
-            backgroundPath: this.BackgroundPath(member.guild.id, which, card.background),
+            backgroundPath: this.Background(card.background),
         });
     }
 
     private Fill(text: string, values: Record<string, string>): string {
         return text.replace(/\{([a-z.]+)\}/g, (match, key: string) => values[key] ?? match);
-    }
-
-    /* ----------------------------------------------------------
-       Hintergrundbilder
-       ---------------------------------------------------------- */
-    BackgroundPath(guildId: string, which: "join" | "leave", file: string | null): string | null {
-        return file && STORED_BACKGROUND.test(file) && file.startsWith(which) ? path.join(WELCOME_ROOT, guildId, file) : null;
-    }
-
-    /** Legt das hochgeladene Bild ab - eines je Server und Richtung. */
-    async SaveBackground(guild: Guild, which: "join" | "leave", buffer: Buffer, mime: string): Promise<string> {
-        const image = await Shrink(buffer, mime).catch(() => null);
-
-        if (!image) throw new WelcomeError("Das Bild ließ sich nicht lesen.");
-
-        const file = `${which}${image.extension}`;
-        const directory = path.join(WELCOME_ROOT, guild.id);
-        const config = await this.Settings(guild.id);
-
-        await mkdir(directory, { recursive: true });
-        await writeFile(path.join(directory, file), image.buffer);
-
-        // Ein früheres Bild mit anderer Endung wäre sonst Müll auf der Platte.
-        for (const old of ["png", "jpg", "jpeg", "gif", "webp"].map((extension) => `${which}.${extension}`)) {
-            if (old !== file) await rm(path.join(directory, old), { force: true });
-        }
-
-        config[which].card.background = file;
-        await this.client.moduleSettings.Save(guild.id, WELCOME_MODULE, config);
-
-        return file;
-    }
-
-    async RemoveBackground(guild: Guild, which: "join" | "leave"): Promise<void> {
-        const config = await this.Settings(guild.id);
-        const file = config[which].card.background;
-
-        if (file && STORED_BACKGROUND.test(file)) await rm(path.join(WELCOME_ROOT, guild.id, file), { force: true });
-
-        config[which].card.background = null;
-        await this.client.moduleSettings.Save(guild.id, WELCOME_MODULE, config);
     }
 
     /* ----------------------------------------------------------

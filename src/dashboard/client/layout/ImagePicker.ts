@@ -32,6 +32,13 @@ export interface IGalleryImage {
 const CUSTOM_ALBUM = "custom";
 const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 
+/** Woher ein Bild kommen kann - in dieser Reihenfolge stehen die Reiter. */
+const TABS = [
+    ["gallery", "Galerie"],
+    ["upload", "Hochladen"],
+    ["url", "Adresse"],
+] as const;
+
 const PLACEHOLDER_LABELS: Record<string, string> = {
     "{user.avatar}": "Avatar des Users",
     "{guild.icon}": "Server-Icon",
@@ -99,10 +106,15 @@ function inFolder(image: IGalleryImage, folder: IGalleryFolder): boolean {
 let dialog: HTMLDialogElement | null = null;
 let answer: ((source: string | null) => void) | null = null;
 
-/** Öffnet die Auswahl. null heißt: abgebrochen. placeholders: die Bild-Platzhalter dieser Nachricht. */
-export function pickImage(guildId: string, placeholders: string[] = IMAGE_PLACEHOLDERS): Promise<string | null> {
+/**
+ * Öffnet die Auswahl. null heißt: abgebrochen. placeholders: die Bild-Platzhalter
+ * dieser Nachricht. allow: welche Wege erlaubt sind - die Welcome Card etwa lädt
+ * das Bild selbst und nimmt darum keine fremde Adresse.
+ */
+export function pickImage(guildId: string, placeholders: string[] = IMAGE_PLACEHOLDERS, allow: readonly string[] = TABS.map(([name]) => name)): Promise<string | null> {
     const host = dialog ?? build();
 
+    paintTabs(host, allow);
     paintFoot(placeholders);
     void fill(guildId, host);
     host.showModal();
@@ -112,11 +124,30 @@ export function pickImage(guildId: string, placeholders: string[] = IMAGE_PLACEH
     });
 }
 
+/** Nur die erlaubten Reiter zeigen - der erste davon ist offen. */
+function paintTabs(host: HTMLDialogElement, allow: readonly string[]): void {
+    const first = TABS.find(([name]) => allow.includes(name))?.[0] ?? "gallery";
+
+    for (const tab of host.querySelectorAll<HTMLElement>(".imgpick__tabs button")) {
+        tab.hidden = !allow.includes(tab.dataset.tab ?? "");
+        tab.setAttribute("aria-pressed", String(tab.dataset.tab === first));
+    }
+
+    for (const pane of host.querySelectorAll<HTMLElement>(".imgpick__pane")) {
+        pane.hidden = pane.dataset.pane !== first;
+    }
+
+    host.querySelector(".modal__head p")!.textContent = allow.includes("url")
+        ? "Aus der Galerie, frisch hochgeladen oder als Adresse."
+        : "Aus der Galerie deines Servers oder frisch hochgeladen.";
+}
+
 function paintFoot(placeholders: string[]): void {
     if (!footHost) return;
 
     const label = footHost.firstElementChild!;
 
+    footHost.hidden = placeholders.length === 0;
     footHost.replaceChildren(
         label,
         ...placeholders.map((placeholder) => {
@@ -179,11 +210,7 @@ function build(): HTMLDialogElement {
 
     const panes = document.createElement("div");
 
-    for (const [name, text] of [
-        ["gallery", "Galerie"],
-        ["upload", "Hochladen"],
-        ["url", "Adresse"],
-    ] as const) {
+    for (const [name, text] of TABS) {
         const tab = document.createElement("button");
 
         tab.type = "button";
